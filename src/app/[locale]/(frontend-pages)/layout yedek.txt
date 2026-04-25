@@ -1,0 +1,61 @@
+// src/app/[locale]/layout.tsx
+import type { Metadata } from "next";
+import { cookies, headers } from "next/headers";
+import { I18nProvider } from "@/app/context/i18nContext";
+
+export const metadata: Metadata = { title: "LiveManage" };
+
+async function fetchDict(baseUrl: string, lang: string) {
+  const res = await fetch(`${baseUrl}/api/i18n/${encodeURIComponent(lang)}/dict`, {
+    method: "GET",
+    headers: { accept: "application/json", "accept-language": lang },
+    cache: "no-store",
+  });
+  if (!res.ok) return {};
+  const json = await res.json().catch(() => null);
+  return json?.data ?? {};
+}
+
+export default async function LocaleLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: { locale: string }; // Promise DEĞİL
+}) {
+  const lang = params.locale ?? "tr";
+  const dir = lang.startsWith("ar") ? "rtl" : "ltr";
+
+  // Sende tipler Promise olarak görünüyor -> await gerekiyor
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (process.env.HTTPS === "true" ? "https" : "http");
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? `${proto}://${host}`;
+
+  const dict = await fetchDict(baseUrl, lang);
+
+  // cookies() de Promise tipinde -> await
+  const cookieStore = await cookies();
+  const theme     = cookieStore.get("theme")?.value ?? "light";
+  const colorTheme= cookieStore.get("colorTheme")?.value ?? "BLUE_THEME";
+  const layout    = cookieStore.get("layout")?.value ?? "vertical";
+  const boxed     = cookieStore.get("boxed")?.value ?? "boxed";
+  const sidebar   = cookieStore.get("sidebar")?.value ?? "full-sidebar";
+
+  return (
+    <html
+      lang={lang}
+      dir={dir}
+      className={theme}
+      data-color-theme={colorTheme}
+      data-layout={layout}
+      data-boxed-layout={boxed}
+      data-sidebar-type={sidebar}
+    >
+      <body>
+        <I18nProvider lang={lang} dict={dict}>{children}</I18nProvider>
+      </body>
+    </html>
+  );
+}
+

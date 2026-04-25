@@ -1,0 +1,647 @@
+"use client";
+
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useParams } from "next/navigation";
+
+type Dict = Record<string, string>;
+
+type I18nCtx = {
+  lang: string;
+  dict: Dict;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  ready: boolean;
+  ensure: (namespaces: string[]) => void;
+};
+
+const Ctx = createContext<I18nCtx | null>(null);
+
+const DEBUG = process.env.NODE_ENV !== "production";
+
+const now = () =>
+  new Date().toLocaleString("tr-TR", {
+    hour12: false,
+  });
+
+function log(...args: any[]) {
+  if (!DEBUG) return;
+  console.log(`🌍 [I18nProvider][${now()}]`, ...args);
+}
+
+
+function makeTraceId() {
+  return `i18n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function warn(...args: any[]) {
+  if (!DEBUG) return;
+  console.warn(`⚠️ [I18nProvider][${now()}]`, ...args);
+}
+
+function toShort(s?: string) {
+  return (s ?? "tr").split("-")[0].toLowerCase();
+}
+
+function formatICU(s: string, vars?: Record<string, string | number>) {
+  if (!vars) return s;
+  return s.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
+}
+
+function deepFlatten(obj: unknown, prefix = ""): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (obj == null) return out;
+
+  if (Array.isArray(obj)) {
+    obj.forEach((v, i) => {
+      const key = prefix ? `${prefix}.${i}` : String(i);
+      if (v && typeof v === "object") {
+        Object.assign(out, deepFlatten(v, key));
+      } else if (v != null) {
+        out[key] = String(v);
+      }
+    });
+    return out;
+  }
+
+  if (typeof obj === "object") {
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      const key = prefix ? `${prefix}.${k}` : k;
+      if (v && typeof v === "object") {
+        Object.assign(out, deepFlatten(v, key));
+      } else if (v != null) {
+        out[key] = String(v);
+      }
+    }
+  }
+
+  return out;
+}
+
+function toDotKey(key: string) {
+  if (!key.includes(":")) return key;
+  return key.replace(":", ".");
+}
+
+function toColonKey(key: string) {
+  if (key.includes(":")) return key;
+  const idx = key.indexOf(".");
+  if (idx < 0) return key;
+  return `${key.slice(0, idx)}:${key.slice(idx + 1)}`;
+}
+function normalizeDict(input: unknown): Dict {
+  let source: unknown = input;
+
+  if (
+    source &&
+    typeof source === "object" &&
+    !Array.isArray(source) &&
+    "data" in source
+  ) {
+    const maybeEnvelope = source as Record<string, unknown>;
+
+    if (
+      maybeEnvelope.data &&
+      typeof maybeEnvelope.data === "object" &&
+      !Array.isArray(maybeEnvelope.data)
+    ) {
+      source = maybeEnvelope.data;
+    }
+  }
+
+  const flat = deepFlatten(source);
+  const out: Dict = {};
+
+  for (const [key, value] of Object.entries(flat)) {
+    const str = String(value);
+    out[key] = str;
+    out[toDotKey(key)] = str;
+    out[toColonKey(key)] = str;
+  }
+
+  return out;
+}
+
+function mergeDict(a: Dict, b: Dict): Dict {
+  if (!Object.keys(b).length) return a;
+  return { ...a, ...b };
+}
+
+function extractNamespacesFromDict(dict: Dict): Set<string> {
+  const nsSet = new Set<string>();
+
+  for (const k of Object.keys(dict || {})) {
+    const colonIdx = k.indexOf(":");
+    const dotIdx = k.indexOf(".");
+
+    if (colonIdx > 0 && (dotIdx < 0 || colonIdx < dotIdx)) {
+      nsSet.add(k.slice(0, colonIdx));
+    } else if (dotIdx > 0) {
+      nsSet.add(k.slice(0, dotIdx));
+    }
+  }
+
+  return nsSet;
+}
+
+function dictHasNamespace(dict: Dict, ns: string): boolean {
+  if (!ns.trim()) return false;
+
+  const prefixColon = `${ns}:`;
+  const prefixDot = `${ns}.`;
+
+  return Object.keys(dict || {}).some(
+    (key) => key.startsWith(prefixColon) || key.startsWith(prefixDot)
+  );
+}
+
+function candidateKeys(key: string): string[] {
+  const k = key.trim();
+  if (!k) return [];
+
+  const out = new Set<string>();
+  out.add(k);
+  out.add(toDotKey(k));
+  out.add(toColonKey(k));
+
+  return Array.from(out);
+}
+
+function createDictSignature(lang: string, dict: Dict) {
+  const keys = Object.keys(dict).sort();
+  return `${lang}|${keys.length}|${keys.join(",")}`;
+}
+
+type ProviderProps = {
+  lang?: string;
+  dict?: Dict | Record<string, unknown>;
+  children: React.ReactNode;
+};
+
+export function I18nProvider({
+  lang: langProp,
+  dict: dictProp,
+  children,
+}: ProviderProps) {
+
+const params = useParams() as { lang?: string; locale?: string };
+
+const effectiveLang = useMemo(
+  () => toShort(langProp ?? params?.lang ?? params?.locale ?? "tr"),
+  [langProp, params?.lang, params?.locale]
+);
+
+  const normalizedInitialDict = useMemo(() => normalizeDict(dictProp), [dictProp]);
+  const initialLoadedNs = useMemo(
+    () => extractNamespacesFromDict(normalizedInitialDict),
+    [normalizedInitialDict]
+  );
+
+  const [dict, setDict] = useState<Dict>(normalizedInitialDict);
+  const [loadedNs, setLoadedNs] = useState<Set<string>>(initialLoadedNs);
+  const [wantedNs, setWantedNs] = useState<Set<string>>(new Set());
+  const [ready, setReady] = useState<boolean>(
+    Object.keys(normalizedInitialDict).length > 0
+  );
+
+  const mountedRef = useRef(false);
+  const fetchSeqRef = useRef(0);
+  const lastLangRef = useRef(effectiveLang);
+  const lastInitialSignatureRef = useRef("");
+
+  const loadedNsRef = useRef<Set<string>>(loadedNs);
+  const wantedNsRef = useRef<Set<string>>(wantedNs);
+  const inFlightNsRef = useRef<Set<string>>(new Set());
+  const pendingBeforeMountRef = useRef<Set<string>>(new Set());
+  const dictRef = useRef<Dict>(dict);
+
+  useEffect(() => {
+    loadedNsRef.current = loadedNs;
+  }, [loadedNs]);
+
+  useEffect(() => {
+    wantedNsRef.current = wantedNs;
+  }, [wantedNs]);
+
+  useEffect(() => {
+  dictRef.current = dict;
+}, [dict]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    if (pendingBeforeMountRef.current.size > 0) {
+      const queued = Array.from(pendingBeforeMountRef.current);
+      pendingBeforeMountRef.current.clear();
+
+      setWantedNs((prev) => {
+        let changed = false;
+        const next = new Set(prev);
+
+        for (const ns of queued) {
+          if (!next.has(ns)) {
+            next.add(ns);
+            changed = true;
+          }
+        }
+
+        return changed ? next : prev;
+      });
+    }
+
+    log("✅ Provider mount", {
+      lang: effectiveLang,
+      initialKeyCount: Object.keys(normalizedInitialDict).length,
+      loadedNamespaces: Array.from(initialLoadedNs).sort(),
+    });
+
+    return () => {
+      mountedRef.current = false;
+      log("🛑 Provider unmount", { lang: effectiveLang });
+    };
+  }, []);
+
+  useEffect(() => {
+  if (lastLangRef.current === effectiveLang) return;
+
+  log("🌐 Dil değişti, i18n state resetleniyor", {
+    from: lastLangRef.current,
+    to: effectiveLang,
+    wantedBeforeReset: Array.from(wantedNsRef.current).sort(),
+  });
+
+  lastLangRef.current = effectiveLang;
+  fetchSeqRef.current += 1;
+  inFlightNsRef.current.clear();
+  pendingBeforeMountRef.current.clear();
+  lastInitialSignatureRef.current = "";
+
+  const nextInitialLoaded = extractNamespacesFromDict(normalizedInitialDict);
+
+  setDict(normalizedInitialDict);
+  setLoadedNs(nextInitialLoaded);
+  setWantedNs((prev) => new Set(prev));
+  loadedNsRef.current = nextInitialLoaded;
+  setReady(Object.keys(normalizedInitialDict).length > 0);
+}, [effectiveLang, normalizedInitialDict]);
+
+  useEffect(() => {
+    const normalized = normalizedInitialDict;
+    const keyCount = Object.keys(normalized).length;
+
+    if (!keyCount) return;
+
+    const signature = createDictSignature(effectiveLang, normalized);
+    if (lastInitialSignatureRef.current === signature) {
+      return;
+    }
+
+    lastInitialSignatureRef.current = signature;
+
+    log("📦 Server initial dict merge", {
+      lang: effectiveLang,
+      keyCount,
+      namespaces: Array.from(extractNamespacesFromDict(normalized)).sort(),
+    });
+
+    setDict((prev) => mergeDict(prev, normalized));
+    setLoadedNs((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+
+      for (const ns of extractNamespacesFromDict(normalized)) {
+        if (!next.has(ns)) {
+          next.add(ns);
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+
+    setReady(true);
+  }, [effectiveLang, normalizedInitialDict]);
+
+  const ensure = useCallback((namespaces: string[]) => {
+      log("📥 [ensure] fonksiyona girildi", {
+    namespaces,
+    lang: effectiveLang,
+  });
+    
+    if (!namespaces?.length) return;
+
+    const clean = Array.from(
+      new Set(
+        namespaces
+          .map((x) => x?.trim())
+          .filter(Boolean)
+      )
+    ) as string[];
+
+    if (!clean.length) return;
+
+    if (!mountedRef.current) {
+      for (const ns of clean) {
+        pendingBeforeMountRef.current.add(ns);
+      }
+
+      log("🕓 Mount öncesi namespace kuyruğa alındı", {
+        lang: effectiveLang,
+        namespaces: clean,
+      });
+
+      return;
+    }
+
+    setWantedNs((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+
+      for (const ns of clean) {
+        if (!next.has(ns)) {
+          next.add(ns);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        log("➕ Namespace ensure edildi", {
+          lang: effectiveLang,
+          requested: clean,
+          wantedAfter: Array.from(next).sort(),
+        });
+        return next;
+      }
+
+ 
+
+      return prev;
+    });
+  }, [effectiveLang]);
+
+  const wantedKey = useMemo(
+    () => Array.from(wantedNs).sort().join(","),
+    [wantedNs]
+  );
+
+  useEffect(() => {
+  
+    const wanted = Array.from(wantedNsRef.current);
+const loaded = loadedNsRef.current;
+const inFlight = inFlightNsRef.current;
+const currentDict = dictRef.current;
+
+const missing = wanted
+  .filter((ns) => {
+    const loadedFlag = loaded.has(ns);
+    const hasKeys = dictHasNamespace(currentDict, ns);
+    const inFlightFlag = inFlight.has(ns);
+
+    return (!loadedFlag || !hasKeys) && !inFlightFlag;
+  })
+  .sort();
+
+    if (!missing.length) {
+      if (!ready) {
+         const allLoaded = wanted.every(
+  (ns) => loaded.has(ns) && dictHasNamespace(dictRef.current, ns)
+);
+        if (allLoaded) {
+          log("✅ Tüm istenen namespace’ler hazır", {
+            lang: effectiveLang,
+            wanted,
+          });
+          setReady(true);
+        }
+      }
+      return;
+    }
+
+    const requestNs = missing.join(",");
+    const seq = ++fetchSeqRef.current;
+    const ac = new AbortController();
+
+    for (const ns of missing) {
+      inFlight.add(ns);
+    }
+
+    const url = `/api/i18n/${effectiveLang}/dict?ns=${encodeURIComponent(requestNs)}`;
+
+    log("🌐 Namespace fetch başlıyor", {
+      seq,
+      lang: effectiveLang,
+      missing,
+      url,
+    });
+
+    (async () => {
+      setReady(false);
+
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+          },
+          cache: "no-store",
+          signal: ac.signal,
+        });
+
+        const json = await res.json().catch(() => null);
+
+        if (ac.signal.aborted) {
+          log("🛑 Fetch abort edildi", { seq, lang: effectiveLang, requestNs });
+          return;
+        }
+
+        if (seq !== fetchSeqRef.current) {
+          log("⏭️ Eski fetch sonucu yok sayıldı", {
+            seq,
+            currentSeq: fetchSeqRef.current,
+            lang: effectiveLang,
+            requestNs,
+          });
+          return;
+        }
+        log("📨 Namespace fetch response alındı", {
+  seq,
+  lang: effectiveLang,
+  requestNs,
+  status: res.status,
+  ok: res.ok,
+  json,
+});
+
+        if (!res.ok || json?.ok === false) {
+          warn("Namespace fetch başarısız", {
+            seq,
+            lang: effectiveLang,
+            requestNs,
+            status: res.status,
+            error: json?.error,
+            detail: json?.detail,
+          });
+
+          setReady(true);
+          return;
+        }
+
+        const incoming = normalizeDict(json?.data ?? {});
+        const incomingKeyCount = Object.keys(incoming).length;
+        const incomingNs = extractNamespacesFromDict(incoming);
+
+       log("✅ Namespace fetch başarılı", {
+  seq,
+  lang: effectiveLang,
+  requestNs,
+  incomingKeyCount,
+  incomingNamespaces: Array.from(incomingNs).sort(),
+  usersSampleKeys: Object.keys(incoming)
+    .filter((k) => k.toLowerCase().startsWith("users"))
+    .slice(0, 20),
+});
+
+        if (!incomingKeyCount) {
+          warn("⚠️ Namespace fetch boş döndü", {
+            seq,
+            lang: effectiveLang,
+            requestNs,
+          });
+
+          setReady(true);
+          return;
+        }
+
+        setDict((prev) => mergeDict(prev, incoming));
+
+        setLoadedNs((prev) => {
+          const next = new Set(prev);
+          let changed = false;
+
+          for (const ns of missing) {
+            if (incomingNs.has(ns) && !next.has(ns)) {
+              next.add(ns);
+              changed = true;
+            }
+          }
+
+          return changed ? next : prev;
+        });
+
+        setReady(true);
+      }
+      
+      catch (err: any) {
+        if (ac.signal.aborted) {
+          log("🛑 Fetch iptal edildi", {
+            seq,
+            lang: effectiveLang,
+            requestNs,
+          });
+          return;
+        }
+
+        warn("❌ Namespace fetch exception", {
+          seq,
+          lang: effectiveLang,
+          requestNs,
+          error: err?.message ?? String(err),
+        });
+
+        setReady(true);
+      } finally {
+        for (const ns of missing) {
+          inFlightNsRef.current.delete(ns);
+        }
+      }
+    })();
+
+    return () => {
+      ac.abort();
+    };
+  }, [effectiveLang, wantedKey, ready]);
+
+  const t = useCallback(
+    (key: string, vars?: Record<string, string | number>) => {
+      if (!key) return "";
+
+      for (const cand of candidateKeys(key)) {
+        const raw = dict[cand];
+        if (raw != null) {
+          return formatICU(String(raw), vars);
+        }
+      }
+
+      if (DEBUG) {
+        warn("Eksik çeviri anahtarı", {
+          lang: effectiveLang,
+          key,
+          namespaceGuess: key.split(/[:.]/)[0],
+        });
+      }
+
+      return `[${key}]`;
+    },
+    [dict, effectiveLang]
+  );
+
+  const value = useMemo<I18nCtx>(
+    () => ({
+      lang: effectiveLang,
+      dict,
+      t,
+      ready,
+      ensure,
+    }),
+    [effectiveLang, dict, t, ready, ensure]
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useI18n(namespaces?: string | string[]) {
+  const ctx = useContext(Ctx);
+  if (!ctx) {
+    throw new Error("useI18n must be used within I18nProvider");
+  }
+
+  const depKey = useMemo(() => {
+    const arr = Array.isArray(namespaces) ? namespaces : [namespaces];
+    return Array.from(new Set(arr.filter(Boolean))).sort().join("|");
+  }, [namespaces]);
+
+  log("🧪 [useI18n] render", {
+    rawNamespaces: namespaces,
+    depKey,
+  });
+
+  const ensureFn = ctx.ensure;
+
+   useEffect(() => {
+    if (!depKey) {
+      log("⏭️ [useI18n] depKey boş, ensure çalışmadı");
+      return;
+    }
+
+    const nsList = depKey.split("|").filter(Boolean);
+ 
+
+    ensureFn(nsList);
+  }, [depKey, ensureFn]);
+  return ctx;
+}
+
+export function useI18nNs(namespaces: string | string[]) {
+  const nsList = Array.isArray(namespaces) ? namespaces : [namespaces];
+
+ 
+
+
+  return useI18n(namespaces);
+}

@@ -1,0 +1,64 @@
+// src/app/layout.tsx
+import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import React from "react";
+import NextTopLoader from "nextjs-toploader";
+import "./global.css";
+import MyApp from "./app";
+import { CustomizerContextProvider } from "./context/customizerContext";
+import MuiProviders from "./providers/MuiProviders";
+import MuiAndIntlProvider from "./providers/MuiAndIntl";
+import { I18nProvider } from "./context/i18nContext";
+import { ReactQueryProvider } from "./providers/ReactQueryProvider";
+import { AuthProvider } from "./context/AuthContext";
+
+export const metadata: Metadata = {
+  title: "LiveManage",
+  description: "LiveManage frontend",
+};
+
+const RTL = new Set(["ar", "fa", "he"]);
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const c = await cookies();
+
+  const lang       = (c.get("lm_locale")?.value || "tr").toLowerCase();
+  const dir        = RTL.has(lang) ? "rtl" : "ltr";
+  const themeMode  = (c.get("theme")?.value ?? "light") as "light" | "dark";
+  const colorTheme = c.get("colorTheme")?.value ?? "BLUE_THEME";
+  const layout     = c.get("layout")?.value ?? "vertical";
+  const boxed      = c.get("boxed")?.value ?? "boxed";
+  const sidebar    = c.get("sidebar")?.value ?? "full-sidebar";
+
+  return (
+    <html
+      lang={lang}
+      dir={dir}
+      className={themeMode}
+      data-color-theme={colorTheme}
+      data-layout={layout}
+      data-boxed-layout={boxed}
+      data-sidebar-type={sidebar}
+      suppressHydrationWarning
+    >
+      <body>
+        <NextTopLoader color="#5D87FF" />
+
+        {/* ✅ I18nProvider en dışa alındı   */}
+          <I18nProvider lang={lang}>
+          <AuthProvider>
+            <MuiProviders dir={dir} mode={themeMode}>
+              <MuiAndIntlProvider>
+                <CustomizerContextProvider>
+                  <ReactQueryProvider>
+                    <MyApp>{children}</MyApp>
+                  </ReactQueryProvider>
+                </CustomizerContextProvider>
+              </MuiAndIntlProvider>
+            </MuiProviders>
+          </AuthProvider>
+        </I18nProvider>  
+      </body>
+    </html>
+  );
+}

@@ -1,0 +1,74 @@
+"use client";
+import React from "react";
+import { Box, Stack, Typography, Container, Grid, Button } from "@mui/material";
+import Link from "next/link";
+
+const Banner = () => {
+  return (
+    <Box
+      bgcolor="primary.light"
+      sx={{
+        paddingTop: {
+          xs: "40px",
+          lg: "100px",
+        },
+        paddingBottom: {
+          xs: "40px",
+          lg: "100px",
+        },
+      }}
+    >
+      <Container maxWidth="lg">
+        <Grid container spacing={3} justifyContent="space-between">
+          <Grid
+            alignItems="center"
+            size={{
+              xs: 12,
+              lg: 6
+            }}>
+            <Typography
+              variant="h1"
+              mb={3}
+              lineHeight={1.4}
+              fontWeight={700}
+              sx={{
+                fontSize: {
+                  xs: "34px",
+                  sm: "48px",
+                },
+              }}
+            >
+              LiveManage Dosyası
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <Button
+                variant="contained"
+                size="large"
+                component={Link}
+                href="/auth/auth1/register"
+              >
+                Yeni Hesap Oluştur
+              </Button>
+              <Button variant="outlined" size="large">
+                Yıllık abonelikler
+              </Button>
+            </Stack>
+          </Grid>
+          <Grid
+            display="flex"
+            alignItems="center"
+            size={{
+              xs: 12,
+              lg: 5
+            }}>
+            <Typography lineHeight={1.9}>
+              Lorem ipsum dolor sit, amet consectetur adipisicing elit. Corrupti quasi odit magni quas voluptatem laudantium perferendis, quisquam tempora? Molestiae iusto eveniet dignissimos voluptatibus eius perferendis fuga iste ad maxime vel?
+            </Typography>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
+  );
+};
+
+export default Banner;

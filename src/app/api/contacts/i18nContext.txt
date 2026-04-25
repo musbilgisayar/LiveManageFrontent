@@ -1,0 +1,185 @@
+// src/app/context/i18nContext.tsx
+"use client";
+
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useParams, usePathname } from "next/navigation";
+
+type Dict = Record<string, string>;
+
+/** === Public Context API (değiştirmedik) === */
+type I18nCtx = {
+  lang: string;
+  dict: Dict; // düzleştirilmiş: "ns.key" => value
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  /** Dinamik namespace yükleme talebi */
+  ensure: (namespaces: string[]) => void;
+  /** Sözlük hazır mı (isteğe bağlı) */
+  ready: boolean;
+};
+
+const Ctx = createContext<I18nCtx | null>(null);
+
+/** ICU varyantı (senin fonksiyonunu koruduk) */
+function formatICU(s: string, vars?: Record<string, string | number>) {
+  if (!vars) return s;
+  return s.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
+}
+
+/** "tr-TR" -> "tr" */
+const toShort = (s?: string) => (s ?? "tr").split("-")[0].toLowerCase();
+
+/** Backend’ten gelen bundle { ns: { k:v } } -> flat dict {"ns.k":v} */
+function flattenBundle(b: Record<string, Record<string, string>> | null | undefined): Dict {
+  const out: Dict = {};
+  if (!b || typeof b !== "object") return out;
+  for (const [ns, dict] of Object.entries(b)) {
+    if (!dict || typeof dict !== "object") continue;
+    for (const [k, v] of Object.entries(dict)) {
+      out[`${ns}.${k}`] = v;
+    }
+  }
+  return out;
+}
+
+/** Merge flat dicts */
+function mergeDict(a: Dict, b: Dict): Dict {
+  return { ...a, ...b };
+}
+
+type ProviderProps = {
+  /** İstersen SSR’den lang/dict enjekte edebilirsin (opsiyonel) */
+  lang?: string;
+  dict?: Dict;
+  children: React.ReactNode;
+};
+
+/**
+ * I18nProvider:
+ * - (Opsiyonel) lang/dict prop'larını kabul eder (senin eski kullanımın).
+ * - Prop verilmezse URL’den locale okur ve BFF’ten sözlükleri çeker.
+ * - useI18nNs ile bildirilen namespace’leri toplar ve fetch eder.
+ */
+export function I18nProvider({ lang: langProp, dict: dictProp, children }: ProviderProps) {
+  const params = useParams() as { locale?: string };
+  const pathname = usePathname();
+
+  const langFromUrl = toShort(params?.locale || "tr");
+  const effectiveLang = (langProp && toShort(langProp)) || langFromUrl;
+
+  // İstenen namespace set’i; common’ı default tutuyoruz
+  const [wantedNs, setWantedNs] = useState<Set<string>>(new Set(["common"]));
+  const ensure = useCallback((namespaces: string[]) => {
+    if (!namespaces?.length) return;
+    setWantedNs((prev) => {
+      const next = new Set(prev);
+      namespaces.forEach((ns) => ns && next.add(ns));
+      return next;
+    });
+  }, []);
+
+  // Sözlük durumu: Eğer dictProp verilirse onu başlangıç olarak al
+  const [dict, setDict] = useState<Dict>(() => dictProp ?? {});
+  const [ready, setReady] = useState<boolean>(!!dictProp && Object.keys(dictProp).length > 0);
+
+  const lastFetchKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    // Prop ile gelen dict varsa, dil/URL değişse bile öncelik ondadır.
+    // Ancak prop verilmemişse otomatik fetch yaparız.
+    if (dictProp) {
+      setDict(dictProp);
+      setReady(true);
+      return;
+    }
+
+    let alive = true;
+    const ac = new AbortController();
+
+    async function fetchDict() {
+      const nsParam = Array.from(wantedNs).join(",");
+      const fetchKey = `${effectiveLang}|${nsParam}`;
+      if (fetchKey === lastFetchKeyRef.current) return; // idem-potent
+      lastFetchKeyRef.current = fetchKey;
+
+      setReady(false);
+      try {
+        const res = await fetch(`/api/i18n/${effectiveLang}/dict?ns=${encodeURIComponent(nsParam)}`, {
+          method: "GET",
+          headers: { accept: "application/json" },
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        const json = await res.json().catch(() => null);
+
+        // Beklenen: { ok:true, data: { ns: {k:v}, ... } }
+        const bundle = (json?.data && typeof json.data === "object" && json.data) || {};
+        const flat = flattenBundle(bundle);
+
+        if (!alive) return;
+        setDict(flat); // dil değiştiğinde eski sözlüğü tamamen değiştir
+        setReady(true);
+      } catch {
+        if (!alive) return;
+        setDict({});
+        setReady(true); // hata olsa bile UI kilitlenmesin
+      }
+    }
+
+    fetchDict();
+    return () => {
+      alive = false;
+      ac.abort();
+    };
+    // Dil değişiminde veya istenen ns listesi değiştiğinde tetikle
+  }, [effectiveLang, pathname, dictProp, Array.from(wantedNs).join("|")]);
+
+  const t = useCallback(
+    (key: string, vars?: Record<string, string | number>) => {
+      if (!key) return "";
+      // "ns.key" doğrudan; "key" verilirse "common.key" dene
+      const fullKey = key.includes(".") ? key : `common.${key}`;
+      const raw = dict[fullKey] ?? `[${fullKey}]`;
+      return formatICU(raw, vars);
+    },
+    [dict]
+  );
+
+  const value = useMemo<I18nCtx>(
+    () => ({
+      lang: effectiveLang,
+      dict,
+      t,
+      ensure,
+      ready,
+    }),
+    [effectiveLang, dict, t, ensure, ready]
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** Eski kullanım ile uyumlu */
+export function useI18n() {
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error("useI18n must be used within I18nProvider");
+  return ctx;
+}
+
+/** Component'in ihtiyaç duyduğu namespace’leri bildirmesi için yardımcı hook */
+export function useI18nNs(...namespaces: string[]) {
+  const ctx = useI18n();
+  useEffect(() => {
+    if (namespaces?.length) ctx.ensure(namespaces);
+    // ctx.lang değiştiğinde aynı ns'ler için yeniden fetch tetiklenir
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.lang, ...namespaces]);
+  return ctx;
+}

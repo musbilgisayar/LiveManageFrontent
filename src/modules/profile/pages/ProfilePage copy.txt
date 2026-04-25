@@ -1,0 +1,85 @@
+// src/modules/profile/pages/ProfilePage.tsx
+"use client";
+
+import React from "react";
+import { Stack, Grid, Alert } from "@mui/material";
+import PageContainer from "@/app/components/container/PageContainer";
+import Breadcrumb from "@/app/[locale]/(DashboardLayout)/layout/shared/breadcrumb/Breadcrumb";
+import { useI18nNs } from "@/app/context/i18nContext";
+
+// 🧩 Modül kartları
+import ProfileBanner from "../components/ProfileBanner";
+import PersonalInfoCard from "../components/PersonalInfoCard";
+import ProfileAccordionForm from "../components/ProfileAccordionForm";
+import UserAccountDetailCard from "../components/UserAccountDetailCard";
+
+import { useProfile } from "../hooks/useProfile";
+import { useAccountMe } from "../hooks/useAccountMe";
+
+export default function ProfilePage() {
+  const { t } = useI18nNs(["account", "common"]);
+
+  const { profile, isLoading, error, save, reload } = useProfile();
+  const { user, isLoading: userLoading, error: userError } = useAccountMe();
+
+  return (
+    <PageContainer
+      title={t("account:profile.title", { defaultValue: "Profilim" })}
+      description={t("account:profile.desc", {
+        defaultValue: "Kişisel ve kurumsal bilgilerinizi yönetin.",
+      })}
+    >
+      {/* 🖼️ Profil Banner */}
+      <ProfileBanner
+        fullName={
+          profile ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() : undefined
+        }
+        role={profile?.jobTitle ?? undefined}
+        department={profile?.department ?? undefined}
+        profilePhotoUrl={profile?.profilePhotoUrl ?? undefined}
+        coverPhotoUrl={profile?.coverPhotoUrl ?? undefined}
+      />
+
+      {/* 🔗 Breadcrumb */}
+      <Breadcrumb
+        title={t("account:profile.title", { defaultValue: "Profilim" })}
+        items={[{ title: "Dashboard", to: "/" }, { title: "Profil" }]}
+      />
+
+      {/* Sayfa geneli hata (isteğe bağlı) */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {t("common:alert.error", { defaultValue: "Bir hata oluştu." })}
+        </Alert>
+      )}
+
+      {/* ✅ Grid yapın KORUNDU (tek container, iki sütun) */}
+      <Grid container spacing={3}>
+        {/* Sol Sütun */}
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Stack spacing={3}>
+            <UserAccountDetailCard
+              user={user}
+              isLoading={userLoading}
+              error={userError}
+            />
+
+            <PersonalInfoCard
+              profile={profile}
+              isLoading={isLoading}
+              onSave={save}
+              onReload={reload}
+            />
+          </Stack>
+        </Grid>
+
+        {/* Sağ Sütun */}
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Stack spacing={3}>
+            <ProfileAccordionForm />
+          </Stack>
+        </Grid>
+      </Grid>
+    </PageContainer>
+  );
+}

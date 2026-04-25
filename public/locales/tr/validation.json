@@ -1,0 +1,7 @@
+ 
+{
+  "error": {
+    "NetworkError": "Bağlantı hatası. Lütfen internetinizi kontrol edin veya tekrar deneyin.",
+  "UnknownError": "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin."
+  }
+}

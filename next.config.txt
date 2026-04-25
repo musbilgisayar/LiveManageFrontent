@@ -1,0 +1,73 @@
+
+
+
+// next.config.mjs
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+
+  // Prod’da ufak sertleştirmeler:
+  poweredByHeader: false,
+  compress: true,
+  swcMinify: true,
+  output: 'standalone', // Docker/CI yayınlarında işine yarar
+
+  // Görsel optimizasyonu (lokal public/ yeterli; remote kullanıyorsan domains ekleyebilirsin)
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    // remotePatterns: [{ protocol:'https', hostname:'cdn.example.com' }],
+  },
+
+  // MUI paketlerini modüler içe aktarmak için (bundle boyutunu düşürür)
+  modularizeImports: {
+    '@mui/material': { transform: '@mui/material/{{member}}' },
+    '@mui/icons-material': { transform: '@mui/icons-material/{{member}}' },
+    '@mui/lab': { transform: '@mui/lab/{{member}}' },
+  },
+
+  // BFF + SSR için yararlı header’lar
+  async headers() {
+    return [
+      // Statik görselleri agresif cache’le
+      {
+        source: '/images/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      // Genel güvenlik başlıkları
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          // İstersen kademeli CSP de ekleyebilirsin (YouTube iframe vb. izinlere göre uyarlarsın)
+          // { key: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data:; frame-src https://www.youtube.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'" },
+        ],
+      },
+    ];
+  },
+
+  // Not: i18n config KULLANMIYORUZ.
+  // Locale segmenti ([locale]) + middleware redirect stratejisi ile çakışmasın diye boş bırakıyoruz.
+
+  // Rewrites kapalı -> Route Handler /api/** ile BFF çalışacak.
+  // async rewrites() { return []; },
+
+  // CI'da istersen:
+  // eslint: { ignoreDuringBuilds: false },
+  // typescript: { ignoreBuildErrors: false },
+};
+
+export default nextConfig;
+
+
+
+// next.config.mjs - çalışan 
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  // Rewrites kapalı. BFF mantığı için /api/** Route Handler'ları kullanılacak.
+};
+
+export default nextConfig;

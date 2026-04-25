@@ -1,0 +1,116 @@
+// src/utils/fetchers.client.ts
+"use client";
+
+/**
+ * ✅ Client fetchers
+ * - access token ekler
+ * - 401 → refresh → retry
+ * - accept-language + correlation-id ekler
+ */
+
+const ACCESS_TOKEN_KEY = "accessToken";
+const REFRESH_ENDPOINT = "/api/v1.0/auth/refresh";
+
+const isBrowser = () => typeof window !== "undefined";
+
+const envFlag = (k: string) => {
+  if (typeof process !== "undefined" && (process as any)?.env?.[k]) return (process as any).env[k];
+  if (isBrowser() && (window as any)?.[k]) return String((window as any)[k]);
+  return "";
+};
+
+const CLIENT_LOG_ON = () => {
+  const a = envFlag("NEXT_PUBLIC_LM_FETCH_LOG");
+  const b = envFlag("LM_FETCH_LOG");
+  return a === "1" || b === "1";
+};
+
+const nowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+const rid = () => {
+  if (typeof globalThis !== "undefined" && (globalThis as any).crypto?.randomUUID) {
+    return (globalThis as any).crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random()}`;
+};
+
+const getaccessToken = (): string | null => (isBrowser() ? localStorage.getItem(ACCESS_TOKEN_KEY) : null);
+const setaccessToken = (token: string) => { if (isBrowser()) localStorage.setItem(ACCESS_TOKEN_KEY, token); };
+
+const safeJson = async (res: Response) => {
+  const text = await res.text();
+  try { return text ? JSON.parse(text) : {}; } catch { return { ok: false, raw: text }; }
+};
+
+const refreshaccessToken = async (reqId: string): Promise<string | null> => {
+  try {
+    const res = await fetch(REFRESH_ENDPOINT, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) return null;
+
+    const json: any = await safeJson(res);
+    const newToken = json?.accessToken ?? json?.data?.accessToken ?? null;
+    if (typeof newToken === "string" && newToken.length > 0) {
+      setaccessToken(newToken);
+      if (CLIENT_LOG_ON()) console.info("🟢 [FETCH][REFRESH] ok", { reqId });
+      return newToken;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+type FetchJsonOptions = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
+
+const fetchJsonWithAuth = async (url: string, options: FetchJsonOptions = {}) => {
+  const reqId = rid();
+  const method = (options.method ?? "GET").toUpperCase();
+  const headers = new Headers(options.headers);
+
+  if (!headers.has("Content-Type") && method !== "GET") headers.set("Content-Type", "application/json");
+
+  const token = getaccessToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  if (!headers.has("x-correlation-id")) headers.set("x-correlation-id", reqId);
+
+  if (!headers.has("accept-language")) {
+    const lang =
+      (isBrowser() && (localStorage.getItem("lang") || localStorage.getItem("i18nextLng") || navigator.language)) ||
+      "tr-TR";
+    headers.set("accept-language", lang);
+  }
+
+  let res = await fetch(url, { ...options, headers, credentials: "include" });
+
+  if (res.status === 401) {
+    const newToken = await refreshaccessToken(reqId);
+    if (newToken) {
+      headers.set("Authorization", `Bearer ${newToken}`);
+      res = await fetch(url, { ...options, headers, credentials: "include" });
+    }
+  }
+
+  const json = await safeJson(res);
+
+  if (!res.ok) {
+    const msg = json?.message || json?.error || json?.title || `Request failed (${res.status})`;
+    const err = new Error(msg) as Error & { status?: number; payload?: any; reqId?: string };
+    err.status = res.status;
+    err.payload = json;
+    err.reqId = reqId;
+    throw err;
+  }
+
+  return json;
+};
+
+export const getWebFetcher = (url: string) => fetchJsonWithAuth(url, { method: "GET" });
+export const postWebFetcher = (url: string, arg: any) => fetchJsonWithAuth(url, { method: "POST", body: JSON.stringify(arg) });
+export const putFetcher = (url: string, arg: any) => fetchJsonWithAuth(url, { method: "PUT", body: JSON.stringify(arg) });
+export const patchWebFetcher = (url: string, arg: any) => fetchJsonWithAuth(url, { method: "PATCH", body: JSON.stringify(arg) });
+export const deleteFetcher = (url: string, arg?: any) => fetchJsonWithAuth(url, { method: "DELETE", ...(arg ? { body: JSON.stringify(arg) } : {}) });
