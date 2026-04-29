@@ -1,3 +1,5 @@
+// src/lib/bff/proxyJsonWithWebAuth.ts
+
 /**
  * Web auth için JSON odaklı BFF proxy helper.
  *
@@ -5,19 +7,15 @@
  * - HttpOnly cookie + BFF session tabanlı web auth
  * - JSON request / JSON response
  * - 401 → refresh → retry
+ * - refresh başarısızsa standart SessionExpired cevabı
  * - tenant + correlation-id + language forwarding
  *
  * Bilinçli sınırlar:
  * - FormData / file upload desteklemez
  * - binary / stream / SSE desteklemez
  * - sadece JSON API endpointleri için kullanılır
- *
- * Neden core'dan ayrıldı?
- * - Auth, tenant, correlation-id, refresh, timeout ve header filtering gibi
- *   ortak web auth davranışları webAuthProxyCore.ts içinde toplandı.
- * - Bu dosya artık yalnızca JSON request/response davranışına odaklanır.
- * - Böylece raw/file helper ile ortak omurga paylaşılır ve tekrar azaltılır.
  */
+
 import { resolveTenant } from "./resolveTenant";
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -25,7 +23,6 @@ import {
   type WebProxyMethod,
   resolveBackendUrl,
   resolveCorrelationId,
- 
   withTimeout,
   buildWebAuthHeaders,
   tryRefreshWebSession,
@@ -93,6 +90,37 @@ async function readResponsePayload(
   }
 }
 
+function buildSessionExpiredResponse(
+  upstream: Response,
+  correlationId: string,
+  logLabel: string
+): NextResponse {
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(`[BFF][${logLabel}][SESSION_EXPIRED]`, {
+      correlationId,
+      reason: "RefreshFailed",
+      upstreamStatus: upstream.status,
+    });
+  }
+
+  return NextResponse.json(
+    {
+      ok: false,
+      message: "auth.session_expired",
+      userMessage: "Oturum süreniz doldu. Lütfen tekrar giriş yapın.",
+      correlationId,
+      data: {
+        reason: "SessionExpired",
+        redirectTo: "/login",
+      },
+    },
+    {
+      status: 401,
+      headers: filterProxyResponseHeaders(upstream, []),
+    }
+  );
+}
+
 export async function proxyJsonWithWebAuth(
   req: NextRequest,
   options: ProxyOptions
@@ -121,11 +149,14 @@ export async function proxyJsonWithWebAuth(
       extraHeaders: options.extraHeaders,
       defaultAccept: "application/json",
     });
+
     applyJsonContentTypeIfNeeded(headers, options.body);
 
     let upstream: Response;
+
     {
       const { signal, cleanup } = withTimeout(timeoutMs);
+
       try {
         upstream = await fetch(url, {
           method,
@@ -156,36 +187,40 @@ export async function proxyJsonWithWebAuth(
         logLabel
       );
 
-      if (refresh.ok) {
-        refreshCookies = refresh.cookies;
+      if (!refresh.ok) {
+        return buildSessionExpiredResponse(upstream, correlationId, logLabel);
+      }
 
-        headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
-          extraHeaders: options.extraHeaders,
-          defaultAccept: "application/json",
+      refreshCookies = refresh.cookies;
+
+      headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
+        extraHeaders: options.extraHeaders,
+        defaultAccept: "application/json",
+      });
+
+      applyJsonContentTypeIfNeeded(headers, options.body);
+
+      const retryTimeout = withTimeout(timeoutMs);
+
+      try {
+        upstream = await fetch(url, {
+          method,
+          headers,
+          body: buildBody(options.body),
+          cache: "no-store",
+          signal: retryTimeout.signal,
         });
-        applyJsonContentTypeIfNeeded(headers, options.body);
+      } finally {
+        retryTimeout.cleanup();
+      }
 
-        const retryTimeout = withTimeout(timeoutMs);
-        try {
-          upstream = await fetch(url, {
-            method,
-            headers,
-            body: buildBody(options.body),
-            cache: "no-store",
-            signal: retryTimeout.signal,
-          });
-        } finally {
-          retryTimeout.cleanup();
-        }
-
-        if (process.env.NODE_ENV !== "production") {
-          console.info(`[BFF][${logLabel}][UPSTREAM_RETRY]`, {
-            correlationId,
-            status: upstream.status,
-            retryUsed: true,
-            refreshCookieCount: refreshCookies.length,
-          });
-        }
+      if (process.env.NODE_ENV !== "production") {
+        console.info(`[BFF][${logLabel}][UPSTREAM_RETRY]`, {
+          correlationId,
+          status: upstream.status,
+          retryUsed: true,
+          refreshCookieCount: refreshCookies.length,
+        });
       }
     }
 
@@ -248,7 +283,7 @@ export async function proxyJsonWithWebAuth(
     return NextResponse.json(
       {
         ok: false,
-        message: isTimeout ? "Timeout" : "Proxy error",
+        message: isTimeout ? "bff.timeout" : "bff.proxy_error",
         userMessage: isTimeout
           ? "İstek zaman aşımına uğradı."
           : "Beklenmeyen bir hata oluştu.",

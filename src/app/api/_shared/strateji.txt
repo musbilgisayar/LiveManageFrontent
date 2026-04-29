@@ -1,0 +1,643 @@
+# BFF Web Auth Merkezi Helper Yapısı – Teknik Rapor
+
+## Amaç
+
+Bu dokümanın amacı, projede kullanılan **merkezi BFF helper yapılarının** ne iş yaptığını, hangi dosyaların hangi sorumluluğu taşıdığını, `refresh`, `tenant`, `correlation-id`, `cookie forwarding`, `401 -> refresh -> retry` gibi mekanizmaların neden merkezi hale getirildiğini açıklamaktır.
+
+Bu yapıların temel hedefi şudur:
+
+- route ve service katmanlarında **aynı auth / refresh / header / tenant / timeout kodlarını tekrar tekrar yazmamak**
+- bütün web-auth akışını **tek standart** üzerinden yürütmek
+- bir auth davranışı değiştiğinde, onlarca route yerine **tek bir merkezden** güncelleyebilmek
+- `401`, `session expired`, `refresh`, `set-cookie`, `retry` gibi kritik davranışları her endpoint’te aynı şekilde işletmek
+- projeyi devralacak kişinin, “hangi route ne yapıyor” yerine “hangi merkezi helper neyi garanti ediyor” mantığıyla ilerleyebilmesini sağlamak
+
+Bu nedenle projede auth gerektiren BFF route’ların mümkün olduğunca **merkezi helper’lar üzerinden çalışması gerekir**.
+
+---
+
+# 1. Genel Mimari Yaklaşım
+
+Projede web tarafı ile backend arasına bir **BFF (Backend For Frontend)** katmanı yerleştirilmiştir.
+
+Bu katmanın görevleri şunlardır:
+
+- frontend’den gelen request’i almak
+- gerekli header/cookie/tenant bilgisini backend’e taşımak
+- backend yanıtını uygun şekilde frontend’e geri döndürmek
+- auth ve refresh davranışını merkezi olarak yönetmek
+- gerektiğinde `401` sonrasında session yenileyip isteği tekrar denemek
+
+Bu mimaride route dosyalarının görevi mümkün olduğunca küçültülmelidir.
+
+Bir route dosyası ideal olarak sadece şunu yapmalıdır:
+
+1. hedef upstream URL’yi kurmak
+2. method/body gibi endpoint özel bilgileri belirlemek
+3. ortak helper’ı çağırmak
+
+Bunun dışındaki tekrar eden davranışlar route içinde değil, helper katmanında yaşamalıdır.
+
+---
+
+# 2. Neden Merkezi Helper Kullanıyoruz?
+
+Projede en çok tekrar etme riski olan konular şunlardır:
+
+- `tenant` çözümleme
+- `x-correlation-id` üretme ve taşıma
+- `accept-language` forwarding
+- `cookie` forwarding
+- `authorization` forwarding
+- timeout yönetimi
+- `401` sonrası refresh çağırma
+- refresh sonucunda gelen cookie’leri merge etme
+- retry request oluşturma
+- response header filtreleme
+- `set-cookie` forwarding
+- standart `session expired` response üretme
+
+Bu davranışlar route route elle yazılırsa şu sorunlar çıkar:
+
+- bazı route’larda refresh olur, bazılarında olmaz
+- bazı route’larda tenant gider, bazılarında gitmez
+- bazı route’larda cookie forward edilir, bazılarında unutulur
+- bazı route’lar `401` alınca kullanıcıyı düşürür, bazıları refresh eder
+- auth davranışı route bazında dağınık hale gelir
+- bug fix yapılınca her route tek tek güncellenmek zorunda kalır
+
+Bu nedenle auth gerektiren route’lar için ortak davranışları merkezi helper’larda toplamak zorunludur.
+
+---
+
+# 3. Merkezi Yapılar
+
+Projede merkezi kabul edilmesi gereken temel yapılar şunlardır:
+
+## 3.1 `src/lib/bff/webAuthProxyCore.ts`
+
+Bu dosya, web auth proxy yapısının **çekirdeğidir**.
+
+### Sorumluluğu
+Bu dosya şu ortak işleri çözer:
+
+- backend base URL çözümleme
+- correlation-id çözümleme
+- timeout oluşturma
+- ortak request header’larını oluşturma
+- refresh endpoint çağrısı
+- refresh sonucunda dönen cookie’leri alma
+- request cookie’leri ile refresh cookie’lerini merge etme
+- response header filtreleme
+- retry request için header hazırlama
+- concurrency/race durumlarında refresh çağrılarını koordine etme
+
+### Bu dosya ne yapmaz?
+Bu dosya doğrudan:
+- JSON parse etmez
+- raw/file response oluşturmaz
+- request body serialize etmez
+- route bazlı endpoint kurgusu yapmaz
+
+Yani bu dosya bir “çekirdek davranış kütüphanesi”dir.
+
+---
+
+## 3.2 `src/lib/bff/proxyJsonWithWebAuth.ts`
+
+Bu dosya, auth gerektiren **JSON endpoint’leri** için üst seviye proxy helper’dır.
+
+### Sorumluluğu
+Bu dosya şunları yapar:
+
+- request’i backend’e yollar
+- JSON body varsa serialize eder
+- response’u JSON/text/empty olarak okur
+- `401` durumunda refresh dener
+- refresh başarılıysa isteği yeniden dener
+- refresh başarısızsa standart `session expired` cevabı döner
+- upstream response header’larını güvenli şekilde döndürür
+
+### Bu helper ne için kullanılmalı?
+Sadece şu tip route’lar için:
+
+- auth gerektiren
+- JSON request/response kullanan
+- dosya upload / binary / stream olmayan
+- standart web auth davranışını kullanması gereken endpoint’ler
+
+Özetle:
+> Auth gerektiren JSON BFF route’larının ana giriş noktası bu helper olmalıdır.
+
+---
+
+## 3.3 `src/app/api/v1.0/account/refresh/route.ts`
+
+Bu route, BFF tarafındaki refresh giriş kapısıdır.
+
+### Sorumluluğu
+Bu endpoint’in görevi şudur:
+
+- mevcut request’ten tenant, language, cookie gibi context bilgilerini almak
+- backend refresh endpoint’ine bunları taşımak
+- backend’den gelen yeni session/access cookie’lerini frontend tarafına geri geçirmek
+
+Bu route’un görevi business logic yazmak değildir.
+
+Bu route:
+- token üretmez
+- auth policy belirlemez
+- session yönetimi kuralı koymaz
+
+Sadece refresh request’ini güvenli şekilde proxy eder.
+
+---
+
+## 3.4 `src/app/api/_shared/globalFetcher.server.ts`
+
+Bu dosya, bazı BFF route’larında kullanılan genel server-side upstream fetch katmanıdır.
+
+### Sorumluluğu
+- request’i upstream’e taşımak
+- ortak header forwarding yapmak
+- correlation-id taşımak
+- tenant taşımak
+- cookie taşımak
+- response’taki `set-cookie` bilgilerini geri çevirmek
+
+### Önemli not
+Bu dosya genel amaçlıdır, fakat auth ve refresh gibi kritik senaryolarda çok dikkatli kullanılmalıdır.
+
+Çünkü:
+- response yeniden oluşturulurken `set-cookie` kaybolabilir
+- content-type yanlış normalize edilebilir
+- refresh davranışı route bazında tekrar yazılabilir
+
+Bu nedenle auth gerektiren JSON route’lar için öncelikli çözüm **`proxyJsonWithWebAuth.ts`** olmalıdır.  
+`globalFetcher.server.ts` genel yardımcıdır; auth policy merkezi olmamalıdır.
+
+---
+
+# 4. `webAuthProxyCore.ts` İçindeki Yapılar Ne İş Yapar?
+
+Aşağıda çekirdek dosyadaki ana fonksiyonların görevleri açıklanmıştır.
+
+---
+
+## 4.1 `resolveBackendUrl(url)`
+
+### Amaç
+Verilen relatif veya mutlak URL’yi backend base URL’e göre çözmek.
+
+### Ne zaman kullanılır?
+Route helper’ı backend’e istek atacaksa.
+
+### Neden merkezi?
+Çünkü backend base URL bilgisi her route’ta tekrar tekrar yazılmamalıdır.
+
+---
+
+## 4.2 `resolveCorrelationId(req)`
+
+### Amaç
+Request’te gelen `x-correlation-id` varsa onu kullanmak, yoksa yeni bir correlation id üretmek.
+
+### Neden önemli?
+Dağıtık sistemlerde log zinciri kurmak için gereklidir.
+
+### Neden merkezi?
+Her route kendi correlation-id üretirse tutarsızlık oluşur. Bu davranış tek yerde tanımlanmalıdır.
+
+---
+
+## 4.3 `withTimeout(timeoutMs)`
+
+### Amaç
+Fetch çağrılarını zaman aşımına bağlamak.
+
+### Neden gerekli?
+Sonsuza kadar bekleyen upstream çağrılar BFF katmanını kilitler.
+
+### Neden merkezi?
+Timeout davranışının her route’ta farklı implement edilmesi gereksiz tekrar ve hata üretir.
+
+---
+
+## 4.4 `buildWebAuthHeaders(req, correlationId, options)`
+
+### Amaç
+Web auth request’lerinde gerekli ortak header’ları tek yerden üretmek.
+
+### Eklenen bilgiler
+- `accept`
+- `cookie`
+- `authorization` (gerekiyorsa)
+- `accept-language`
+- `x-tenant-key`
+- `x-correlation-id`
+
+### Neden önemli?
+Bu fonksiyon, auth gerektiren backend çağrılarının “ortak kimliğini” tanımlar.
+
+### Neden merkezi?
+Aksi halde bazı route’lar tenant gönderir, bazıları göndermez; bazıları cookie taşır, bazıları unutabilir.
+
+---
+
+## 4.5 `extractSetCookies(headers)`
+
+### Amaç
+Response header’larından dönen `Set-Cookie` değerlerini almak.
+
+### Neden kritik?
+Refresh ve session devamlılığı bu cookie’lerin doğru yakalanmasına bağlıdır.
+
+### Neden merkezi?
+`Set-Cookie` handling en kırılgan noktalardan biridir. Her route’ta farklı yazılması risklidir.
+
+---
+
+## 4.6 `mergeCookie(original, setCookies)`
+
+### Amaç
+İlk request’in cookie header’ı ile refresh response’tan gelen yeni cookie’leri birleştirmek.
+
+### Kullanım senaryosu
+- ilk request `401` döndü
+- refresh çağrısı başarılı oldu
+- retry request’te yeni cookie’lerle devam etmek gerekiyor
+
+### Neden merkezi?
+Cookie merge mantığı route’larda tekrar edilmemelidir.
+
+---
+
+## 4.7 `tryRefreshWebSession(req, timeoutMs, correlationId, logLabel)`
+
+### Amaç
+BFF içindeki refresh endpoint’ini çağırmak ve refresh sonucunu standart bir yapı olarak döndürmek.
+
+### Dönen bilgi
+- refresh başarılı mı
+- HTTP status ne
+- yeni cookie döndü mü
+- dönen cookie listesi nedir
+
+### Neden merkezi?
+Refresh davranışı sistemin en kritik auth davranışıdır. Route’larda elle yazılmamalıdır.
+
+---
+
+## 4.8 `refreshInFlight`
+
+### Amaç
+Aynı session için aynı anda birden fazla refresh çağrısı yapılmasını azaltmak.
+
+### Neden gerekli?
+Paralel request senaryolarında birkaç request aynı anda `401` alabilir.  
+Hepsi refresh’e giderse race condition oluşabilir.
+
+### Ne sağlar?
+Aynı session için tekil bir refresh işlemi paylaşılabilir.
+
+### Neden merkezi?
+Bu davranış route bazında çözülmez; çekirdek katmanda çözülmelidir.
+
+---
+
+## 4.9 `buildMergedRetryHeaders(...)`
+
+### Amaç
+Refresh sonrası retry request için yeni header seti oluşturmak.
+
+### Önemli detay
+Bu aşamada yeni cookie’ler merge edilir.
+
+### Ek not
+Retry aşamasında `authorization` header’ının yeniden taşınıp taşınmayacağı sistem kararına göre merkezi şekilde belirlenmelidir.
+
+---
+
+## 4.10 `filterProxyResponseHeaders(upstream, refreshCookies)`
+
+### Amaç
+Frontend’e dönecek response header’larını temizleyip, gerekli `set-cookie` değerlerini eklemek.
+
+### Neden gerekli?
+Bazı hop-by-hop header’lar frontend’e taşınmamalıdır.  
+Ama auth için gerekli cookie’ler taşınmalıdır.
+
+### Neden merkezi?
+Header filtreleme route’larda elle yapılmamalıdır.
+
+---
+
+# 5. `proxyJsonWithWebAuth.ts` Akışı
+
+Bu dosyanın standart davranışı şu şekildedir:
+
+1. Request için ortak auth header’ları hazırlanır
+2. Upstream backend endpoint’ine istek atılır
+3. Yanıt `401` değilse normal response döndürülür
+4. Yanıt `401` ise refresh denenir
+5. Refresh başarılıysa:
+   - refresh cookie’leri alınır
+   - retry request için header’lar yeniden kurulur
+   - istek tekrar gönderilir
+6. Refresh başarısızsa:
+   - standart `session expired` cevabı dönülür
+7. Son response güvenli header’larla frontend’e döndürülür
+
+### Bu neyi garanti eder?
+Auth gerektiren JSON route’lar aynı auth yaşam döngüsünü paylaşır.
+
+---
+
+# 6. Route Katmanında Beklenen Kullanım Şekli
+
+Bir route dosyası mümkün olduğunca sade olmalıdır.
+
+## Yanlış yaklaşım
+Route içinde:
+- tenant çözümlemek
+- correlation id üretmek
+- cookie merge etmek
+- refresh çağırmak
+- `401` kontrol etmek
+- response header filtrelemek
+- `set-cookie` taşımak
+
+gibi ortak auth davranışlarını elle yazmak
+
+Bu yaklaşım kod tekrarına ve auth tutarsızlığına yol açar.
+
+---
+
+## Doğru yaklaşım
+Route sadece endpoint özel bilgiyi üretmeli ve helper’ı çağırmalıdır.
+
+Örnek:
+
+```ts
+export async function GET(req: NextRequest) {
+  const queryString = req.nextUrl.searchParams.toString();
+  const url = queryString
+    ? `/api/v1.0/admin/monitoring/lockouts?${queryString}`
+    : "/api/v1.0/admin/monitoring/lockouts";
+
+  return proxyJsonWithWebAuth(req, {
+    url,
+    method: "GET",
+    timeoutMs: 15_000,
+    logLabel: "MonitoringLockoutList",
+  });
+}
+
+
+Bu modelde route’ın görevi:
+
+endpoint URL belirlemek
+method seçmek
+gerekiyorsa body geçirmek
+timeout/log label vermek
+
+Geri kalan her şey helper’a aittir.
+
+7. Hangi Route’lar Merkezi Helper Kullanmalı?
+
+Aşağıdaki özelliklere sahip route’lar doğrudan proxyJsonWithWebAuth kullanmalıdır:
+
+auth gerektiriyorsa
+cookie/session tabanlı web auth kullanıyorsa
+request/response JSON ise
+standart refresh davranışı isteniyorsa
+
+Örnek alanlar:
+
+monitoring
+account auth sonrası korumalı endpoint’ler
+admin panel JSON endpoint’leri
+tenant-aware backend JSON route’ları
+8. Hangi Durumlarda Ayrı Helper Gerekebilir?
+
+Aşağıdaki durumlarda proxyJsonWithWebAuth dışında özel helper gerekebilir:
+
+8.1 Raw/File endpoint’ler
+
+Örnek:
+
+dosya indirme
+PDF/Excel export
+image/blob response
+
+Bunlar için proxyRawWithWebAuth gibi ayrı helper gerekir.
+
+8.2 Multipart/FormData upload
+
+JSON helper bunun için uygun değildir.
+
+8.3 Stream/SSE
+
+SSE veya streaming response’lar JSON helper mantığıyla çalışmaz.
+
+Bu senaryolarda auth çekirdeği yine ortak kalmalı, ama üst helper farklı olmalıdır.
+
+9. Refresh Yapısının Amacı
+
+Refresh mekanizmasının amacı, session süresi dolmaya yakın veya dolmuş request’lerde kullanıcı deneyimini korumaktır.
+
+Temel akış
+kullanıcı bir korumalı endpoint’e gider
+backend mevcut cookie/session ile isteği reddeder (401)
+BFF bunu yakalar
+BFF refresh endpoint’ini çağırır
+yeni cookie alınırsa request tekrar denenir
+kullanıcı mümkünse login ekranına düşmeden işlemine devam eder
+Neden route’larda yazılmamalı?
+
+Çünkü bu, tüm auth korumalı endpoint’lerde ortak davranıştır.
+Route bazında yazıldığında bazı endpoint’ler refresh yaparken bazıları yapmaz.
+
+10. Tenant Yapısının Amacı
+
+Tenant yapısı multi-tenant sistem davranışını korumak için vardır.
+
+Amaç
+
+Her request’in doğru tenant context’i ile backend’e gitmesini sağlamak.
+
+Taşınan bilgi
+x-tenant-key
+gerekiyorsa tenant cookie veya başka tenant kaynakları
+Neden merkezi?
+
+Tenant çözümleme route bazında tekrar edilirse:
+
+bazı route’lar yanlış tenant ile backend’e gider
+hata ayıklama zorlaşır
+auth ve data isolation risk altına girer
+
+Bu nedenle tenant resolution tek yerde tanımlanmalı ve tüm auth helper’lar bunu kullanmalıdır.
+
+11. Correlation-ID Yapısının Amacı
+
+Correlation id, request zincirini uçtan uca takip etmek için kullanılır.
+
+Ne sağlar?
+frontend -> BFF -> backend log korelasyonu
+hatalı request’in tek id üzerinden izlenebilmesi
+refresh ve retry senaryolarında tek işlem zincirinin anlaşılması
+Neden merkezi?
+
+Route’ların kendi başına correlation-id üretmesi log bütünlüğünü bozar.
+
+12. Kod Tekrarını Önlemek İçin Kurallar
+
+Aşağıdaki kurallar proje standardı olarak benimsenmelidir:
+
+Kural 1
+
+Auth gerektiren JSON route’larda elle fetch yazılmamalıdır.
+Öncelik proxyJsonWithWebAuth kullanmaktır.
+
+Kural 2
+
+Route içinde manuel 401 -> refresh -> retry yazılmamalıdır.
+Bu davranış merkezi helper’da yaşamalıdır.
+
+Kural 3
+
+Route içinde tenant/correlation-id/cookie merge gibi ortak auth kodları yazılmamalıdır.
+
+Kural 4
+
+set-cookie forwarding route bazında yeniden kurgulanmamalıdır.
+
+Kural 5
+
+Response header filtreleme route bazında yeniden yazılmamalıdır.
+
+Kural 6
+
+Aynı auth davranışını kullanan endpoint’ler aynı helper üzerinden gitmelidir.
+
+13. Yeni Route Yazarken İzlenecek Yol
+
+Yeni bir BFF route geliştirilecekse şu sırayla düşünülmelidir:
+
+Senaryo A – JSON + auth gerekiyor
+
+proxyJsonWithWebAuth kullan
+
+Senaryo B – raw/file + auth gerekiyor
+
+Auth çekirdeğini kullanan ayrı raw helper kullan
+
+Senaryo C – auth gerekmiyor
+
+Daha sade bir helper veya basit proxy yeterli olabilir
+
+Senaryo D – özel davranış gerekiyor
+
+Önce bak:
+
+mevcut helper genişletilebilir mi?
+gerçekten yeni helper gerekiyor mu?
+
+İlk tercih her zaman mevcut merkezi yapıyı genişletmek olmalıdır.
+
+14. Anti-Pattern’ler
+
+Aşağıdaki yaklaşımlar projede istenmeyen yaklaşımlardır:
+
+Anti-pattern 1
+
+Her route içinde yeniden:
+
+fetchWithTimeout
+appendSetCookies
+resolveTenant
+newCorrelationId
+cookie
+401 kontrolü
+
+yazmak
+
+Anti-pattern 2
+
+Bazı route’larda refresh yapıp bazılarında yapmamak
+
+Anti-pattern 3
+
+set-cookie handling’i route bazında farklı farklı implement etmek
+
+Anti-pattern 4
+
+Auth davranışını globalFetcher gibi genel yardımcıların içine dağınık biçimde yaymak
+
+Anti-pattern 5
+
+Route dosyalarını business endpoint yerine auth mekanizması ile doldurmak
+
+15. Önerilen Standart Katman Yapısı
+
+Aşağıdaki katmanlaşma önerilir:
+
+Çekirdek katman
+
+src/lib/bff/webAuthProxyCore.ts
+
+Burada:
+
+refresh
+retry
+cookie merge
+tenant
+timeout
+header filtering
+correlation-id
+JSON auth helper
+
+src/lib/bff/proxyJsonWithWebAuth.ts
+
+Burada:
+
+JSON body handling
+JSON/text/empty response handling
+session expired standard response
+Raw auth helper
+
+src/lib/bff/proxyRawWithWebAuth.ts
+(gerekliyse)
+
+Route katmanı
+
+Sadece endpoint özel URL/method/body bilgisi
+
+16. Gelecekte Bakım Yapacak Kişi İçin Özet
+
+Projeyi devralan kişi şunu bilmelidir:
+
+auth davranışının merkezi route.ts dosyaları değildir
+auth davranışının merkezi webAuthProxyCore.ts ve bunu kullanan üst helper’lardır
+route dosyaları mümkün olduğunca ince tutulmalıdır
+route içinde tekrar eden auth kodu görülüyorsa bu genellikle refactor adayıdır
+bir auth davranışı değişecekse önce merkezi helper’lar kontrol edilmelidir
+401, refresh, tenant, set-cookie, retry, session expired gibi davranışlar route bazında değil helper bazında ele alınmalıdır
+17. Sonuç
+
+Bu projede amaç, BFF katmanında auth ile ilgili ortak davranışları merkezileştirmek ve route’ları mümkün olduğunca sade tutmaktır.
+
+Bu nedenle:
+
+webAuthProxyCore.ts auth omurgasıdır
+proxyJsonWithWebAuth.ts auth gerektiren JSON route’ların standart kapısıdır
+refresh, tenant, cookie, retry, response header filtering gibi davranışlar route bazında tekrar yazılmamalıdır
+yeni route’lar mümkün olduğunca mevcut merkezi helper’ları kullanmalıdır
+merkezi helper dışında yazılan auth kodları zamanla teknik borç üretir
+
+Temel prensip şudur:
+
+Route’lar endpoint’i tanımlar.
+Auth davranışını helper’lar yönetir.
+Tekrar eden kod route’larda değil, merkezi helper’larda çözülmelidir.

@@ -1,0 +1,548 @@
+
+
+📄 LiveManage Trust Platform
+Güven Tabanlı Apartman, İlişki ve Gayrimenkul Yönetim Sistemi
+1. 🎯 Ürün Vizyonu
+
+LiveManage, yalnızca apartman yönetimi yapan bir sistem değil;
+kullanıcıların konut hayatına ait geçmiş davranışlarını güvenilir şekilde kayıt altına alan ve kontrollü olarak paylaşılmasını sağlayan bir güven platformudur.
+
+Amaç:
+
+Gayrimenkul kararlarını sözlü beyanlardan çıkarıp veriye dayalı güven modeline taşımak.
+
+2. 🧠 Temel Problemler
+
+Bugünkü sistemde:
+
+Ev sahipleri kiracıyı tanımaz
+Kiracılar ev sahibine güvenemez
+Emlak firmaları şeffaf değildir
+İnşaat firmalarının kalitesi belirsizdir
+Referanslar doğrulanamaz ve manipüle edilebilir
+3. 💡 Çözüm
+
+LiveManage:
+
+Gerçek yaşam verilerini (ödeme, davranış, ilişki)
+Doğrulanmış kullanıcılar üzerinden
+Audit ve güvenlik katmanı ile
+Kullanıcı izniyle paylaşılabilir hale getirir
+4. 🏗️ Sistem Mimarisi (Yüksek Seviye)
+
+Sistem 3 ana katmandan oluşur:
+
+🔒 1. Core Platform (Private Data Layer)
+
+Gerçek verinin üretildiği yer:
+
+Apartman / site yönetimi
+Kullanıcı – daire ilişkileri
+Ödeme kayıtları
+Davranış ve işlem kayıtları
+Audit ve güvenlik logları
+
+👉 Bu katman dış dünyaya direkt açılmaz.
+
+🔗 2. Trust Engine (Güven Katmanı)
+
+Sistemin kalbi:
+
+Referans talep sistemi
+Onay / red mekanizması
+Veri paylaşım kontrolü
+Davranış analizi
+Güven skoru üretimi
+🌐 3. Marketplace (Public Platform)
+
+Kullanıcıların etkileşime girdiği alan:
+
+İlan sistemi (kiralık / satılık)
+Kullanıcı arama
+Referans talebi
+Profil inceleme
+5. 👤 Kullanıcı Modeli
+
+Tek kullanıcı, çok rol prensibi:
+
+Bir kullanıcı:
+
+Kiracı olabilir
+Ev sahibi olabilir
+Yönetici olabilir
+Emlak firması sahibi olabilir
+
+👉 Roller sistem içinde bağlama göre atanır
+
+6. 🏢 Modüller
+6.1 Property & Site Management
+Site / apartman
+Blok / daire
+Ortak alanlar
+Yönetici atama (admin tarafından)
+6.2 Resident & Ownership
+Ev sahibi
+Kiracı
+Aynı kullanıcı birden fazla daireye bağlı olabilir
+Zaman bazlı oturum geçmişi
+6.3 Financial & Operations
+Aidat yönetimi
+Kira takibi
+Ödeme kayıtları
+Gelir / gider kalemleri
+6.4 Relationship System
+Kullanıcılar arası ilişki
+Yetki devri
+Geçici temsil
+Referans geçmişi
+6.5 Trust & Reference System ⭐
+Referans talep etme
+Referans onay / red
+Veri paylaşım izni
+Güven özetleri
+6.6 Company Modules
+🏢 Emlak Firmaları
+Kiracılar değerlendirme yapabilir
+Ev sahipleri firmaları karşılaştırabilir
+🏗️ İnşaat Firmaları
+Ev sahipleri firmayı işaretler
+Kullanıcılar puan ve yorum verir
+Yeni alıcılar karar verir
+6.7 Audit & Security Layer
+
+Mevcut sistemin doğrudan kullanımı:
+
+Audit log
+Security log
+Sensitive access log
+Entity history
+
+👉 Tüm işlemler izlenebilir
+
+7. 🔑 Referans Sistemi (Detay)
+Senaryo: Kiracı değerlendirme
+Ev sahibi → kiracıdan referans ister
+Kiracı:
+✔ Onay → veri paylaşılır
+❌ Red → hiçbir şey gösterilmez
+
+Gösterilen:
+
+Ödeme düzeni
+Kira geçmişi
+Apartman davranışı
+Genel uyum
+Senaryo: Ev sahibi değerlendirme
+Kiracı → ev sahibinden referans ister
+Ev sahibi onaylarsa:
+
+Gösterilen:
+
+Tamir / bakım yaklaşımı
+Sözleşme uyumu
+Genel memnuniyet
+8. 🔐 Güvenlik ve Veri Politikası
+Tüm kullanıcılar email doğrulamalı
+Veri paylaşımı izin bazlı
+Ham veri gösterilmez
+Özetlenmiş skorlar sunulur
+Hassas veriler maskelenir
+
+Örnek:
+
+❌ Tam ödeme geçmişi
+✔ “Ödeme düzeni: iyi / orta / riskli”
+9. 🔁 User Flow’lar
+🔷 Flow 1 – Site kurulumu
+
+Admin → Site oluşturur → Yönetici atar → Yönetici kullanıcıları ekler → Kullanıcılar email doğrular
+
+🔷 Flow 2 – Daire yönetimi
+
+Yönetici → Daire oluşturur → Ev sahibi & kiracı bağlar → Finansal kayıtlar girilir
+
+🔷 Flow 3 – Kiracı geçmişi oluşumu
+
+Kiracı → Ödeme yapar → Sistem kayıt alır → Audit oluşur → Trust verisi birikir
+
+🔷 Flow 4 – Referans talebi
+
+Kullanıcı → Referans ister → Karşı taraf onaylar → Sistem özet veri gösterir
+
+🔷 Flow 5 – İlan süreci
+
+Kullanıcı → İlan açar → Adaylar başvurur → Referans talebi → Karar
+
+10. 🧱 Teknik Mimari (LiveManage uyumlu)
+Katmanlar:
+Core (Entity)
+Abstractions (Interfaces)
+DataAccess (EF)
+Business (Service)
+WebApi (Controller)
+Servis Ayrımı
+UserActivityService
+AuditLogService
+SecurityLogService
+TrustScoreService
+ReferenceRequestService
+PropertyManagementService
+Cache (ICacheService)
+kullanıcı activity cache
+audit list cache
+trust score cache
+
+Tenant-aware key yapısı:
+
+trust:user:{userId}
+audit:tenant:{tenantId}
+11. 🚀 Roadmap
+🔶 Faz 1 – Core System
+Kullanıcı + rol sistemi
+Site / daire yönetimi
+Temel ödeme sistemi
+Activity log
+🔶 Faz 2 – Trust Engine
+Referans talep
+Onay sistemi
+Güven skoru (basic)
+🔶 Faz 3 – Marketplace
+İlan sistemi
+Arama / filtre
+Profil ekranları
+🔶 Faz 4 – Advanced Trust
+Gelişmiş skor algoritması
+Firma değerlendirme
+Risk analizi
+🔶 Faz 5 – Enterprise
+Cross-tenant analiz
+Fraud detection
+AI destekli öneri sistemi
+12. 🏁 Sonuç
+
+LiveManage:
+
+❌ Bir apartman yönetim uygulaması değildir
+✔ Güven verisi üreten ve yöneten bir platformdur
+
+Bu sistemin gücü:
+
+Gerçek veri
+Audit ile doğrulanabilirlik
+Kullanıcı kontrollü paylaşım
+Çoklu rol ve ilişki yapısı
+Sonraki adım
+
+İstersen buradan sonra:
+
+🔥 Database modelini (entity-level) birlikte tasarlayalım
+veya
+⚙️ ilk modülün (ReferenceRequest + TrustScore) kod mimarisine geçelim
+
+Benim önerim:
+
+önce ReferenceRequest modülünü tasarlayalım
+çünkü sistemin kalbi orası.
+
+-------------------------------
+Modüller
+
+LiveManage Trust Platform — Ana Modül Başlıkları
+1. Kullanıcı & Kimlik Modülü
+kullanıcı kaydı
+email doğrulama
+login / logout
+rol ve yetki
+cihaz / oturum takibi
+2. Organizasyon & Tenant Modülü
+tenant / şirket / kurum
+site yönetimi organizasyonu
+emlak şirketi organizasyonu
+inşaat firması organizasyonu
+organizasyon üyelikleri
+3. Site / Apartman Yönetimi Modülü
+site
+apartman
+blok
+kat
+daire
+ortak alanlar
+site yöneticisi atama
+4. Daire İlişki Modülü
+daire sahibi
+kiracı
+eski kiracı
+vekil
+aynı kullanıcının birden fazla daire/site ilişkisi
+zaman bazlı oturum geçmişi
+5. Aidat & Gelir-Gider Modülü
+aidat tanımlama
+ortak giderler
+gelir kalemleri
+gider kalemleri
+borçlandırma
+ödeme takibi
+6. Kira Takip Modülü
+kira sözleşmesi
+kira ödeme kayıtları
+gecikme takibi
+ödeme düzeni analizi
+kiracı ödeme geçmişi
+7. İşlem & Aktivite Geçmişi Modülü
+kullanıcı hareketleri
+apartman işlemleri
+ödeme hareketleri
+toplantı katılımı
+bakım / arıza davranışı
+raporlanabilir geçmiş
+8. Referans Talep Modülü
+kiracıdan referans isteme
+ev sahibinden referans isteme
+emlak firmasından referans isteme
+onay / red
+süreli paylaşım izni
+paylaşım geçmişi
+9. Güven Skoru & Referans Özeti Modülü
+ödeme disiplini
+aidat düzeni
+apartman uyumu
+ev sahibi davranışı
+emlak firması güven notu
+inşaat firması kalite notu
+10. İlan / Public Marketplace Modülü
+kiralık ilan
+satılık ilan
+ilan arama
+başvuru / iletişim
+referans talebi entegrasyonu
+login zorunlu işlem akışı
+11. Emlak Firması Modülü
+emlak şirketi profili
+ilan yönetimi
+kullanıcı değerlendirmeleri
+firma referans geçmişi
+ev sahipleri için güven raporu
+12. İnşaat Firması Modülü
+inşaat firması profili
+firma proje geçmişi
+kullanıcı yorumları
+kalite değerlendirmeleri
+satın alma öncesi güven raporu
+13. Bakım / Arıza / Talep Modülü
+arıza bildirimi
+bakım talebi
+tamir kayıtları
+ev sahibi müdahale geçmişi
+kiracı memnuniyeti
+14. Toplantı & Karar Modülü
+apartman toplantıları
+katılım kayıtları
+oylamalar
+karar defteri
+kullanıcı katılım geçmişi
+15. Belge Yönetimi Modülü
+kira sözleşmeleri
+tapu / mülkiyet belgeleri
+apartman kararları
+ödeme belgeleri
+güvenli belge erişimi
+16. Bildirim Modülü
+email bildirimleri
+sistem içi bildirimler
+referans talebi bildirimi
+ödeme hatırlatmaları
+toplantı bildirimi
+17. Audit & Security Monitoring Modülü
+audit timeline
+security timeline
+sensitive access viewer
+lockout center
+işlem izleme
+admin denetim ekranları
+18. Raporlama & Analitik Modülü
+site gelir-gider raporu
+kiracı ödeme raporu
+ev sahibi davranış raporu
+firma güven raporu
+trust dashboard
+19. Permission & Access Control Modülü
+kullanıcı izinleri
+site bazlı yetki
+daire bazlı erişim
+referans görüntüleme izni
+hassas veri erişim izni
+20. Sistem Ayarları & Localization Modülü
+çok dilli yapı
+tenant ayarları
+sistem konfigürasyonları
+UI metinleri
+ülke / bölge bazlı ayarlar
+
+-----------------------
+istediğin süreç şu:
+
+1. UI ekran tasarımı
+2. Ekranın ihtiyaç duyduğu dinamik verileri tespit etme
+3. Bu verilerden TypeScript type çıkarma
+4. TypeScript type → Backend DTO sözleşmesi
+5. DTO’yu üretmek için gereken entity’leri belirleme
+6. Repository interface
+7. Repository implementation
+8. Service interface
+9. Service implementation
+10. Validation
+11. Mapping
+12. Controller endpoint
+13. BFF route
+14. Frontend service / hook bağlantısı
+15. UI gerçek veriyle çalışır
+
+Bu, senin LiveManage için en doğru geliştirme metodolojisi.
+
+Buna isim verelim:
+
+UI-driven Contract-to-Backend Development
+
+Yani:
+
+Ekran ne istiyor → veri ne olmalı → backend bunu nasıl üretmeli?
+
+Her modül için kullanacağımız standart şablon
+
+Bundan sonra her yeni modülde şu sırayla ilerleyelim:
+
+1. Ekran Tanımı
+
+Örnek:
+
+Ekran: Site Yönetim Dashboard
+Kullanıcı: Site yöneticisi
+Amaç: Yönettiği apartmanın durumunu tek ekranda görmek
+2. UI Bölümleri
+- Özet kartları
+- Finans özeti
+- Daire doluluk durumu
+- Geciken ödemeler
+- Son işlemler
+- Açık bakım talepleri
+3. Dinamik Veri Listesi
+- totalUnits
+- occupiedUnits
+- vacantUnits
+- monthlyExpectedAmount
+- monthlyCollectedAmount
+- overdueAmount
+- recentActivities
+- openMaintenanceRequests
+4. Frontend Type
+export type SiteManagementDashboardDto = {
+  siteId: string;
+  siteName: string;
+  totalUnits: number;
+  occupiedUnits: number;
+  vacantUnits: number;
+  monthlyExpectedAmount: number;
+  monthlyCollectedAmount: number;
+  overdueAmount: number;
+};
+5. Backend DTO
+public sealed class SiteManagementDashboardDto
+{
+    public Guid SiteId { get; set; }
+    public string SiteName { get; set; } = string.Empty;
+    public int TotalUnits { get; set; }
+    public int OccupiedUnits { get; set; }
+    public int VacantUnits { get; set; }
+    public decimal MonthlyExpectedAmount { get; set; }
+    public decimal MonthlyCollectedAmount { get; set; }
+    public decimal OverdueAmount { get; set; }
+}
+6. Backend Gereksinimleri
+Entity:
+- Site
+- Building
+- PropertyUnit
+- UnitOccupancy
+- FeePeriod
+- PaymentTransaction
+
+Repository:
+- ISiteRepository
+- IPropertyUnitRepository
+- IFinancialSummaryRepository
+
+Service:
+- ISiteManagementDashboardService
+
+Validation:
+- SiteDashboardQueryValidator
+
+Mapping:
+- SiteDashboardMapper
+
+Controller:
+GET /api/v1.0/property-management/sites/{siteId}/dashboard
+En önemli kural
+
+Entity’yi direkt UI’dan çıkarmayacağız.
+
+UI bize şunu söyleyecek:
+
+“Ben hangi veriye ihtiyacım var?”
+
+Backend sonra karar verecek:
+
+“Bu veri hangi entity’lerden üretilir?”
+
+Bu fark çok önemli.
+
+Bu yöntemle her modül için çıktı formatımız
+
+Her ekran için sana şu formatta döküman çıkaracağım:
+
+Ekran adı
+Kullanıcı rolü
+Ekranın amacı
+UI blokları
+Dinamik veri ihtiyaçları
+Frontend type
+Mock data alanları
+Backend DTO
+Gerekli entity adayları
+Repository ihtiyacı
+Service ihtiyacı
+Validation ihtiyacı
+Mapping ihtiyacı
+Endpoint
+Cache stratejisi
+Audit / log ihtiyacı
+Permission ihtiyacı
+İlk başlayacağımız yer
+
+Benim önerim:
+
+Site Yönetim Dashboard
+
+Çünkü tüm sistemin ana ekranı olacak.
+
+İlk ekran için hedef:
+
+Yönetici kendi sitesinin genel durumunu görecek.
+
+Bu ekranda:
+
+- toplam daire
+- dolu daire
+- boş daire
+- aktif kiracı
+- ev sahibi sayısı
+- beklenen aidat
+- tahsil edilen aidat
+- geciken ödeme
+- son işlemler
+- açık talepler
+- yaklaşan toplantılar
+
+Bu artık doğru metodoloji:
+
+Önce ekran, sonra dinamik veri, sonra contract, sonra backend zinciri.

@@ -1,3 +1,6 @@
+//src/lib/bff/header.ts
+
+/// 🌐 BFF Proxy Headers Builder
 import { NextRequest } from "next/server";
 import crypto from "node:crypto";
 import { resolveTenant } from "./resolveTenant";

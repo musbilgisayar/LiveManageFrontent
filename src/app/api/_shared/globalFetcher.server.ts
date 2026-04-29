@@ -2,8 +2,6 @@
 // File: src/app/api/_shared/globalFetcher.server.ts
 // ============================================================
 
-/// 🌐 BFF Proxy Fetcher (SERVER ONLY)
-
 import "server-only";
 import crypto from "crypto";
 import { resolveTenantDetailed } from "@/lib/bff/resolveTenant";
@@ -54,10 +52,11 @@ const isAnonymousAuthPath = (url: string): boolean => {
 const createRequestId = (): string => {
   if (
     typeof globalThis !== "undefined" &&
-    (globalThis as any).crypto?.randomUUID
+    typeof globalThis.crypto?.randomUUID === "function"
   ) {
-    return (globalThis as any).crypto.randomUUID();
+    return globalThis.crypto.randomUUID();
   }
+
   return `${Date.now()}-${Math.random()}`;
 };
 
@@ -67,28 +66,18 @@ const createCorrelationId = (
 ): string => {
   if (incoming && incoming.trim() !== "") return incoming;
 
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
 
   return fallback ?? createRequestId();
 };
 
-const tryParseJson = (text: string) => {
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return { ok: false, raw: text };
-  }
-};
-
 function normalizeSetCookieForBff(cookie: string): string {
   let normalized = cookie;
 
-  // BFF host'una yazılabilmesi için upstream Domain bilgisini kaldır.
   normalized = normalized.replace(/;\s*Domain=[^;]+/i, "");
 
-  // Dev ortamında frontend http ise Secure cookie yazılamayabilir.
   if (process.env.NODE_ENV === "development") {
     normalized = normalized.replace(/;\s*Secure/gi, "");
   }
@@ -96,27 +85,105 @@ function normalizeSetCookieForBff(cookie: string): string {
   return normalized;
 }
 
-const appendSetCookies = (source: Headers, target: Headers): string[] => {
-  const getSetCookieFn = (source as any).getSetCookie;
+function splitCombinedSetCookie(headerValue: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inExpires = false;
 
-  if (typeof getSetCookieFn === "function") {
-    const cookies: string[] = getSetCookieFn.call(source) ?? [];
-    if (cookies.length > 0) {
-      const normalizedCookies = cookies.map(normalizeSetCookieForBff);
-      normalizedCookies.forEach((cookie) => target.append("set-cookie", cookie));
-      return normalizedCookies;
+  for (let i = 0; i < headerValue.length; i += 1) {
+    const char = headerValue[i];
+    const remaining = headerValue.slice(i);
+
+    if (!inExpires && remaining.toLowerCase().startsWith("expires=")) {
+      inExpires = true;
+    }
+
+    if (inExpires && char === ";") {
+      inExpires = false;
+    }
+
+    if (!inExpires && char === ",") {
+      const rest = headerValue.slice(i + 1);
+      const cookieStartMatch = rest.match(
+        /^\s*([!#$%&'*+\-.^_`|~0-9A-Za-z]+)=/
+      );
+
+      if (cookieStartMatch) {
+        if (current.trim()) {
+          result.push(current.trim());
+        }
+        current = "";
+        continue;
+      }
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) {
+    result.push(current.trim());
+  }
+
+  return result;
+}
+
+function getSetCookieValues(headers: Headers): string[] {
+  const withGetSetCookie = headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+
+  if (typeof withGetSetCookie.getSetCookie === "function") {
+    try {
+      const cookies = withGetSetCookie.getSetCookie();
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        return cookies.filter(Boolean);
+      }
+    } catch {
+      // Fallback below.
     }
   }
 
-  const single = source.get("set-cookie");
-  if (single) {
-    const normalized = normalizeSetCookieForBff(single);
-    target.append("set-cookie", normalized);
-    return [normalized];
+  const raw = headers.get("set-cookie");
+  if (!raw) {
+    return [];
   }
 
-  return [];
-};
+  return splitCombinedSetCookie(raw).filter(Boolean);
+}
+
+function appendSetCookies(source: Headers, target: Headers): string[] {
+  const cookies = getSetCookieValues(source).map(normalizeSetCookieForBff);
+
+  for (const cookie of cookies) {
+    target.append("set-cookie", cookie);
+  }
+
+  return cookies;
+}
+
+function copyResponseHeaders(source: Headers, correlationId: string): Headers {
+  const target = new Headers();
+
+  source.forEach((value, key) => {
+    const lower = key.toLowerCase();
+
+    if (
+      lower === "set-cookie" ||
+      lower === "content-length" ||
+      lower === "transfer-encoding" ||
+      lower === "connection"
+    ) {
+      return;
+    }
+
+    target.set(key, value);
+  });
+
+  target.set("x-correlation-id", correlationId);
+  appendSetCookies(source, target);
+
+  return target;
+}
 
 export default async function globalFetcher(
   req: Request,
@@ -142,6 +209,7 @@ export default async function globalFetcher(
 
   const headers: Record<string, string> = {
     "x-correlation-id": correlationId,
+    "x-tenant-key": tenantKey,
   };
 
   if (contentType && contentType.trim() !== "") {
@@ -151,8 +219,6 @@ export default async function globalFetcher(
   if (acceptLanguage && acceptLanguage.trim() !== "") {
     headers["Accept-Language"] = acceptLanguage;
   }
-
-  headers["X-Tenant-Key"] = tenantKey;
 
   const shouldForwardAuthorization =
     !!authorization &&
@@ -191,11 +257,18 @@ export default async function globalFetcher(
       method,
       headers,
       ...(hasBody ? { body } : {}),
+      cache: "no-store",
     });
 
     const elapsedMs = Math.round(nowMs() - startedAt);
+    const rawSetCookies = getSetCookieValues(upstreamResponse.headers);
+    const responseHeaders = copyResponseHeaders(
+      upstreamResponse.headers,
+      correlationId
+    );
     const responseText = await upstreamResponse.text();
-    const parsedBody = tryParseJson(responseText);
+    const responseContentType =
+      upstreamResponse.headers.get("content-type") ?? "(yok)";
 
     if (SERVER_LOG_ON()) {
       console.info("🟣 [BFF][RES] Upstream yanıtı alındı", {
@@ -208,9 +281,11 @@ export default async function globalFetcher(
         elapsedMs,
         tenantKey: maskTenant(tenantKey),
         tenantSource: tenantResolution.source,
-        contentType: upstreamResponse.headers.get("content-type") ?? "(yok)",
-        envelopeOk: (parsedBody as any)?.ok,
-        responseKeys: Object.keys((parsedBody as any) ?? {}),
+        contentType: responseContentType,
+        responseBytes: responseText.length,
+        setCookieCount: rawSetCookies.length,
+        setCookieNames: rawSetCookies.map((c) => c.split("=")[0]),
+        rawSetCookieHeader: upstreamResponse.headers.get("set-cookie") ?? "(yok)",
       });
     }
 
@@ -223,25 +298,14 @@ export default async function globalFetcher(
         status: upstreamResponse.status,
         tenantKey: maskTenant(tenantKey),
         tenantSource: tenantResolution.source,
-        payload: parsedBody,
         raw:
-          typeof (parsedBody as any)?.raw === "string"
-            ? short((parsedBody as any).raw, 500)
-            : undefined,
+          typeof responseText === "string" ? short(responseText, 500) : undefined,
       });
     }
 
-    const responseHeaders = new Headers({
-      "Content-Type": "application/json",
-      "x-correlation-id": correlationId,
-    });
-
-    const forwardedCookies = appendSetCookies(
-      upstreamResponse.headers,
-      responseHeaders
-    );
-
     if (SERVER_LOG_ON()) {
+      const forwardedCookies = getSetCookieValues(responseHeaders);
+
       console.info("🍪 [BFF][COOKIE] Set-Cookie forward sonucu", {
         reqId,
         correlationId,
@@ -252,12 +316,13 @@ export default async function globalFetcher(
       });
     }
 
-    return new Response(JSON.stringify(parsedBody), {
+    return new Response(responseText, {
       status: upstreamResponse.status,
       headers: responseHeaders,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     const elapsedMs = Math.round(nowMs() - startedAt);
+    const message = error instanceof Error ? error.message : String(error);
 
     console.error("💥 [BFF][EX] Upstream network veya SSL hatası", {
       reqId,
@@ -267,13 +332,13 @@ export default async function globalFetcher(
       elapsedMs,
       tenantKey: maskTenant(tenantKey),
       tenantSource: tenantResolution.source,
-      message: error?.message ?? String(error),
+      message,
     });
 
     return new Response(
       JSON.stringify({
         ok: false,
-        error: error?.message ?? "fetch failed",
+        error: message,
         reqId,
         correlationId,
       }),

@@ -1,33 +1,9 @@
-/**
- * Web auth proxy core
- *
- * Neden var?
- * - Web tarafında auth stratejimiz cookie-first çalışır.
- * - JSON proxy ve raw/file proxy aynı auth + tenant + refresh + retry omurgasını kullanır.
- * - Bu ortak davranışları tek yerde toplamak; bakım, tutarlılık ve hata ayıklamayı kolaylaştırır.
- *
- * Bu dosya neyi çözer?
- * - tenant çözümleme
- * - correlation-id üretme / taşıma
- * - backend url çözümleme
- * - timeout yönetimi
- * - request header oluşturma
- * - refresh çağrısı
- * - set-cookie extraction
- * - cookie merge
- * - response header filtreleme
- *
- * Bu dosya ne yapmaz?
- * - JSON parse etmez
- * - raw/binary response oluşturmaz
- * - request body serialize etmez
- *
- * Yani:
- * - proxyJsonWithWebAuth.ts => bu core'u kullanır + JSON davranışını ekler
- * - proxyRawWithWebAuth.ts  => bu core'u kullanır + raw/file davranışını ekler
- */
+// ============================================================
+// File: src/lib/bff/webAuthProxyCore.ts
+// ============================================================
 
 import { NextRequest } from "next/server";
+import { createHash } from "crypto";
 import { resolveTenant } from "@/lib/bff/resolveTenant";
 
 export const WEB_AUTH_BACKEND_BASE =
@@ -53,7 +29,8 @@ export type RefreshResult = {
   cookies: string[];
 };
 
- 
+const refreshInFlight = new Map<string, Promise<RefreshResult>>();
+
 export function resolveCorrelationId(req: NextRequest): string {
   return req.headers.get("x-correlation-id") ?? crypto.randomUUID();
 }
@@ -103,6 +80,48 @@ export function applyHeaders(target: Headers, source?: HeadersInit): void {
   });
 }
 
+function splitCombinedSetCookie(headerValue: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inExpires = false;
+
+  for (let i = 0; i < headerValue.length; i += 1) {
+    const char = headerValue[i];
+    const remaining = headerValue.slice(i);
+
+    if (!inExpires && remaining.toLowerCase().startsWith("expires=")) {
+      inExpires = true;
+    }
+
+    if (inExpires && char === ";") {
+      inExpires = false;
+    }
+
+    if (!inExpires && char === ",") {
+      const rest = headerValue.slice(i + 1);
+      const cookieStartMatch = rest.match(
+        /^\s*([!#$%&'*+\-.^_`|~0-9A-Za-z]+)=/
+      );
+
+      if (cookieStartMatch) {
+        if (current.trim()) {
+          result.push(current.trim());
+        }
+        current = "";
+        continue;
+      }
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) {
+    result.push(current.trim());
+  }
+
+  return result;
+}
+
 export function extractSetCookies(headers: Headers): string[] {
   const withGetSetCookie = headers as Headers & {
     getSetCookie?: () => string[];
@@ -110,14 +129,21 @@ export function extractSetCookies(headers: Headers): string[] {
 
   if (typeof withGetSetCookie.getSetCookie === "function") {
     try {
-      return withGetSetCookie.getSetCookie();
+      const cookies = withGetSetCookie.getSetCookie();
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        return cookies.filter(Boolean);
+      }
     } catch {
-      return [];
+      // Fallback below.
     }
   }
 
   const raw = headers.get("set-cookie");
-  return raw ? [raw] : [];
+  if (!raw) {
+    return [];
+  }
+
+  return splitCombinedSetCookie(raw).filter(Boolean);
 }
 
 export function mergeCookie(
@@ -163,26 +189,13 @@ export function mergeCookie(
     .join("; ");
 }
 
-/*
- * Web auth standardı:
- * - Cookie varsa forward et
- * - Authorization varsa onu da forward et
- *
- * Neden?
- * - Bazı backend endpointleri cookie ile birlikte Authorization header'ını da bekleyebiliyor
- * - Pratikte çalışan route'larda hem cookie hem authorization birlikte gidiyor
- * - Sadece "cookie varsa auth gönderme" yaklaşımı bazı route'larda 401 üretiyor
- *
- * Not:
- * - Bu fonksiyon request'te gelen auth sinyallerini backend'e taşır
- * - Hangi auth kaynağının esas alınacağına backend karar verir
- */
 export function buildWebAuthHeaders(
   req: NextRequest,
   correlationId: string,
   options?: {
     extraHeaders?: HeadersInit;
     defaultAccept?: string;
+    includeAuthorization?: boolean;
   }
 ): Headers {
   const headers = new Headers();
@@ -197,12 +210,16 @@ export function buildWebAuthHeaders(
     headers.set("cookie", cookie);
   }
 
-  const auth =
-    req.headers.get("authorization") ??
-    req.headers.get("Authorization");
+  const includeAuthorization = options?.includeAuthorization ?? true;
 
-  if (auth) {
-    headers.set("authorization", auth);
+  if (includeAuthorization) {
+    const auth =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization");
+
+    if (auth) {
+      headers.set("authorization", auth);
+    }
   }
 
   const lang = req.headers.get("accept-language");
@@ -215,21 +232,14 @@ export function buildWebAuthHeaders(
 
   applyHeaders(headers, options?.extraHeaders);
 
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[BFF][buildWebAuthHeaders]", {
-      hasIncomingCookie: !!req.headers.get("cookie"),
-      incomingCookieLength: req.headers.get("cookie")?.length ?? 0,
-      hasIncomingAuthorization:
-        !!req.headers.get("authorization") ||
-        !!req.headers.get("Authorization"),
-      forwardedCookie: headers.has("cookie"),
-      forwardedAuthorization: headers.has("authorization"),
-      tenant: headers.get("x-tenant-key"),
-      correlationId: headers.get("x-correlation-id"),
-    });
-  }
-
   return headers;
+}
+
+function getRefreshKey(req: NextRequest): string {
+  const tenant = resolveTenant(req);
+  const cookie = req.headers.get("cookie") ?? "";
+  const cookieHash = createHash("sha256").update(cookie).digest("hex");
+  return `${tenant}::${cookieHash}`;
 }
 
 export async function tryRefreshWebSession(
@@ -238,58 +248,85 @@ export async function tryRefreshWebSession(
   correlationId: string,
   logLabel: string
 ): Promise<RefreshResult> {
-  const { signal, cleanup } = withTimeout(timeoutMs);
-  const refreshUrl = `${req.nextUrl.origin}/api/v1.0/account/refresh`;
+  const key = getRefreshKey(req);
+  const existing = refreshInFlight.get(key);
+
+  if (existing) {
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[BFF][${logLabel}][REFRESH_REUSE]`, {
+        correlationId,
+        refreshKey: key,
+      });
+    }
+    return existing;
+  }
+
+  const promise = (async (): Promise<RefreshResult> => {
+    const { signal, cleanup } = withTimeout(timeoutMs);
+    const refreshUrl = `${req.nextUrl.origin}/api/v1.0/account/refresh`;
+
+    try {
+      const res = await fetch(refreshUrl, {
+        method: "POST",
+        headers: {
+          cookie: req.headers.get("cookie") || "",
+          "x-tenant-key": resolveTenant(req),
+          "x-correlation-id": correlationId,
+          ...(req.headers.get("accept-language")
+            ? { "accept-language": req.headers.get("accept-language")! }
+            : {}),
+          accept: "application/json",
+        },
+        cache: "no-store",
+        signal,
+      });
+
+      const cookies = extractSetCookies(res.headers);
+      const ok = res.ok && cookies.length > 0;
+
+      if (process.env.NODE_ENV !== "production") {
+        console.info(`[BFF][${logLabel}][REFRESH]`, {
+          correlationId,
+          refreshUrl,
+          status: res.status,
+          ok: res.ok,
+          effectiveOk: ok,
+          refreshCookieCount: cookies.length,
+          refreshCookieNames: cookies.map((c) => c.split("=")[0]),
+          rawSetCookieHeader: res.headers.get("set-cookie") ?? "(yok)",
+        });
+      }
+
+      return {
+        ok,
+        status: res.status,
+        cookies,
+      };
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error(`[BFF][${logLabel}][REFRESH_ERROR]`, {
+          correlationId,
+          refreshUrl,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+
+      return {
+        ok: false,
+        status: 0,
+        cookies: [],
+      };
+    } finally {
+      cleanup();
+    }
+  })();
+
+  refreshInFlight.set(key, promise);
 
   try {
-    const res = await fetch(refreshUrl, {
-      method: "POST",
-      headers: {
-        cookie: req.headers.get("cookie") || "",
-        "x-tenant-key": resolveTenant(req),
-        "x-correlation-id": correlationId,
-        ...(req.headers.get("accept-language")
-          ? { "accept-language": req.headers.get("accept-language")! }
-          : {}),
-        accept: "application/json",
-      },
-      cache: "no-store",
-      signal,
-    });
-
-    const cookies = extractSetCookies(res.headers);
-
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`[BFF][${logLabel}][REFRESH]`, {
-        correlationId,
-        refreshUrl,
-        status: res.status,
-        ok: res.ok,
-        refreshCookieCount: cookies.length,
-      });
-    }
-
-    return {
-      ok: res.ok,
-      status: res.status,
-      cookies,
-    };
-  } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error(`[BFF][${logLabel}][REFRESH_ERROR]`, {
-        correlationId,
-        refreshUrl,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-
-    return {
-      ok: false,
-      status: 0,
-      cookies: [],
-    };
+    return await promise;
   } finally {
-    cleanup();
+    refreshInFlight.delete(key);
   }
 }
 
@@ -321,11 +358,19 @@ export function filterProxyResponseHeaders(
     headers.set(key, value);
   });
 
+  const cookieMap = new Map<string, string>();
+
   for (const cookie of extractSetCookies(upstream.headers)) {
-    headers.append("set-cookie", cookie);
+    const name = cookie.split("=")[0]?.trim();
+    if (name) cookieMap.set(name, cookie);
   }
 
   for (const cookie of refreshCookies) {
+    const name = cookie.split("=")[0]?.trim();
+    if (name) cookieMap.set(name, cookie);
+  }
+
+  for (const cookie of cookieMap.values()) {
     headers.append("set-cookie", cookie);
   }
 
@@ -348,31 +393,25 @@ export function buildMergedRetryHeaders(
     defaultAccept?: string;
   }
 ): Headers {
-  const headers = buildWebAuthHeaders(req, correlationId, options);
+  const headers = buildWebAuthHeaders(req, correlationId, {
+    ...options,
+    includeAuthorization: false,
+  });
 
   const mergedCookie = mergeCookie(req.headers.get("cookie"), refreshCookies);
 
   if (process.env.NODE_ENV !== "production") {
-    console.log("[BFF][RETRY_COOKIE]", {
+    console.info("[BFF][RETRY_COOKIE]", {
+      correlationId,
       originalCookieLength: req.headers.get("cookie")?.length ?? 0,
       refreshCookieCount: refreshCookies.length,
-      mergedCookieLength: mergedCookie?.length ?? 0,
-      correlationId,
+      mergedCookieLength: mergedCookie.length,
+      refreshCookieNames: refreshCookies.map((c) => c.split("=")[0]),
     });
   }
 
   if (mergedCookie) {
     headers.set("cookie", mergedCookie);
-  }
-
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[BFF][buildMergedRetryHeaders]", {
-      forwardedCookie: headers.has("cookie"),
-      cookieLength: headers.get("cookie")?.length ?? 0,
-      forwardedAuthorization: headers.has("authorization"),
-      tenant: headers.get("x-tenant-key"),
-      correlationId: headers.get("x-correlation-id"),
-    });
   }
 
   return headers;

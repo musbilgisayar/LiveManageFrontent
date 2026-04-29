@@ -103,58 +103,61 @@ export default function LanguageSelector() {
     [pathname, router, setIsLanguage]
   );
 
-  useEffect(() => {
-    const ac = new AbortController();
+useEffect(() => {
+  const ac = new AbortController();
 
-    (async () => {
-      try {
-        const url = `${API_BASE}/api/v${API_VERSION}/culture/list`;
-        const acceptCulture = toCulture(urlPrefix);
+  (async () => {
+    try {
+      const url = `${API_BASE}/api/v${API_VERSION}/culture/list`;
+      const acceptCulture = toCulture(urlPrefix);
 
-        const res = await fetch(url, {
-          headers: {
-            accept: "application/json",
-            "accept-language": acceptCulture,
-          },
-          cache: "no-store",
-          signal: ac.signal,
-        });
+      const res = await fetch(url, {
+        headers: {
+          accept: "application/json",
+          "accept-language": acceptCulture,
+        },
+        cache: "no-store",
+        signal: ac.signal,
+      });
 
-        if (!res.ok) {
-          console.warn("[LanguageSelector] culture/list HTTP not ok:", res.status);
-          return;
-        }
-
-        const json = await res.json().catch(() => null);
-        const normalized = normalizeCultures(json);
-
-        if (!normalized.length) {
-          console.warn("[LanguageSelector] culture/list empty:", json);
-          return;
-        }
-
-        setLanguages(
-          normalized.map((x) => ({
-            cultureCode: x.cultureCode,
-            name: x.name,
-            isDefault: x.isDefault,
-          }))
-        );
-
-        const matched = normalized.find((l) => toPrefix(l.cultureCode) === urlPrefix);
-        const fallback = normalized.find((x) => x.isDefault) || normalized[0];
-        const selected = matched?.cultureCode || fallback.cultureCode;
-
-        setLocaleCookie(selected);
-        setIsLanguage(selected);
-      } catch (err: any) {
-        if (err?.name === "AbortError") return;
-        console.error("[LanguageSelector] fetch failed:", err);
+      if (!res.ok) {
+        console.warn("[LanguageSelector] culture/list HTTP not ok:", res.status);
+        return;
       }
-    })();
 
-    return () => ac.abort();
-  }, [urlPrefix, setIsLanguage]);
+      const json = await res.json().catch(() => null);
+      const normalized = normalizeCultures(json);
+
+      if (!normalized.length) {
+        console.warn("[LanguageSelector] culture/list empty:", json);
+        return;
+      }
+
+      const nextLanguages = normalized.map((x) => ({
+        cultureCode: x.cultureCode,
+        name: x.name,
+        isDefault: x.isDefault,
+      }));
+
+      setLanguages(nextLanguages);
+
+      const matched = normalized.find((l) => toPrefix(l.cultureCode) === urlPrefix);
+      const fallback = normalized.find((x) => x.isDefault) || normalized[0];
+      const selected = matched?.cultureCode || fallback.cultureCode;
+
+      setLocaleCookie(selected);
+
+      if (isLanguage !== selected) {
+        setIsLanguage(selected);
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError") return;
+      console.error("[LanguageSelector] fetch failed:", err);
+    }
+  })();
+
+  return () => ac.abort();
+}, [urlPrefix, isLanguage]);  
 
   const shownCulture = currentLang?.cultureCode || "en-US";
   const shownName = currentLang?.name || "English";

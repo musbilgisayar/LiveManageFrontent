@@ -14,26 +14,17 @@ export const runtime = "nodejs";
  * Bu çekirdek özellikle WEB tarafı için şu kabullere göre hazırlanmıştır:
  * - Web auth gerçeği: cookie + BFF refresh + session/device akışı
  * - i18n ana/public giriş: /api/i18n/[lang]/dict
- *
- * Not:
- * Bu dosya tek başına tüm route davranışını belirlemez.
- * Ancak route'ların ortak bağımlılığı olacak yardımcı katmanı sağlar.
  */
 
 import crypto from "node:crypto";
 import { Agent, setGlobalDispatcher } from "undici";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/bff/resolveTenant";
+
 /* -------------------------------------------------------------------------- */
 /* ENV / RUNTIME                                                              */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Backend base adresi.
- *
- * Tek merkezden çözülmesi amaçlanır.
- * Route dosyalarında ayrıca BACKEND tanımlamak yerine bu sabit kullanılmalıdır.
- */
 export const BACKEND_BASE =
   process.env.BACKEND_BASE ||
   process.env.BACKEND_URL ||
@@ -41,33 +32,16 @@ export const BACKEND_BASE =
   process.env.LM_BACKEND_BASE ||
   "https://localhost:5002";
 
-/**
- * Servisler arası çağrılarda kullanılabilecek service token.
- *
- * Not:
- * Bu token web kullanıcı auth'ının yerine geçmez.
- * Kullanım alanı daha çok:
- * - i18n/service-to-service çağrıları
- * - sistem içi özel backend erişimleri
- */
 export const SERVICE_JWT =
   process.env.SVC_JWT ||
   process.env.SERVICE_JWT ||
   process.env.SERVICE_TOKEN ||
   "";
 
-
-  /**
- * Service token erişimi.
- *
- * Not:
- * Bazı route'lar sabit yerine fonksiyon import ediyor.
- * Bu yüzden shared core içinde bu yardımcı da bulunmalı.
- */
 export async function getServiceToken(): Promise<string> {
   return SERVICE_JWT;
 }
- 
+
 const isDev = process.env.NODE_ENV !== "production";
 const allowInsecure = process.env.BE_SSL_INSECURE === "true";
 
@@ -89,10 +63,6 @@ function ensureDevDispatcher() {
 /* CORRELATION / REQUEST ID                                                   */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Gelen request header'ında correlation id varsa onu kullanır,
- * yoksa yeni bir correlation id üretir.
- */
 export function newCorrelationId(h?: Headers): string {
   return h?.get("x-correlation-id") ?? crypto.randomUUID();
 }
@@ -101,17 +71,8 @@ export function newCorrelationId(h?: Headers): string {
 /* LANGUAGE                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Şu anda aktif olarak kabul edilen kısa dil kodları.
- *
- * Not:
- * Projede daha fazla dil gerçekten aktifse bu liste genişletilmelidir.
- */
 const SUPPORTED_LANGS = new Set(["tr", "en", "de", "fr", "it", "ar"]);
 
-/**
- * Kısa dil kodundan culture üretir.
- */
 function cultureFromShort(short: string): string {
   switch (short) {
     case "tr":
@@ -131,15 +92,6 @@ function cultureFromShort(short: string): string {
   }
 }
 
-/**
- * Dışarıdan gelen dil değerini normalize eder.
- *
- * Örnek:
- * - tr      -> { short: "tr", culture: "tr-TR" }
- * - tr-TR   -> { short: "tr", culture: "tr-TR" }
- * - de-DE   -> { short: "de", culture: "de-DE" }
- * - bilinmeyen -> tr fallback
- */
 export function normalizeLang(raw?: string) {
   const value = (raw || "tr").trim().toLowerCase();
   const short = value.split("-")[0];
@@ -151,15 +103,6 @@ export function normalizeLang(raw?: string) {
   };
 }
 
-/**
- * Request'ten gelen accept-language değerini çözmeye çalışır.
- *
- * Sıra:
- * 1. lm.lang cookie
- * 2. NEXT_LOCALE cookie
- * 3. accept-language header
- * 4. fallback
- */
 export function resolveAcceptLanguage(
   req: NextRequest | Request,
   fallback = "tr-TR"
@@ -182,19 +125,14 @@ export function resolveAcceptLanguage(
 
   const fromHeader = req.headers.get("accept-language")?.split(",")[0]?.trim();
   if (fromHeader) {
-    return fromHeader;
+    return fromHeader.includes("-")
+      ? fromHeader
+      : normalizeLang(fromHeader).culture;
   }
 
   return fallback;
 }
 
-/**
- * Accept-Language içinden kısa locale segmenti üretir.
- *
- * Örnek:
- * - tr-TR -> tr
- * - de-DE -> de
- */
 export function resolveLangSegment(
   req: NextRequest | Request,
   fallback = "tr"
@@ -207,29 +145,22 @@ export function resolveLangSegment(
 /* TENANT                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Varsayılan tenant key.
- */
 export const DEFAULT_TENANT =
   process.env.LM_DEFAULT_TENANT ||
   process.env.NEXT_PUBLIC_DEFAULT_TENANT ||
   "default";
 
-/**
- * Request'ten tenant key çözer.
- *
- * Sıra:
- * 1. x-tenant-key header
- * 2. lm.tenant cookie
- * 3. tenantKey cookie
- * 4. fallback default tenant
- */
- export function resolveTenantKey(
+export function resolveTenantKey(
   req: NextRequest | Request
 ): {
   tenantKey: string;
   source: "header" | "cookie" | "fallback(bff)";
 } {
+  const fromHeader = req.headers.get("x-tenant-key")?.trim();
+  if (fromHeader) {
+    return { tenantKey: fromHeader, source: "header" };
+  }
+
   if ("cookies" in req) {
     const fromCookie =
       req.cookies.get("lm.tenant")?.value?.trim() ||
@@ -238,11 +169,6 @@ export const DEFAULT_TENANT =
     if (fromCookie) {
       return { tenantKey: fromCookie, source: "cookie" };
     }
-  }
-
-  const fromHeader = req.headers.get("x-tenant-key")?.trim();
-  if (fromHeader) {
-    return { tenantKey: fromHeader, source: "header" };
   }
 
   const resolved = resolveTenant(req as NextRequest);
@@ -256,20 +182,6 @@ export const DEFAULT_TENANT =
 /* AUTH                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Web tarafında kullanıcı auth sinyalini request'ten seçer.
- *
- * Öncelik:
- * 1. Authorization header (Bearer ...)
- * 2. accessToken cookie
- * 3. access_token cookie
- * 4. lm_at cookie
- * 5. lm.at cookie
- *
- * Not:
- * Bu helper kullanıcı auth sinyalini seçer.
- * Service token ile karıştırılmamalıdır.
- */
 export function pickClientAuth(
   req: NextRequest | Request
 ): { header: string; source: string } | null {
@@ -305,9 +217,6 @@ export function pickClientAuth(
   return null;
 }
 
-/**
- * Auth header'ı için kısa ve güvenli cache anahtarı üretir.
- */
 export function authHash(authHeader?: string | null): string {
   const normalized = (authHeader ?? "").trim();
   if (!normalized) {
@@ -325,13 +234,6 @@ export function authHash(authHeader?: string | null): string {
 /* FETCH / TIMEOUT                                                            */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Ortak timeout'lu fetch helper.
- *
- * Özellikler:
- * - dev SSL dispatcher'ı gerektiğinde hazırlar
- * - AbortController ile timeout uygular
- */
 export async function fetchWithTimeout(
   url: string,
   init: RequestInit = {},
@@ -356,14 +258,6 @@ export async function fetchWithTimeout(
 /* UPSTREAM BODY / JSON SAFE                                                  */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Response body'yi güvenli biçimde parse eder.
- *
- * Davranış:
- * - JSON ise parse etmeye çalışır
- * - parse edemezse null/json fallback döner
- * - text ise string döner
- */
 export async function readUpstreamBody(
   upstream: Response
 ): Promise<{
@@ -389,10 +283,6 @@ export async function readUpstreamBody(
   }
 }
 
-/**
- * Response text'ini güvenli JSON parse etmeye çalışır.
- * Parse edemezse raw text bilgisini döner.
- */
 export async function parseJsonSafe(
   response: Response
 ): Promise<Record<string, unknown> | null> {
@@ -413,13 +303,10 @@ export async function parseJsonSafe(
 /* SET-COOKIE                                                                 */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Upstream'den gelen Set-Cookie başlıklarını BFF host'una daha uygun hale getirir.
- *
- * Özellikle:
- * - upstream Domain kaldırılır
- * - development ortamında Secure zorunluluğu gevşetilebilir
- */
+type HeadersWithSetCookie = Headers & {
+  getSetCookie?: () => string[];
+};
+
 export function normalizeSetCookieForBff(cookie: string): string {
   let normalized = cookie;
 
@@ -432,17 +319,11 @@ export function normalizeSetCookieForBff(cookie: string): string {
   return normalized;
 }
 
-/**
- * Upstream response headers içindeki Set-Cookie başlıklarını hedef header'a taşır.
- *
- * Dönüş değeri:
- * - forward edilen normalize cookie listesi
- */
 export function appendSetCookies(source: Headers, target: Headers): string[] {
-  const getSetCookieFn = (source as any).getSetCookie;
+  const getSetCookieFn = (source as HeadersWithSetCookie).getSetCookie;
 
   if (typeof getSetCookieFn === "function") {
-    const cookies: string[] = getSetCookieFn.call(source) ?? [];
+    const cookies = getSetCookieFn.call(source) ?? [];
     if (cookies.length > 0) {
       const normalizedCookies = cookies.map(normalizeSetCookieForBff);
       normalizedCookies.forEach((cookie) => target.append("set-cookie", cookie));
@@ -460,25 +341,58 @@ export function appendSetCookies(source: Headers, target: Headers): string[] {
   return [];
 }
 
+function parseCookieNameValue(setCookie: string): { name: string; value: string } | null {
+  const firstPart = setCookie.split(";")[0]?.trim();
+  if (!firstPart) return null;
+
+  const eqIndex = firstPart.indexOf("=");
+  if (eqIndex <= 0) return null;
+
+  const name = firstPart.slice(0, eqIndex).trim();
+  const value = firstPart.slice(eqIndex + 1).trim();
+
+  if (!name) return null;
+  return { name, value };
+}
+
+function mergeCookieHeader(
+  originalCookieHeader: string,
+  setCookies: string[]
+): string {
+  const jar = new Map<string, string>();
+
+  for (const rawPart of originalCookieHeader.split(";")) {
+    const part = rawPart.trim();
+    if (!part) continue;
+
+    const eqIndex = part.indexOf("=");
+    if (eqIndex <= 0) continue;
+
+    const name = part.slice(0, eqIndex).trim();
+    const value = part.slice(eqIndex + 1).trim();
+
+    if (name) {
+      jar.set(name, value);
+    }
+  }
+
+  for (const setCookie of setCookies) {
+    const parsed = parseCookieNameValue(setCookie);
+    if (!parsed) continue;
+    jar.set(parsed.name, parsed.value);
+  }
+
+  return Array.from(jar.entries())
+    .map(([name, value]) => `${name}=${value}`)
+    .join("; ");
+}
+
 /* -------------------------------------------------------------------------- */
 /* CACHE                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Hafif process-local memory cache.
- *
- * Notlar:
- * - instance bazlıdır
- * - dağıtık garanti vermez
- * - çok kritik tutarlılık gereken veriler için tek kaynak sayılmaz
- * - kısa TTL'li BFF optimizasyonu için uygundur
- */
 const mem = new Map<string, { exp: number; val: unknown }>();
 
-/**
- * Cache'den veri okur.
- * Süresi geçmişse cache kaydını temizler.
- */
 export function cacheGet<T>(key: string): T | null {
   const hit = mem.get(key);
   if (!hit || hit.exp < Date.now()) {
@@ -489,11 +403,6 @@ export function cacheGet<T>(key: string): T | null {
   return hit.val as T;
 }
 
-/**
- * Cache'e veri yazar.
- *
- * seconds <= 0 ise kayıt silinir.
- */
 export function cacheSet(key: string, val: unknown, seconds = 30): void {
   if (seconds <= 0) {
     mem.delete(key);
@@ -506,23 +415,197 @@ export function cacheSet(key: string, val: unknown, seconds = 30): void {
   });
 }
 
-/**
- * Cache kaydını açıkça siler.
- */
 export function cacheDelete(key: string): void {
   mem.delete(key);
+}
+
+/* -------------------------------------------------------------------------- */
+/* WEB AUTH PROXY WITH REFRESH                                                */
+/* -------------------------------------------------------------------------- */
+
+type ProxyJsonWithWebAuthOptions = {
+  req: NextRequest;
+  backendPath: string;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  body?: string | null;
+  logLabel?: string;
+  timeoutMs?: number;
+};
+
+export async function proxyJsonWithWebAuth({
+  req,
+  backendPath,
+  method = "GET",
+  body = null,
+  logLabel = "BFF WEB AUTH PROXY",
+  timeoutMs = 15_000,
+}: ProxyJsonWithWebAuthOptions) {
+  const correlationId = newCorrelationId(req.headers);
+  const { tenantKey, source: tenantSource } = resolveTenantKey(req);
+  const acceptLanguage = resolveAcceptLanguage(req, "tr-TR");
+
+  const responseHeaders = new Headers({
+    "x-correlation-id": correlationId,
+  });
+
+  let cookieHeader = req.headers.get("cookie") ?? "";
+
+  const buildHeaders = (): HeadersInit => {
+    const headers: HeadersInit = {
+      accept: "application/json",
+      "x-correlation-id": correlationId,
+      "x-tenant-key": tenantKey,
+      "accept-language": acceptLanguage,
+      cookie: cookieHeader,
+    };
+
+    if (body !== null && body !== undefined) {
+      headers["content-type"] = "application/json";
+    }
+
+    return headers;
+  };
+
+  async function send(path: string) {
+    return fetchWithTimeout(
+      buildBackendUrl(path),
+      {
+        method,
+        cache: "no-store",
+        headers: buildHeaders(),
+        body: body ?? undefined,
+      },
+      timeoutMs
+    );
+  }
+
+  console.group(`🟦 [${logLabel}]`);
+
+  try {
+    console.log("➡️ Upstream istek başladı", {
+      correlationId,
+      tenantKey,
+      tenantSource,
+      acceptLanguage,
+      backendPath,
+      method,
+      hasCookie: !!cookieHeader,
+    });
+
+    let upstream = await send(backendPath);
+
+    if (upstream.status === 401) {
+      console.warn("🟧 Upstream 401 döndü, refresh deneniyor", {
+        correlationId,
+        tenantKey,
+        backendPath,
+      });
+
+      const refresh = await fetchWithTimeout(
+        buildBackendUrl("/api/v1.0/account/refresh"),
+        {
+          method: "POST",
+          cache: "no-store",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+            "x-correlation-id": correlationId,
+            "x-tenant-key": tenantKey,
+            "accept-language": acceptLanguage,
+            cookie: cookieHeader,
+          },
+          body: JSON.stringify({ clientType: "web" }),
+        },
+        timeoutMs
+      );
+
+      const refreshSetCookies = appendSetCookies(refresh.headers, responseHeaders);
+
+      if (refresh.ok) {
+        cookieHeader = mergeCookieHeader(cookieHeader, refreshSetCookies);
+
+        console.log("✅ Refresh başarılı, original request retry ediliyor", {
+          correlationId,
+          tenantKey,
+          backendPath,
+          forwardedCookieCount: refreshSetCookies.length,
+        });
+
+        upstream = await send(backendPath);
+      } else {
+        console.warn("🟥 Refresh başarısız", {
+          correlationId,
+          tenantKey,
+          status: refresh.status,
+        });
+
+        const { data, contentType } = await readUpstreamBody(refresh);
+
+        console.groupEnd();
+
+        if (contentType.includes("application/json")) {
+          return NextResponse.json(data, {
+            status: refresh.status,
+            headers: responseHeaders,
+          });
+        }
+
+        return new NextResponse(typeof data === "string" ? data : null, {
+          status: refresh.status,
+          headers: responseHeaders,
+        });
+      }
+    }
+
+    const { data, contentType } = await readUpstreamBody(upstream);
+
+    appendSetCookies(upstream.headers, responseHeaders);
+
+    console.log("⬅️ Upstream response hazır", {
+      correlationId,
+      tenantKey,
+      status: upstream.status,
+      ok: upstream.ok,
+      contentType,
+    });
+
+    console.groupEnd();
+
+    if (contentType.includes("application/json")) {
+      return NextResponse.json(data, {
+        status: upstream.status,
+        headers: responseHeaders,
+      });
+    }
+
+    return new NextResponse(typeof data === "string" ? data : null, {
+      status: upstream.status,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    console.error(`🟥 [${logLabel} ERROR]`, {
+      correlationId,
+      tenantKey,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    console.groupEnd();
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `${logLabel.replaceAll(" ", "_")}_ERROR`,
+        correlationId,
+      },
+      { status: 500, headers: responseHeaders }
+    );
+  }
 }
 
 /* -------------------------------------------------------------------------- */
 /* OPTIONAL HELPERS                                                           */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Backend URL'yi güvenli şekilde birleştirir.
- *
- * Örnek:
- * buildBackendUrl("/api/v1.0/account/me")
- */
 export function buildBackendUrl(path: string): string {
   const cleanBase = BACKEND_BASE.replace(/\/+$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;

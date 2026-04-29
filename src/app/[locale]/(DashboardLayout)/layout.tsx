@@ -1,3 +1,5 @@
+// src/app/[locale]/(DashboardLayout)/layout.tsx
+
 "use client";
 
 import React from "react";

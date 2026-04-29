@@ -10,6 +10,10 @@ import { uniqueId } from "lodash";
 import {
   IconAward,
   IconBoxMultiple,
+    IconLayoutGrid,
+  IconBuildingEstate,
+  IconSpeakerphone,
+  IconClipboardList,
   IconPoint,
   IconAlertCircle,
   IconNotes,
@@ -71,8 +75,9 @@ import {
   IconToggleLeft,
   IconSettings2,
   IconTrash,
+  IconActivity
 } from "@tabler/icons-react";
-
+import { IconBuildingCommunity } from "@tabler/icons-react";
 import { ElementType } from "react-spring";
 import { NavGroup } from "@/app/[locale]/(DashboardLayout)/types/layout/sidebar";
 
@@ -125,6 +130,73 @@ const Menuitems: NavGroup[] = [
       title: "sidebar:menu.manager.localization.namespaces",
       icon: IconPoint,
       href: "/superadmin/localization/namespaces",
+    },
+  ],
+},
+
+{
+  navlabel: true,
+  subheader: "Gayrimenkul",
+},
+{
+  id: uniqueId(),
+  title: "Alanlarım",
+  icon: IconLayoutGrid,
+  href: "/my-spaces",
+},
+{
+  id: uniqueId(),
+  title: "Yeni Gayrimenkul Tanımla",
+  icon: IconBuildingEstate,
+  href: "/property-management/properties/create",
+},
+{
+  navlabel: true,
+  subheader: "İlan Yönetimi",
+},
+{
+  id: uniqueId(),
+  title: "İlan Ver",
+  icon: IconSpeakerphone,
+  href: "/listings-management/create/select-property",
+},
+{
+  id: uniqueId(),
+  title: "İlanlarım",
+  icon: IconClipboardList,
+  href: "/listings-management/my-listings",
+},
+
+// audit log izleme monitring dashboard
+{
+  id: uniqueId(),
+  title: "sidebar:menu.monitoring.root",
+  icon: IconActivity,
+  href: "/superadmin/monitoring",
+  children: [
+    {
+      id: uniqueId(),
+      title: "sidebar:menu.monitoring.dashboard",
+      icon: IconPoint,
+      href: "/superadmin/monitoring",
+    },
+    {
+      id: uniqueId(),
+      title: "sidebar:menu.monitoring.securityTimeline",
+      icon: IconPoint,
+      href: "/superadmin/monitoring/security-timeline",
+    },
+    {
+      id: uniqueId(),
+      title: "sidebar:menu.monitoring.lockoutCenter",
+      icon: IconPoint,
+      href: "/superadmin/monitoring/lockouts",
+    },
+    {
+      id: uniqueId(),
+      title: "sidebar:menu.monitoring.auditTimeline",
+      icon: IconPoint,
+      href: "/superadmin/monitoring/audit-timeline",
     },
   ],
 },
