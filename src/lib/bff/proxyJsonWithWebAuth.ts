@@ -1,23 +1,7 @@
 // src/lib/bff/proxyJsonWithWebAuth.ts
 
-/**
- * Web auth için JSON odaklı BFF proxy helper.
- *
- * Kapsam:
- * - HttpOnly cookie + BFF session tabanlı web auth
- * - JSON request / JSON response
- * - 401 → refresh → retry
- * - refresh başarısızsa standart SessionExpired cevabı
- * - tenant + correlation-id + language forwarding
- *
- * Bilinçli sınırlar:
- * - FormData / file upload desteklemez
- * - binary / stream / SSE desteklemez
- * - sadece JSON API endpointleri için kullanılır
- */
-
-import { resolveTenant } from "./resolveTenant";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveTenant } from "./resolveTenant";
 import {
   DEFAULT_JSON_TIMEOUT_MS,
   type WebProxyMethod,
@@ -31,14 +15,49 @@ import {
   buildMergedRetryHeaders,
 } from "./webAuthProxyCore";
 
+type ResponseTransformContext = {
+  req: NextRequest;
+  correlationId: string;
+  logLabel: string;
+  upstreamStatus: number;
+  retryUsed: boolean;
+};
+
+type ResponseTransformResult = {
+  body: unknown;
+  status?: number;
+  headers?: HeadersInit;
+};
+
 type ProxyOptions = {
   url: string;
   method?: WebProxyMethod;
   body?: unknown;
   timeoutMs?: number;
   extraHeaders?: HeadersInit;
+  responseHeaders?: HeadersInit;
   logLabel?: string;
+  transformResponse?: (
+    payload: unknown,
+    context: ResponseTransformContext
+  ) => ResponseTransformResult | Promise<ResponseTransformResult>;
 };
+
+function applyResponseHeaders(
+  target: Headers,
+  source?: HeadersInit
+): Headers {
+  if (!source) {
+    return target;
+  }
+
+  const extra = new Headers(source);
+  extra.forEach((value, key) => {
+    target.set(key, value);
+  });
+
+  return target;
+}
 
 function buildBody(body: unknown): string | undefined {
   if (body === undefined || body === null) {
@@ -153,6 +172,7 @@ export async function proxyJsonWithWebAuth(
     applyJsonContentTypeIfNeeded(headers, options.body);
 
     let upstream: Response;
+    let retryUsed = false;
 
     {
       const { signal, cleanup } = withTimeout(timeoutMs);
@@ -192,6 +212,7 @@ export async function proxyJsonWithWebAuth(
       }
 
       refreshCookies = refresh.cookies;
+      retryUsed = true;
 
       headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
         extraHeaders: options.extraHeaders,
@@ -234,7 +255,7 @@ export async function proxyJsonWithWebAuth(
           payloadKind: "empty",
         });
       }
-
+applyResponseHeaders(responseHeaders, options.responseHeaders);
       return new NextResponse(null, {
         status: upstream.status,
         headers: responseHeaders,
@@ -255,13 +276,36 @@ export async function proxyJsonWithWebAuth(
       if (!responseHeaders.has("content-type")) {
         responseHeaders.set("content-type", "text/plain; charset=utf-8");
       }
-
+applyResponseHeaders(responseHeaders, options.responseHeaders);
       return new NextResponse(payload.value, {
         status: upstream.status,
         headers: responseHeaders,
       });
     }
 
+    if (options.transformResponse) {
+      const transformed = await options.transformResponse(payload.value, {
+        req,
+        correlationId,
+        logLabel,
+        upstreamStatus: upstream.status,
+        retryUsed,
+      });
+
+      if (transformed.headers) {
+        const extra = new Headers(transformed.headers);
+        extra.forEach((value, key) => {
+          responseHeaders.set(key, value);
+        });
+      }
+      applyResponseHeaders(responseHeaders, options.responseHeaders);
+
+      return NextResponse.json(transformed.body, {
+        status: transformed.status ?? upstream.status,
+        headers: responseHeaders,
+      });
+    }
+applyResponseHeaders(responseHeaders, options.responseHeaders);
     return NextResponse.json(payload.value, {
       status: upstream.status,
       headers: responseHeaders,
@@ -293,3 +337,4 @@ export async function proxyJsonWithWebAuth(
     );
   }
 }
+

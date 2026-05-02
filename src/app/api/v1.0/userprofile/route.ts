@@ -1,68 +1,25 @@
+// src/app/api/v1.0/userprofile/route.ts
+
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import {
-  newCorrelationId,
-  cacheGet,
-  cacheSet,
-} from "@/app/api/_shared/bff";
-import {
-  DEFAULT_JSON_TIMEOUT_MS,
-  buildWebAuthHeaders,
-  isAbortLikeError,
-  resolveBackendUrl,
-  resolveCorrelationId,
-  withTimeout,
-} from "@/lib/bff/webAuthProxyCore";
+import { cacheGet, cacheSet } from "@/app/api/_shared/bff";
+import { resolveCorrelationId } from "@/lib/bff/webAuthProxyCore";
+import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
 
-const BACKEND =
-  process.env.BACKEND_BASE ??
-  process.env.BACKEND_URL ??
-  "https://localhost:5002";
+const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || "1.0";
 
 const BFF_LOG =
   process.env.LM_BFF_LOG === "1" ||
   process.env.NEXT_PUBLIC_LM_BFF_LOG === "1";
-
-const UPSTREAM_PATH = "/api/v1.0/Account/me";
 
 function log(...args: any[]) {
   if (!BFF_LOG) return;
   console.log(...args);
 }
 
-function warn(...args: any[]) {
-  if (!BFF_LOG) return;
-  console.warn(...args);
-}
-
-function pickClientAuth(req: NextRequest): { source: string } | null {
-  const h =
-    req.headers.get("authorization") ||
-    req.headers.get("Authorization") ||
-    "";
-
-  if (h.trim().toLowerCase().startsWith("bearer ")) {
-    return { source: "client-header" };
-  }
-
-  const c1 = req.cookies.get("accessToken")?.value;
-  if (c1?.trim()) return { source: "cookie-accessToken" };
-
-  const c2 = req.cookies.get("access_token")?.value;
-  if (c2?.trim()) return { source: "cookie-access_token" };
-
-  const c3 = req.cookies.get("lm_at")?.value;
-  if (c3?.trim()) return { source: "cookie-lm_at" };
-
-  const cookieHeader = req.headers.get("cookie");
-  if (cookieHeader?.trim()) return { source: "cookie-header" };
-
-  return null;
-}
-
-function authHashFromRequest(req: NextRequest) {
+function authHashFromRequest(req: NextRequest): string {
   const authHeader =
     req.headers.get("authorization") ||
     req.headers.get("Authorization") ||
@@ -78,221 +35,133 @@ function authHashFromRequest(req: NextRequest) {
   return crypto.createHash("sha1").update(key).digest("hex").slice(0, 12);
 }
 
-function buildCacheKeyFromReq(req: NextRequest) {
+function buildCacheKeyFromReq(req: NextRequest): string {
   const lang = (req.headers.get("accept-language") ?? "none").trim();
   return `account:me:${authHashFromRequest(req)}:lang:${lang}`;
 }
 
-async function readJsonSafe(res: Response) {
-  const raw = await res.text().catch(() => "");
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { ok: false, raw };
-  }
-}
-
-async function upstreamRequest(opts: {
-  req: NextRequest;
-  corrId: string;
-  method: "GET" | "PATCH";
-  body?: string | null;
-}) {
-  const { req, corrId, method, body } = opts;
-
-  const picked = pickClientAuth(req);
-
-  if (!picked) {
-    warn("🌍 [BFF][account/users/me] no user auth", {
-      corrId,
-      method,
-    });
-
-    return {
-      ok: false,
-      status: 401,
-      payload: { ok: false, error: "UNAUTHORIZED" },
-    };
+function extractUser(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") {
+    return payload;
   }
 
-  const headers = buildWebAuthHeaders(req, corrId, {
-    defaultAccept: "application/json",
-  });
-
-  if (method !== "GET") {
-    headers.set("content-type", "application/json");
-  }
-
-  log("🟦 [BFF account/users/me] OUT", {
-    corrId,
-    method,
-    authSource: picked.source,
-    hasCookie: !!req.headers.get("cookie"),
-    hasAuthorization: !!req.headers.get("authorization"),
-    acceptLanguage: headers.get("accept-language") ?? "(yok)",
-  });
-
-  const { signal, cleanup } = withTimeout(DEFAULT_JSON_TIMEOUT_MS);
-
-  try {
-    const upstream = await fetch(
-      resolveBackendUrl(`${BACKEND}${UPSTREAM_PATH}`),
-      {
-        method,
-        headers,
-        body: method === "GET" ? undefined : body ?? "",
-        cache: "no-store",
-        signal,
-      }
-    );
-
-    const payload = await readJsonSafe(upstream);
-
-    log("🟩 [BFF account/users/me] UPSTREAM", {
-      corrId,
-      status: upstream.status,
-      ok: upstream.ok,
-    });
-
-    return {
-      ok: upstream.ok,
-      status: upstream.status,
-      payload,
-    };
-  } catch (e: unknown) {
-    warn("🟥 [BFF account/users/me] ERR", {
-      corrId,
-      method,
-      message: e instanceof Error ? e.message : "Unknown error",
-    });
-
-    return {
-      ok: false,
-      status: isAbortLikeError(e) ? 504 : 502,
-      payload: {
-        ok: false,
-        error: isAbortLikeError(e) ? "TIMEOUT" : "FETCH_FAILED",
-      },
-    };
-  } finally {
-    cleanup();
-  }
+  const obj = payload as Record<string, any>;
+  return obj.data?.data ?? obj.data ?? obj;
 }
 
 export async function GET(req: NextRequest) {
-  const corrId =
-    req.headers.get("x-correlation-id") ||
-    newCorrelationId(req.headers) ||
-    resolveCorrelationId(req);
-
+  const correlationId = resolveCorrelationId(req);
   const cacheKey = buildCacheKeyFromReq(req);
 
   const cached = cacheGet<any>(cacheKey);
   if (cached) {
-    log("🟨 [BFF account/users/me] CACHE HIT", { corrId, cacheKey });
+    log("🟨 [BFF account/me] CACHE HIT", { correlationId, cacheKey });
 
     return NextResponse.json(
-      { ok: true, status: 200, data: cached, error: null },
+      {
+        ok: true,
+        status: 200,
+        data: cached,
+        error: null,
+      },
       {
         status: 200,
         headers: {
-          "x-correlation-id": corrId,
+          "x-correlation-id": correlationId,
           "x-audit-log": "cache-hit",
         },
       }
     );
   }
 
-  const upstream = await upstreamRequest({
-    req,
-    corrId,
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v${API_VERSION}/Account/me`,
     method: "GET",
-  });
+    timeoutMs: 15_000,
+    logLabel: "AccountMeGet",
+    transformResponse: (payload, context) => {
+      if (context.upstreamStatus >= 200 && context.upstreamStatus < 300) {
+        const user = extractUser(payload);
+        cacheSet(cacheKey, user, 10);
 
-  if (!upstream.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        status: upstream.status,
-        data: null,
-        error: upstream.payload?.error ?? "UPSTREAM_ERROR",
-      },
-      {
-        status:
-          upstream.status && upstream.status !== 0
-            ? upstream.status
-            : 502,
-        headers: { "x-correlation-id": corrId },
+        log("🟦 [BFF account/me] CACHE SET", {
+          correlationId: context.correlationId,
+          cacheKey,
+          ttl: 10,
+        });
+
+        const headers = new Headers();
+        headers.set("x-correlation-id", context.correlationId);
+        headers.set("x-audit-log", "success");
+
+        return {
+          body: {
+            ok: true,
+            status: context.upstreamStatus,
+            data: user,
+            error: null,
+          },
+          status: 200,
+          headers,
+        };
       }
-    );
-  }
 
-  const user =
-    upstream.payload?.data?.data ??
-    upstream.payload?.data ??
-    upstream.payload;
+      const safePayload =
+        payload && typeof payload === "object"
+          ? (payload as Record<string, any>)
+          : {};
 
-  cacheSet(cacheKey, user, 10);
+      const headers = new Headers();
+      headers.set("x-correlation-id", context.correlationId);
 
-  log("🟦 [BFF account/users/me] CACHE SET", {
-    corrId,
-    cacheKey,
-    ttl: 10,
-  });
-
-  return NextResponse.json(
-    {
-      ok: true,
-      status: upstream.status,
-      data: user,
-      error: null,
+      return {
+        body: {
+          ok: false,
+          status: context.upstreamStatus,
+          data: null,
+          error: safePayload.error ?? safePayload.message ?? "UPSTREAM_ERROR",
+        },
+        status: context.upstreamStatus,
+        headers,
+      };
     },
-    {
-      status: 200,
-      headers: {
-        "x-correlation-id": corrId,
-        "x-audit-log": "success",
-      },
-    }
-  );
+  });
 }
 
 export async function PATCH(req: NextRequest) {
-  const corrId =
-    req.headers.get("x-correlation-id") ||
-    newCorrelationId(req.headers) ||
-    resolveCorrelationId(req);
+  const cacheKey = buildCacheKeyFromReq(req);
+  const bodyText = await req.text().catch(() => "");
 
-  const bodyTxt = await req.text().catch(() => "");
-
-  const upstream = await upstreamRequest({
-    req,
-    corrId,
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v${API_VERSION}/Account/me`,
     method: "PATCH",
-    body: bodyTxt,
+    body: bodyText,
+    timeoutMs: 15_000,
+    logLabel: "AccountMePatch",
+    extraHeaders: {
+      "content-type": req.headers.get("content-type") ?? "application/json",
+    },
+    transformResponse: (payload, context) => {
+      if (context.upstreamStatus >= 200 && context.upstreamStatus < 300) {
+        cacheSet(cacheKey, null as any, 0);
+
+        log("🧹 [BFF account/me] CACHE INVALIDATE", {
+          correlationId: context.correlationId,
+          cacheKey,
+        });
+      }
+
+      const headers = new Headers();
+      headers.set("x-correlation-id", context.correlationId);
+
+      return {
+        body:
+          payload && typeof payload === "object"
+            ? payload
+            : { ok: false, error: "NO_PAYLOAD" },
+        status: context.upstreamStatus,
+        headers,
+      };
+    },
   });
-
-  if (upstream.ok) {
-    const cacheKey = buildCacheKeyFromReq(req);
-    cacheSet(cacheKey, null as any, 0);
-
-    log("🧹 [BFF account/users/me] CACHE INVALIDATE", {
-      corrId,
-      cacheKey,
-    });
-  }
-
-  return NextResponse.json(
-    upstream.payload ?? { ok: false, error: "NO_PAYLOAD" },
-    {
-      status: upstream.ok
-        ? 200
-        : upstream.status && upstream.status !== 0
-          ? upstream.status
-          : 502,
-      headers: { "x-correlation-id": corrId },
-    }
-  );
 }

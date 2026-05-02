@@ -1,51 +1,18 @@
 // src/app/api/v1.0/localization/bundle/route.ts
+
 export const runtime = "nodejs";
 
-/**
- * localization/bundle BFF route
- * --------------------------------------------------------------------------
- * Bu route i18n için ANA/PUBLIC giriş noktası değildir.
- *
- * Roller:
- * - /api/i18n/[lang]/dict  -> ana/public giriş
- * - /api/v1.0/localization/bundle -> internal provider/cache katmanı
- * - /api/v1.0/[lang]/localization/strings -> yardımcı adapter
- *
- * Bu route'un görevi:
- * - backend localization bundle endpoint'ine gitmek
- * - auth / tenant / language bilgilerini taşımak
- * - kısa süreli BFF cache uygulamak
- * - ETag / 304 davranışını desteklemek
- * - tek namespace bundle verisini döndürmek
- *
- * Not:
- * Frontend doğrudan bunu ana i18n kapısı gibi kullanmamalıdır.
- * Bu route esas olarak dict route'unun iç kaynağı gibi düşünülmelidir.
- */
-
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "node:crypto";
-import {
-  authHash,
-  BACKEND_BASE,
-  buildBackendUrl,
-  cacheGet,
-  cacheSet,
-  fetchWithTimeout,
-  newCorrelationId,
-  parseJsonSafe,
-  pickClientAuth,
-  resolveAcceptLanguage,
-  resolveLangSegment,
-  resolveTenantKey,
-} from "@/app/api/_shared/bff";
+import { cacheGet, cacheSet } from "@/app/api/_shared/bff";
+import { resolveCorrelationId } from "@/lib/bff/webAuthProxyCore";
+import { proxyJsonWithWebAuthCached } from "@/lib/bff/proxyJsonWithWebAuthCached";
+import { buildWeakEtag } from "@/lib/bff/httpCache";
+import { buildUserScopedCacheKey } from "@/lib/bff/userScopedCache";
+import { resolveTenant } from "@/lib/bff/resolveTenant";
 
 const CACHE_TTL_SECONDS = 30;
 const VARY_HEADER = "Accept-Language, Authorization, X-Tenant-Key";
 
-/**
- * BFF response zarfı.
- */
 type ApiEnvelope<T> = {
   ok: boolean;
   status: number;
@@ -55,111 +22,48 @@ type ApiEnvelope<T> = {
 
 type BundleData = Record<string, string>;
 
-type FetchBundleResult =
-  | {
-      kind: "ok";
-      status: number;
-      bundle: BundleData;
-      etag: string;
-      cacheControl: string;
-    }
-  | {
-      kind: "not-modified";
-      etag: string;
-      cacheControl: string;
-    }
-  | {
-      kind: "upstream-error";
-      upstreamStatus: number;
-      payload: unknown;
-    };
+const inflightRequests = new Map<string, Promise<Response>>();
 
-/**
- * Aynı cache key için aynı anda gelen istekleri tek upstream çağrı altında toplar.
- */
-const inflightRequests = new Map<string, Promise<FetchBundleResult>>();
-
-/**
- * İstekten culture parametresini çözer.
- * Yoksa Accept-Language kullanılır.
- */
 function normalizeCulture(req: NextRequest): string {
   const raw =
     req.nextUrl.searchParams.get("culture")?.trim() ||
-    resolveAcceptLanguage(req);
+    req.headers.get("accept-language") ||
+    "tr-TR";
 
-  const lowered = (raw || "tr-TR").trim().toLowerCase();
+  const lowered = raw.trim().toLowerCase();
 
   switch (lowered) {
     case "tr":
     case "tr-tr":
       return "tr-TR";
-
     case "en":
     case "en-us":
       return "en-US";
-
     case "de":
     case "de-de":
       return "de-DE";
-
     case "fr":
     case "fr-fr":
       return "fr-FR";
-
     case "it":
     case "it-it":
       return "it-IT";
-
     case "ar":
     case "ar-sa":
       return "ar-SA";
-
     default:
       return "tr-TR";
   }
 }
 
-/**
- * Namespace parametresini çözer.
- */
 function normalizeNamespace(req: NextRequest): string {
   return req.nextUrl.searchParams.get("ns")?.trim() || "common";
 }
 
-/**
- * Format parametresini çözer.
- */
 function normalizeFormat(req: NextRequest): string {
   return req.nextUrl.searchParams.get("format")?.trim() || "full";
 }
 
-/**
- * Gövdeden stabil bir ETag üretir.
- */
-function etagFor(value: unknown): string {
-  try {
-    const text = JSON.stringify(value);
-    const hash = crypto
-      .createHash("sha1")
-      .update(text)
-      .digest("base64url")
-      .slice(0, 16);
-
-    return `"lm-${hash}"`;
-  } catch {
-    return `"lm-${crypto.randomUUID()}"`;
-  }
-}
-
-/**
- * Backend payload'ından bundle datasını normalize eder.
- *
- * Olası şekiller:
- * - { data: {...} }
- * - { items: {...} }
- * - direkt {...}
- */
 function normalizeBundlePayload(payload: unknown): BundleData {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return {};
@@ -186,30 +90,22 @@ function normalizeBundlePayload(payload: unknown): BundleData {
   return candidate as BundleData;
 }
 
-/**
- * Cache anahtarını tenant + dil + culture + namespace + format + auth bazında üretir.
- */
-function buildCacheKey(req: NextRequest, tenantKey: string): string {
-  const langSeg = resolveLangSegment(req);
+function buildInternalCacheKey(req: NextRequest): string {
+  const tenantKey = resolveTenant(req);
   const culture = normalizeCulture(req);
   const ns = normalizeNamespace(req);
   const format = normalizeFormat(req);
-  const authHeader = pickClientAuth(req)?.header ?? "";
 
-  return [
-    "localization:bundle",
-    tenantKey,
-    langSeg,
-    culture,
-    ns,
-    format,
-    `auth:${authHash(authHeader)}`,
-  ].join(":");
+  const userScoped = buildUserScopedCacheKey({
+    namespace: "localization:bundle",
+    req,
+    languageSegment: culture,
+    includeCookieHeader: false,
+  });
+
+  return [userScoped, tenantKey, culture, ns, format].join(":");
 }
 
-/**
- * Standart JSON response helper.
- */
 function jsonResponse<T>(
   body: ApiEnvelope<T>,
   init?: ResponseInit
@@ -217,98 +113,10 @@ function jsonResponse<T>(
   return NextResponse.json(body, init);
 }
 
-/**
- * Upstream localization bundle çağrısını yapar.
- */
-async function fetchBundleFromUpstream(params: {
-  req: NextRequest;
-  corrId: string;
-  tenantKey: string;
-  acceptLanguage: string;
-  etagIn?: string;
-  upstreamUrl: string;
-  auth: { header: string; source: string } | null;
-}): Promise<FetchBundleResult> {
-  const {
-    req,
-    corrId,
-    tenantKey,
-    acceptLanguage,
-    etagIn,
-    upstreamUrl,
-    auth,
-  } = params;
-
-  const upstreamHeaders: Record<string, string> = {
-    accept: "application/json",
-    "x-correlation-id": corrId,
-    "accept-language": acceptLanguage,
-    "x-tenant-key": tenantKey,
-  };
-
-  if (etagIn) {
-    upstreamHeaders["if-none-match"] = etagIn;
-  }
-
-  if (auth) {
-    upstreamHeaders.authorization = auth.header;
-  }
-
-  const upstream = await fetchWithTimeout(
-    upstreamUrl,
-    {
-      method: "GET",
-      headers: upstreamHeaders,
-      cache: "no-store",
-    },
-    10_000
-  );
-
-  if (upstream.status === 304) {
-    return {
-      kind: "not-modified",
-      etag: upstream.headers.get("etag") ?? etagIn ?? `"lm-${crypto.randomUUID()}"`,
-      cacheControl: upstream.headers.get("cache-control") ?? "public, max-age=300",
-    };
-  }
-
-  const payload = await parseJsonSafe(upstream);
-
-  if (!upstream.ok) {
-    console.warn("⚠️ [BFF localization/bundle] Upstream başarısız", {
-      corrId,
-      tenantKey,
-      path: req.nextUrl.pathname,
-      search: req.nextUrl.search,
-      status: upstream.status,
-      payload,
-    });
-
-    return {
-      kind: "upstream-error",
-      upstreamStatus: upstream.status,
-      payload,
-    };
-  }
-
-  const bundle = normalizeBundlePayload(payload);
-
-  return {
-    kind: "ok",
-    status: upstream.status,
-    bundle,
-    etag: upstream.headers.get("etag") ?? etagFor(bundle),
-    cacheControl: upstream.headers.get("cache-control") ?? "public, max-age=300",
-  };
-}
-
-/**
- * Aynı cache key için tek inflight promise kullanır.
- */
 async function getOrCreateInflight(
   cacheKey: string,
-  factory: () => Promise<FetchBundleResult>
-): Promise<FetchBundleResult> {
+  factory: () => Promise<Response>
+): Promise<Response> {
   const existing = inflightRequests.get(cacheKey);
   if (existing) {
     return existing;
@@ -323,54 +131,23 @@ async function getOrCreateInflight(
 }
 
 export async function GET(req: NextRequest) {
-  const corrId = newCorrelationId(req.headers);
-  const { tenantKey } = resolveTenantKey(req);
-  const acceptLanguage = resolveAcceptLanguage(req);
-  const cacheKey = buildCacheKey(req, tenantKey);
-  const auth = pickClientAuth(req);
-
-  /**
-   * Internal provider route olduğu için backend'in gerçek localization bundle
-   * endpoint'ine gider.
-   */
-  const upstreamUrl = `${buildBackendUrl("/api/v1.0/localization/bundle")}${req.nextUrl.search}`;
+  const correlationId = resolveCorrelationId(req);
+  const cacheKey = buildInternalCacheKey(req);
   const etagIn = req.headers.get("if-none-match") || undefined;
 
-  console.group("🟦 [BFF localization/bundle]");
-  console.log("➡️ Internal provider başladı", {
-    corrId,
-    tenantKey,
-    acceptLanguage,
-    cacheKey,
-    authSource: auth?.source ?? "none",
-    hasAuth: !!auth,
-    upstreamUrl,
-    backendBase: BACKEND_BASE,
-  });
-
-  /**
-   * Önce process cache kontrolü
-   */
   const cached = cacheGet<BundleData>(cacheKey);
   if (cached) {
-    const etag = etagFor(cached);
-
-    console.log("🟨 [BFF localization/bundle] CACHE HIT", {
-      corrId,
-      cacheKey,
-      keyCount: Object.keys(cached).length,
-    });
-    console.groupEnd();
+    const etag = buildWeakEtag(cached);
 
     if (etagIn && etagIn === etag) {
       return new NextResponse(null, {
         status: 304,
         headers: {
-          "x-correlation-id": corrId,
+          "x-correlation-id": correlationId,
           "x-audit-log": "not-modified",
-          ETag: etag,
-          "Cache-Control": "public, max-age=30",
-          Vary: VARY_HEADER,
+          etag,
+          "cache-control": "public, max-age=30",
+          vary: VARY_HEADER,
         },
       });
     }
@@ -385,118 +162,74 @@ export async function GET(req: NextRequest) {
       {
         status: 200,
         headers: {
-          "x-correlation-id": corrId,
+          "x-correlation-id": correlationId,
           "x-audit-log": "cache-hit",
-          ETag: etag,
-          "Cache-Control": "public, max-age=30",
-          Vary: VARY_HEADER,
+          etag,
+          "cache-control": "public, max-age=30",
+          vary: VARY_HEADER,
         },
       }
     );
   }
 
-  try {
-    const result = await getOrCreateInflight(cacheKey, async () => {
-      const upstreamResult = await fetchBundleFromUpstream({
-        req,
-        corrId,
-        tenantKey,
-        acceptLanguage,
-        etagIn,
-        upstreamUrl,
-        auth,
-      });
+  return getOrCreateInflight(cacheKey, async () => {
+    const response = await proxyJsonWithWebAuthCached(req, {
+      url: `/api/v1.0/localization/bundle${req.nextUrl.search}`,
+      method: "GET",
+      timeoutMs: 10_000,
+      logLabel: "Localization.Bundle.GET",
+      cache: false,
+      transformResponse: (payload, context) => {
+        const headers = new Headers();
+        headers.set("x-correlation-id", context.correlationId);
+        headers.set("vary", VARY_HEADER);
 
-      if (upstreamResult.kind === "ok") {
-        cacheSet(cacheKey, upstreamResult.bundle, CACHE_TTL_SECONDS);
-      }
+        if (context.upstreamStatus >= 200 && context.upstreamStatus < 300) {
+          const bundle = normalizeBundlePayload(payload);
+          cacheSet(cacheKey, bundle, CACHE_TTL_SECONDS);
 
-      return upstreamResult;
-    });
+          headers.set("x-audit-log", "success");
+          headers.set("etag", buildWeakEtag(bundle));
+          headers.set("cache-control", "public, max-age=30");
 
-    if (result.kind === "not-modified") {
-      console.log("🟪 [BFF localization/bundle] 304 not modified", {
-        corrId,
-        cacheKey,
-      });
-      console.groupEnd();
-
-      return new NextResponse(null, {
-        status: 304,
-        headers: {
-          "x-correlation-id": corrId,
-          "x-audit-log": "not-modified",
-          ETag: result.etag,
-          "Cache-Control": result.cacheControl,
-          Vary: VARY_HEADER,
-        },
-      });
-    }
-
-    if (result.kind === "upstream-error") {
-      console.warn("🟥 [BFF localization/bundle] Upstream error", {
-        corrId,
-        cacheKey,
-        upstreamStatus: result.upstreamStatus,
-      });
-      console.groupEnd();
-
-      /**
-       * Mevcut sistem davranışı ile uyumlu kalmak için body-level envelope + 200 dönüyoruz.
-       * Error semantics ileride merkezileşirse yeniden ele alınabilir.
-       */
-      return jsonResponse<BundleData>(
-        {
-          ok: false,
-          status: result.upstreamStatus,
-          data: {},
-          error: "UPSTREAM_NOT_OK",
-        },
-        {
-          status: 200,
-          headers: {
-            "x-correlation-id": corrId,
-            "x-audit-log": "failed",
-            Vary: VARY_HEADER,
-          },
+          return {
+            body: {
+              ok: true,
+              status: context.upstreamStatus,
+              data: bundle,
+              error: null,
+            },
+            status: 200,
+            headers,
+            cache: {
+              enabled: false,
+            },
+          };
         }
-      );
-    }
 
-    console.log("✅ [BFF localization/bundle] Success", {
-      corrId,
-      cacheKey,
-      status: result.status,
-      keyCount: Object.keys(result.bundle).length,
-    });
-    console.groupEnd();
+        headers.set("x-audit-log", "failed");
 
-    return jsonResponse<BundleData>(
-      {
-        ok: true,
-        status: result.status,
-        data: result.bundle,
-        error: null,
+        return {
+          body: {
+            ok: false,
+            status: context.upstreamStatus,
+            data: {},
+            error: "UPSTREAM_NOT_OK",
+          },
+          status: 200,
+          headers,
+          cache: {
+            enabled: false,
+          },
+        };
       },
-      {
-        status: 200,
-        headers: {
-          "x-correlation-id": corrId,
-          "x-audit-log": "success",
-          ETag: result.etag,
-          "Cache-Control": result.cacheControl,
-          Vary: VARY_HEADER,
-        },
-      }
-    );
-  } catch (error: unknown) {
-    console.warn("💥 [BFF localization/bundle] Exception", {
-      corrId,
-      tenantKey,
-      error: error instanceof Error ? error.message : String(error),
+      responseHeaders: {
+        vary: VARY_HEADER,
+      },
     });
-    console.groupEnd();
 
+    return response;
+  }).catch((error: unknown) => {
     return jsonResponse<BundleData>(
       {
         ok: false,
@@ -507,11 +240,11 @@ export async function GET(req: NextRequest) {
       {
         status: 200,
         headers: {
-          "x-correlation-id": corrId,
+          "x-correlation-id": correlationId,
           "x-audit-log": "exception",
-          Vary: VARY_HEADER,
+          vary: VARY_HEADER,
         },
       }
     );
-  }
+  });
 }

@@ -1,3 +1,5 @@
+// src/app/components/shared/LanguageSelector.tsx
+
 "use client";
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
@@ -77,7 +79,9 @@ export default function LanguageSelector() {
     return languages[0] ?? null;
   }, [languages, isLanguage, urlPrefix]);
 
-  const handleOpen = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
+  const handleOpen = (e: React.MouseEvent<HTMLElement>) =>
+    setAnchorEl(e.currentTarget);
+
   const handleClose = () => setAnchorEl(null);
 
   useEffect(() => {
@@ -89,21 +93,24 @@ export default function LanguageSelector() {
       const newPrefix = toPrefix(cultureCode);
       const stripped = pathname.replace(LOCALE_PREFIX_RE, "") || "/";
 
-      const search = typeof window !== "undefined" ? window.location.search : "";
+      const search =
+        typeof window !== "undefined" ? window.location.search : "";
       const hash = typeof window !== "undefined" ? window.location.hash : "";
 
       const nextPath = `/${newPrefix}${stripped}`.replace(/\/{2,}/g, "/");
 
-      setLocaleCookie(newPrefix);
-      setIsLanguage(cultureCode);
+      if (isLanguage !== cultureCode) {
+        setIsLanguage(cultureCode);
+      }
 
+      setLocaleCookie(newPrefix);
       handleClose();
       router.push(`${nextPath}${search}${hash}`);
     },
-    [pathname, router, setIsLanguage]
+    [pathname, router, setIsLanguage, isLanguage]
   );
 
-useEffect(() => {
+ useEffect(() => {
   const ac = new AbortController();
 
   (async () => {
@@ -141,7 +148,9 @@ useEffect(() => {
 
       setLanguages(nextLanguages);
 
-      const matched = normalized.find((l) => toPrefix(l.cultureCode) === urlPrefix);
+      const matched = normalized.find(
+        (l) => toPrefix(l.cultureCode) === urlPrefix
+      );
       const fallback = normalized.find((x) => x.isDefault) || normalized[0];
       const selected = matched?.cultureCode || fallback.cultureCode;
 
@@ -157,8 +166,7 @@ useEffect(() => {
   })();
 
   return () => ac.abort();
-}, [urlPrefix, isLanguage]);  
-
+}, [urlPrefix]);
   const shownCulture = currentLang?.cultureCode || "en-US";
   const shownName = currentLang?.name || "English";
 

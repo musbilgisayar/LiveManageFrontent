@@ -1,28 +1,19 @@
+// src/app/api/v1.0/userprofile/phone-numbers/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
+import { resolveCorrelationId } from "@/lib/bff/webAuthProxyCore";
 
-const BACKEND_BASE_ULTIMATE =
-  process.env.BACKEND_BASE ??
-  process.env.BACKEND_URL ??
-  "https://localhost:5002";
+export const runtime = "nodejs";
 
-const LOG_PREFIX = "UserPhoneNumbersUltimate";
+const LOG_PREFIX = "UserPhoneNumbers";
 
-function buildListUrlUltimate(userId: string) {
-  return new URL(
-    `/api/v1.0/identity/AppUser/${encodeURIComponent(userId)}/phone-numbers`,
-    BACKEND_BASE_ULTIMATE
-  ).toString();
-}
-
-function buildCreateUrlUltimate() {
-  return new URL(
-    "/api/v1.0/identity/AppUser/phone-numbers",
-    BACKEND_BASE_ULTIMATE
-  ).toString();
-}
-
-function buildValidationError(message: string, userMessage: string, field: string) {
+function buildValidationError(
+  correlationId: string,
+  message: string,
+  userMessage: string,
+  field: string
+) {
   return NextResponse.json(
     {
       ok: false,
@@ -33,83 +24,80 @@ function buildValidationError(message: string, userMessage: string, field: strin
         [field]: [message],
       },
     },
-    { status: 400 }
+    {
+      status: 400,
+      headers: {
+        "x-correlation-id": correlationId,
+      },
+    }
   );
 }
 
 export async function GET(req: NextRequest) {
-  try {
-    const userId = req.nextUrl.searchParams.get("userId");
+  const correlationId = resolveCorrelationId(req);
+  const userId = req.nextUrl.searchParams.get("userId")?.trim();
 
-    if (!userId) {
-      return buildValidationError(
-        "userId is required.",
-        "Kullanıcı bilgisi eksik.",
-        "userId"
-      );
-    }
-
-    const backendUrl = buildListUrlUltimate(userId);
-
-    return await proxyJsonWithWebAuth(req, {
-      url: backendUrl,
-      method: "GET",
-      logLabel: `${LOG_PREFIX}.GET`,
-    });
-  } catch (error) {
-    console.error(`[BFF][${LOG_PREFIX}][GET][EX]`, {
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "BFF user phone numbers GET request failed.",
-        userMessage: "Telefon numaraları alınamadı.",
-        data: null,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
+  if (!userId) {
+    return buildValidationError(
+      correlationId,
+      "userId is required.",
+      "Kullanıcı bilgisi eksik.",
+      "userId"
     );
   }
+
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v1.0/identity/AppUser/${encodeURIComponent(userId)}/phone-numbers`,
+    method: "GET",
+    logLabel: `${LOG_PREFIX}.GET`,
+  });
 }
 
 export async function POST(req: NextRequest) {
+  const correlationId = resolveCorrelationId(req);
+
+  let body: unknown;
+
   try {
-    const rawBody = await req.text();
-    const parsedBody = rawBody ? JSON.parse(rawBody) : null;
-    const userId = parsedBody?.userId;
-
-    if (!userId) {
-      return buildValidationError(
-        "userId is required.",
-        "Kullanıcı bilgisi eksik.",
-        "userId"
-      );
-    }
-
-    const backendUrl = buildCreateUrlUltimate();
-
-    return await proxyJsonWithWebAuth(req, {
-      url: backendUrl,
-      method: "POST",
-      body: parsedBody,
-      logLabel: `${LOG_PREFIX}.POST`,
-    });
-  } catch (error) {
-    console.error(`[BFF][${LOG_PREFIX}][POST][EX]`, {
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-
+    body = await req.json();
+  } catch {
     return NextResponse.json(
       {
         ok: false,
-        message: "BFF user phone numbers POST request failed.",
-        userMessage: "Telefon ekleme işlemi tamamlanamadı.",
+        message: "Body is required.",
+        userMessage: "Telefon ekleme verisi eksik.",
         data: null,
-        error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      {
+        status: 400,
+        headers: {
+          "x-correlation-id": correlationId,
+        },
+      }
     );
   }
+
+  const parsedBody =
+    body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+
+  const userId =
+    typeof parsedBody?.userId === "string"
+      ? parsedBody.userId.trim()
+      : parsedBody?.userId;
+
+  if (!userId) {
+    return buildValidationError(
+      correlationId,
+      "userId is required.",
+      "Kullanıcı bilgisi eksik.",
+      "userId"
+    );
+  }
+
+  return proxyJsonWithWebAuth(req, {
+    url: "/api/v1.0/identity/AppUser/phone-numbers",
+    method: "POST",
+    body: parsedBody,
+    logLabel: `${LOG_PREFIX}.POST`,
+  });
 }

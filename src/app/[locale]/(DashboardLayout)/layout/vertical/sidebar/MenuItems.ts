@@ -1,95 +1,81 @@
 // 📂 src/app/[locale]/(DashboardLayout)/layout/sidebar/MenuItems.ts
-// 🧭 LiveManage Sidebar Menü Konfigürasyonu
-// - Tüm sabit metinler, senin çeviri stratejine göre key formatına çevrildi.
-// - Namespace: "sidebar"
-// - Örnek key: "sidebar:menu.home.modern", "sidebar:group.apps"
-// - Aşağıda her ana bölüm için Türkçe açıklama (yorum satırları) eklendi.
 
 import { uniqueId } from "lodash";
 
 import {
-  IconAward,
-  IconBoxMultiple,
-    IconLayoutGrid,
-  IconBuildingEstate,
-  IconSpeakerphone,
-  IconClipboardList,
-  IconPoint,
-  IconAlertCircle,
+  IconLogin,
   IconNotes,
-  IconCalendar,
-  IconMail,
-  IconTicket,
-  IconEdit,
-  IconGitMerge,
-  IconCurrencyDollar,
+  IconActivity,
+  IconAlertCircle,
+  IconAppWindow,
   IconApps,
+  IconBasket,
+  IconBoxAlignBottom,
+  IconBoxAlignLeft,
+  IconBuildingCommunity,
+  IconBuildingEstate,
+  IconCalendar,
+  IconChartArea,
+  IconChartArcs,
+  IconChartArcs3,
+  IconChartCandle,
+  IconChartDonut3,
+  IconChartDots,
+  IconChartHistogram,
+  IconChartLine,
+  IconChartPie2,
+  IconChartPpf,
+  IconChartRadar,
+  IconChartScatter,
+  IconClipboardList,
+  IconCoin,
+  IconCurrencyDollar,
+  IconEdit,
+  IconFileCheck,
   IconFileDescription,
   IconFileDots,
   IconFiles,
-  IconBan,
-  IconStar,
-  IconMoodSmile,
-  IconBorderAll,
-  IconBorderHorizontal,
-  IconBorderInner,
-  IconBorderVertical,
-  IconBorderTop,
-  IconUserCircle,
-  IconPackage,
-  IconMessage2,
-  IconBasket,
-  IconChartLine,
-  IconChartArcs,
-  IconChartCandle,
-  IconChartArea,
-  IconChartDots,
-  IconChartDonut3,
-  IconChartRadar,
-  IconLogin,
-  IconUserPlus,
-  IconRotate,
-  IconBox,
-  IconShoppingCart,
-  IconAperture,
-  IconLayout,
-  IconSettings,
+  IconGitMerge,
   IconHelp,
-  IconZoomCode,
-  IconBoxAlignBottom,
-  IconBoxAlignLeft,
-  IconBorderStyle2,
+  IconHome,
+  IconLayout,
+  IconLayoutGrid,
   IconLockAccess,
-  IconAppWindow,
+  IconMail,
+  IconMapPin,
+  IconMessage2,
+  IconMoodSmile,
   IconNotebook,
-  IconFileCheck,
-  IconChartHistogram,
-  IconListTree,
-  IconChartArcs3,
-  IconChartPpf,
-  IconChartScatter,
-  IconChartPie2,
+  IconPackage,
   IconPageBreak,
+  IconPoint,
+  IconRotate,
+  IconSettings,
   IconShieldCheck,
+  IconShoppingCart,
+  IconSpeakerphone,
+  IconStar,
+  IconTicket,
+  IconTool,
+  IconUserCircle,
+  IconUserPlus,
   IconUsers,
-  IconToggleLeft,
-  IconSettings2,
-  IconTrash,
-  IconActivity
+  IconZoomCode,
+    IconChecklist,
+  IconPlus,
+ 
 } from "@tabler/icons-react";
-import { IconBuildingCommunity } from "@tabler/icons-react";
-import { ElementType } from "react-spring";
+
 import { NavGroup } from "@/app/[locale]/(DashboardLayout)/types/layout/sidebar";
 
-const Menuitems: NavGroup[] = [
-  
  
-    // 🛡 Authorization grubu: Rol & Yetki Yönetimi (Senin eklediğin alan)
+ 
+const Menuitems: NavGroup[] = [
+  // 🛡 Authorization
   {
     navlabel: true,
     subheader: "sidebar:group.authorization",
   },
-
   {
     id: uniqueId(),
     title: "sidebar:menu.authorization.roles.root",
@@ -102,107 +88,198 @@ const Menuitems: NavGroup[] = [
         icon: IconUsers,
         href: "/superadmin/roles",
       },
-      
     ],
   },
 
-// 🌐 Localization Manager (Çeviri Yönetimi)
+  // 🌐 Localization Manager
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.manager.localization.root",
+    icon: IconGitMerge,
+    href: "/superadmin/localization",
+    children: [
+      {
+        id: uniqueId(),
+        title: "sidebar:menu.manager.localization.translations",
+        icon: IconPoint,
+        href: "/superadmin/localization",
+      },
+      {
+        id: uniqueId(),
+        title: "sidebar:menu.manager.localization.keys",
+        icon: IconPoint,
+        href: "/superadmin/localization/keys",
+      },
+      {
+        id: uniqueId(),
+        title: "sidebar:menu.manager.localization.namespaces",
+        icon: IconPoint,
+        href: "/superadmin/localization/namespaces",
+      },
+    ],
+  },
+
+  // 🏠 Gayrimenkul - Master Data
+  {
+    navlabel: true,
+    subheader: "sidebar:group.realEstate",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.realEstate.mySpaces",
+    icon: IconLayoutGrid,
+    href: "/my-spaces",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.realEstate.properties",
+    icon: IconBuildingEstate,
+    href: "/property-management/properties",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.realEstate.units",
+    icon: IconHome,
+    href: "/property-management/units",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.realEstate.addresses",
+    icon: IconMapPin,
+    href: "/property-management/addresses",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.realEstate.createProperty",
+    icon: IconBuildingEstate,
+    href: "/property-management/properties/create",
+  },
+
+  // ⚙️ Operasyonlar
+  {
+    navlabel: true,
+    subheader: "sidebar:group.operations",
+  },
 {
   id: uniqueId(),
-  title: "sidebar:menu.manager.localization.root",
-  icon: IconGitMerge,
-  href: "/superadmin/localization",
-  children: [
-    {
-      id: uniqueId(),
-      title: "sidebar:menu.manager.localization.translations",
-      icon: IconPoint,
-      href: "/superadmin/localization",
-    },
-    {
-      id: uniqueId(),
-      title: "sidebar:menu.manager.localization.keys",
-      icon: IconPoint,
-      href: "/superadmin/localization/keys",
-    },
-    {
-      id: uniqueId(),
-      title: "sidebar:menu.manager.localization.namespaces",
-      icon: IconPoint,
-      href: "/superadmin/localization/namespaces",
-    },
-  ],
+  title: "sidebar:menu.managementApplications.create",
+  icon: IconPlus,
+  href: "/management-applications/create",
+},
+
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.operations.propertyOperations",
+    icon: IconBuildingCommunity,
+    href: "/operation-management/properties",
+    
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.operations.finance",
+    icon: IconCoin,
+    href: "/superadmin/operations/finance",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.operations.unitRelations",
+    icon: IconUsers,
+    href: "/superadmin/operations/units",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.operations.maintenance",
+    icon: IconTool,
+    href: "/superadmin/operations/maintenance",
+  },
+
+  // 📢 İlan Yönetimi
+
+// 📢 İlan Yönetimi
+{
+  navlabel: true,
+  subheader: "sidebar:group.listingManagement",
 },
 
 {
-  navlabel: true,
-  subheader: "Gayrimenkul",
-},
-{
   id: uniqueId(),
-  title: "Alanlarım",
-  icon: IconLayoutGrid,
-  href: "/my-spaces",
-},
-{
-  id: uniqueId(),
-  title: "Yeni Gayrimenkul Tanımla",
-  icon: IconBuildingEstate,
-  href: "/property-management/properties/create",
-},
-{
-  navlabel: true,
-  subheader: "İlan Yönetimi",
-},
-{
-  id: uniqueId(),
-  title: "İlan Ver",
+  title: "sidebar:menu.listings.create",
   icon: IconSpeakerphone,
   href: "/listings-management/create/select-property",
 },
+
 {
   id: uniqueId(),
-  title: "İlanlarım",
+  title: "sidebar:menu.listings.myListings",
   icon: IconClipboardList,
   href: "/listings-management/my-listings",
 },
 
-// audit log izleme monitring dashboard
+// 🧾 Yönetim Başvuruları (Kullanıcı)
 {
   id: uniqueId(),
-  title: "sidebar:menu.monitoring.root",
-  icon: IconActivity,
-  href: "/superadmin/monitoring",
-  children: [
-    {
-      id: uniqueId(),
-      title: "sidebar:menu.monitoring.dashboard",
-      icon: IconPoint,
-      href: "/superadmin/monitoring",
-    },
-    {
-      id: uniqueId(),
-      title: "sidebar:menu.monitoring.securityTimeline",
-      icon: IconPoint,
-      href: "/superadmin/monitoring/security-timeline",
-    },
-    {
-      id: uniqueId(),
-      title: "sidebar:menu.monitoring.lockoutCenter",
-      icon: IconPoint,
-      href: "/superadmin/monitoring/lockouts",
-    },
-    {
-      id: uniqueId(),
-      title: "sidebar:menu.monitoring.auditTimeline",
-      icon: IconPoint,
-      href: "/superadmin/monitoring/audit-timeline",
-    },
-  ],
+  title: "sidebar:menu.managementApplications.create",
+icon: IconFileDescription,
+  href: "/management-applications/create",
 },
 
+{
+  id: uniqueId(),
+  title: "sidebar:menu.managementApplications.my",
+  icon: IconChecklist,
+  href: "/management-applications/my",
+},
 
-  // 📄 Pages grubu: Temaya ait hazır sayfalar (account, pricing, faq, sample page...)
+// 🛡️ Admin Alanı
+{
+  navlabel: true,
+  subheader: "sidebar:group.admin",
+},
+
+{
+  id: uniqueId(),
+  title: "sidebar:menu.managementApplications.review",
+  icon: IconShieldCheck,
+  href: "/management-applications/review",
+  // burada senin permission sistemi gelecek
+  // permission: "ManagementApplications.Review"
+},
+
+  // 🧭 Monitoring
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.monitoring.root",
+    icon: IconActivity,
+    href: "/superadmin/monitoring",
+    children: [
+      {
+        id: uniqueId(),
+        title: "sidebar:menu.monitoring.dashboard",
+        icon: IconPoint,
+        href: "/superadmin/monitoring",
+      },
+      {
+        id: uniqueId(),
+        title: "sidebar:menu.monitoring.securityTimeline",
+        icon: IconPoint,
+        href: "/superadmin/monitoring/security-timeline",
+      },
+      {
+        id: uniqueId(),
+        title: "sidebar:menu.monitoring.lockoutCenter",
+        icon: IconPoint,
+        href: "/superadmin/monitoring/lockouts",
+      },
+      {
+        id: uniqueId(),
+        title: "sidebar:menu.monitoring.auditTimeline",
+        icon: IconPoint,
+        href: "/superadmin/monitoring/audit-timeline",
+      },
+    ],
+  },
+
+  // 📄 Pages
   {
     navlabel: true,
     subheader: "sidebar:group.pages",
@@ -223,32 +300,22 @@ const Menuitems: NavGroup[] = [
     id: uniqueId(),
     title: "sidebar:menu.pages.accountSettings",
     icon: IconUserCircle,
-    
-     href: "/apps/account-setting", // ✅ Doğru yol
+    href: "/apps/account-setting",
   },
 
-   // Kullanıcı 
+  // 👥 Kullanıcılar
   {
     id: uniqueId(),
     title: "sidebar:menu.apps.users.root",
     icon: IconUserCircle,
     href: "/apps/profile",
     children: [
-
       {
-  navlabel: true,
-  subheader: "sidebar:group.admin",
-},
-
-{
-  id: uniqueId(),
-  title: "sidebar:menu.admin.users.root",
-  icon: IconUsers,
-  href: "/superadmin/users",
-},
-
-
-
+        id: uniqueId(),
+        title: "sidebar:menu.admin.users.root",
+        icon: IconUsers,
+        href: "/superadmin/users",
+      },
       {
         id: uniqueId(),
         title: "sidebar:menu.apps.users.profile",
@@ -275,7 +342,6 @@ const Menuitems: NavGroup[] = [
       },
     ],
   },
-
 
   {
     id: uniqueId(),
@@ -328,9 +394,7 @@ const Menuitems: NavGroup[] = [
     ],
   },
 
-
-
-  // 💰 eCommerce dashboard
+  // 💰 Dashboard
   {
     id: uniqueId(),
     title: "sidebar:menu.home.ecommerce",
@@ -338,9 +402,8 @@ const Menuitems: NavGroup[] = [
     href: "/dashboards/ecommerce",
   },
 
-
-    // 📦   Contacts 
- {
+  // 📦 Contacts
+  {
     id: uniqueId(),
     title: "sidebar:menu.apps.contacts",
     icon: IconPackage,
@@ -349,14 +412,11 @@ const Menuitems: NavGroup[] = [
     href: "/apps/contacts",
   },
 
-  // 📦 Apps grubu: Uygulama modülleri (Contacts, Blog, E-Ticaret, Chat vb.)
+  // 📦 Apps
   {
     navlabel: true,
     subheader: "sidebar:group.apps",
   },
-
- 
-
   {
     id: uniqueId(),
     title: "sidebar:menu.apps.blog.root",
@@ -373,12 +433,10 @@ const Menuitems: NavGroup[] = [
         id: uniqueId(),
         title: "sidebar:menu.apps.blog.detail",
         icon: IconPoint,
-        href:
-          "/apps/blog/detail/streaming-video-way-before-it-was-cool-go-dark-tomorrow",
+        href: "/apps/blog/detail/streaming-video-way-before-it-was-cool-go-dark-tomorrow",
       },
     ],
   },
-
   {
     id: uniqueId(),
     title: "sidebar:menu.apps.ecommerce.root",
@@ -423,15 +481,12 @@ const Menuitems: NavGroup[] = [
       },
     ],
   },
-
   {
     id: uniqueId(),
     title: "sidebar:menu.apps.chats",
     icon: IconMessage2,
     href: "/apps/chats",
   },
-
- 
   {
     id: uniqueId(),
     title: "sidebar:menu.apps.notes",
@@ -462,7 +517,6 @@ const Menuitems: NavGroup[] = [
     icon: IconNotebook,
     href: "/apps/kanban",
   },
-
   {
     id: uniqueId(),
     title: "sidebar:menu.apps.invoice.root",
@@ -496,8 +550,7 @@ const Menuitems: NavGroup[] = [
     ],
   },
 
-
-  // 📝 Forms grubu: Form elemanları, layout ve wizard örnekleri
+  // 📝 Forms
   {
     navlabel: true,
     subheader: "sidebar:group.forms",
@@ -595,8 +648,7 @@ const Menuitems: NavGroup[] = [
     href: "/forms/form-tiptap",
   },
 
-
-  // 📈 Charts grubu: ApexCharts tabanlı grafikler
+  // 📈 Charts
   {
     navlabel: true,
     subheader: "sidebar:group.charts",
@@ -644,7 +696,7 @@ const Menuitems: NavGroup[] = [
     href: "/charts/radialbar",
   },
 
-  // 📊 Mui Charts grubu: MUI tabanlı grafik örnekleri
+  // 📊 MUI Charts
   {
     navlabel: true,
     subheader: "sidebar:group.muiCharts",
@@ -700,15 +752,11 @@ const Menuitems: NavGroup[] = [
     href: "/muicharts/gaugecharts",
   },
 
-  // 🌲 Mui Trees grubu: TreeView örnekleri
- 
-
-  // 🔐 Auth grubu: Login / Register / Two Steps / Error / Maintenance
+  // 🔐 Auth
   {
     navlabel: true,
     subheader: "sidebar:group.auth",
   },
-
   {
     id: uniqueId(),
     title: "sidebar:menu.auth.login.root",
@@ -721,7 +769,6 @@ const Menuitems: NavGroup[] = [
         icon: IconPoint,
         href: "/auth/login",
       },
-       
     ],
   },
   {
@@ -735,8 +782,7 @@ const Menuitems: NavGroup[] = [
         title: "sidebar:menu.auth.register.side",
         icon: IconPoint,
         href: "/auth/register",
-      }
-       
+      },
     ],
   },
   {
@@ -759,7 +805,6 @@ const Menuitems: NavGroup[] = [
       },
     ],
   },
-
   {
     id: uniqueId(),
     title: "sidebar:menu.auth.twoSteps.root",
@@ -793,9 +838,7 @@ const Menuitems: NavGroup[] = [
     href: "/auth/maintenance",
   },
 
-  // 🧩 Other grubu: Demo amaçlı çeşitli menü örnekleri
- 
- 
+  // 🔗 External
   {
     id: uniqueId(),
     title: "sidebar:menu.other.externalLink",
@@ -803,8 +846,6 @@ const Menuitems: NavGroup[] = [
     icon: IconStar,
     href: "https://google.com",
   },
-
-
 ];
 
 export default Menuitems;

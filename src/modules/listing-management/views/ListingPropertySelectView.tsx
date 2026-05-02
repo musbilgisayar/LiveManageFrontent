@@ -53,6 +53,8 @@ type PropertyStatus = "all" | "ready" | "missingInfo" | "listed";
 type ViewMode = "list" | "grid";
 
 type PropertyUnit = {
+  propertyId: string;
+  listingId?: string;
   id: string;
   name: string;
   type: Exclude<PropertyType, "all">;
@@ -73,6 +75,7 @@ type Tone = "default" | "success" | "warning" | "info";
 const MOCK_UNITS: PropertyUnit[] = [
   {
     id: "12",
+    propertyId: "7",
     name: "Green Park Sitesi / Blok A / Daire 12",
     type: "apartment",
     city: "Zürich",
@@ -85,6 +88,7 @@ const MOCK_UNITS: PropertyUnit[] = [
   },
   {
     id: "5",
+    propertyId: "8",
     name: "Mavi Bahçe / Daire 5",
     type: "apartment",
     city: "İstanbul",
@@ -97,6 +101,7 @@ const MOCK_UNITS: PropertyUnit[] = [
   },
   {
     id: "8",
+    propertyId: "8",
     name: "Mavi Bahçe / Daire 8",
     type: "apartment",
     city: "İstanbul",
@@ -109,6 +114,8 @@ const MOCK_UNITS: PropertyUnit[] = [
   },
   {
     id: "2",
+    propertyId: "3",
+    listingId: "2",
     name: "ABC Plaza / Dükkan 2",
     type: "shop",
     city: "Ankara",
@@ -121,6 +128,7 @@ const MOCK_UNITS: PropertyUnit[] = [
   },
   {
     id: "7",
+    propertyId: "11",
     name: "Merkez Ofis / Kat 3 / No:7",
     type: "office",
     city: "İzmir",
@@ -133,6 +141,7 @@ const MOCK_UNITS: PropertyUnit[] = [
   },
   {
     id: "9",
+    propertyId: "13",
     name: "Sahil Rezidans / Daire 15",
     type: "apartment",
     city: "Antalya",
@@ -159,7 +168,7 @@ const STATUS_OPTIONS: { value: PropertyStatus; label: string }[] = [
   { value: "listed", label: "İlanda" },
 ];
 
- 
+
 const CREATE_PROPERTY_ROUTE =
   "/property-management/properties/create?returnUrl=/listings-management/create/select-property";
 
@@ -226,10 +235,18 @@ export default function ListingPropertySelectView() {
   };
 
   const handleCreateListing = useCallback(
-    (unitId: string) => {
-      setSelectedId(unitId);
+    (unit: PropertyUnit) => {
+      setSelectedId(unit.id);
+
       setTimeout(() => {
-        router.push(`/listings-management/create/property/${unitId}`);
+        if (unit.status === "listed" && unit.listingId) {
+          router.push(`/listings-management/my-listings/${unit.listingId}/edit`);
+          return;
+        }
+
+        router.push(
+          `/listings-management/create/property/${unit.propertyId}/unit/${unit.id}`
+        );
       }, 200);
     },
     [router],
@@ -548,7 +565,7 @@ export default function ListingPropertySelectView() {
                   <PropertyListItem
                     unit={unit}
                     isSelected={selectedId === unit.id}
-                    onCreateListing={() => handleCreateListing(unit.id)}
+                    onCreateListing={() => handleCreateListing(unit)}
                   />
                 </Box>
               </Grow>

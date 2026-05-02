@@ -1,3 +1,4 @@
+//src/modules/localization/pages/manager/LocalizationDetailPage.tsx
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";

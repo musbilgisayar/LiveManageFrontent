@@ -1,15 +1,18 @@
-import { FC, useState, useContext } from "react";
-import Divider from '@mui/material/Divider'
-import Drawer from '@mui/material/Drawer'
-import Fab from '@mui/material/Fab'
-import Grid from '@mui/material/Grid'
-import IconButton from '@mui/material/IconButton'
-import Slider from '@mui/material/Slider'
-import Stack from '@mui/material/Stack'
-import Tooltip from '@mui/material/Tooltip'
-import Typography from '@mui/material/Typography'
-import { styled } from '@mui/material/styles'
-import { CustomizerContext } from "@/app/context/customizerContext";
+// src/app/[locale]/(DashboardLayout)/layout/shared/customizer/Customizer.tsx
+
+"use client";
+
+import { FC, useState } from "react";
+import Divider from "@mui/material/Divider";
+import Drawer from "@mui/material/Drawer";
+import Fab from "@mui/material/Fab";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import Slider from "@mui/material/Slider";
+import Stack from "@mui/material/Stack";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import { styled } from "@mui/material/styles";
 import Box, { BoxProps } from "@mui/material/Box";
 import { IconX, IconSettings, IconCheck } from "@tabler/icons-react";
 import Scrollbar from "@/app/components/custom-scroll/Scrollbar";
@@ -26,15 +29,41 @@ import {
   PaddingTwoTone,
   BorderOuter,
 } from "@mui/icons-material";
+import { useCustomizer } from "@/app/context/customizerContext";
 
 const SidebarWidth = "320px";
-interface colors {
+
+type ThemeColor = {
   id: number;
   bgColor: string;
   disp?: string;
-}
+};
+
+const StyledBox = styled(Box)<BoxProps>(({ theme }) => ({
+  boxShadow: theme.shadows[8],
+  padding: "20px",
+  cursor: "pointer",
+  justifyContent: "center",
+  display: "flex",
+  transition: "0.1s ease-in",
+  border: "1px solid rgba(145, 158, 171, 0.12)",
+  "&:hover": {
+    transform: "scale(1.05)",
+  },
+}));
+
+const themeColors: ThemeColor[] = [
+  { id: 1, bgColor: "#5D87FF", disp: "BLUE_THEME" },
+  { id: 2, bgColor: "#0074BA", disp: "AQUA_THEME" },
+  { id: 3, bgColor: "#763EBD", disp: "PURPLE_THEME" },
+  { id: 4, bgColor: "#0A7EA4", disp: "GREEN_THEME" },
+  { id: 5, bgColor: "#01C0C8", disp: "CYAN_THEME" },
+  { id: 6, bgColor: "#FA896B", disp: "ORANGE_THEME" },
+];
+
 const Customizer: FC = () => {
   const [showDrawer, setShowDrawer] = useState(false);
+
   const {
     activeDir,
     setActiveDir,
@@ -51,68 +80,16 @@ const Customizer: FC = () => {
     setIsLayout,
     isBorderRadius,
     setIsBorderRadius,
-    setActiveTheme
-  } = useContext(CustomizerContext);
+    setActiveTheme,
+  } = useCustomizer();
 
-
-  const StyledBox = styled(Box)<BoxProps>(({ theme }) => ({
-    boxShadow: theme.shadows[8],
-    padding: "20px",
-    cursor: "pointer",
-    justifyContent: "center",
-    display: "flex",
-    transition: "0.1s ease-in",
-    border: "1px solid rgba(145, 158, 171, 0.12)",
-    "&:hover": {
-      transform: "scale(1.05)",
-    },
-  }));
-
-  const addAttributeToBody = (cvalue: any) => {
-    document.body.setAttribute("data-color-theme", cvalue);
+  const addAttributeToBody = (value?: string) => {
+    if (!value) return;
+    document.body.setAttribute("data-color-theme", value);
   };
-
-  const thColors: colors[] = [
-    {
-      id: 1,
-      bgColor: "#5D87FF",
-      disp: "BLUE_THEME",
-    },
-    {
-      id: 2,
-      bgColor: "#0074BA",
-      disp: "AQUA_THEME",
-    },
-    {
-      id: 3,
-      bgColor: "#763EBD",
-      disp: "PURPLE_THEME",
-    },
-    {
-      id: 4,
-      bgColor: "#0A7EA4",
-      disp: "GREEN_THEME",
-    },
-    {
-      id: 5,
-      bgColor: "#01C0C8",
-      disp: "CYAN_THEME",
-    },
-    {
-      id: 6,
-      bgColor: "#FA896B",
-      disp: "ORANGE_THEME",
-    },
-  ];
-
-
-
 
   return (
     <div>
-      {/* ------------------------------------------- */}
-      {/* --Floating Button to open customizer ------ */}
-      {/* ------------------------------------------- */}
       <Tooltip title="Settings">
         <Fab
           color="primary"
@@ -123,6 +100,7 @@ const Customizer: FC = () => {
           <IconSettings stroke={1.5} />
         </Fab>
       </Tooltip>
+
       <Drawer
         anchor="right"
         open={showDrawer}
@@ -132,17 +110,14 @@ const Customizer: FC = () => {
             sx: {
               width: SidebarWidth,
             },
-          }
+          },
         }}
       >
-        {/* ------------------------------------------- */}
-        {/* ------------ Customizer Sidebar ------------- */}
-        {/* ------------------------------------------- */}
         <Scrollbar sx={{ height: "calc(100vh - 5px)" }}>
           <Box
             p={2}
             display="flex"
-            justifyContent={"space-between"}
+            justifyContent="space-between"
             alignItems="center"
           >
             <Typography variant="h4">Settings</Typography>
@@ -151,86 +126,66 @@ const Customizer: FC = () => {
               <IconX size="1rem" />
             </IconButton>
           </Box>
+
           <Divider />
+
           <Box p={3}>
-            {/* ------------------------------------------- */}
-            {/* ------------ Dark light theme setting ------------- */}
-            {/* ------------------------------------------- */}
             <Typography variant="h6" gutterBottom>
               Theme Option
             </Typography>
-            <Stack direction={"row"} gap={2} my={2}>
-              <StyledBox
-                onClick={() => setActiveMode("light")}
-                display="flex"
-                gap={1}
-              >
+
+            <Stack direction="row" gap={2} my={2}>
+              <StyledBox onClick={() => setActiveMode("light")} display="flex" gap={1}>
                 <WbSunnyTwoToneIcon
-                  color={
-                    activeMode === "light" ? "primary" : "inherit"
-                  }
+                  color={activeMode === "light" ? "primary" : "inherit"}
                 />
                 Light
               </StyledBox>
-              <StyledBox
-                onClick={() => setActiveMode("dark")}
-                display="flex"
-                gap={1}
-              >
+
+              <StyledBox onClick={() => setActiveMode("dark")} display="flex" gap={1}>
                 <DarkModeTwoToneIcon
-                  color={
-                    activeMode === "dark" ? "primary" : "inherit"
-                  }
+                  color={activeMode === "dark" ? "primary" : "inherit"}
                 />
                 Dark
               </StyledBox>
             </Stack>
 
             <Box pt={3} />
-            {/* ------------------------------------------- */}
-            {/* ------------ RTL theme setting -------------*/}
-            {/* ------------------------------------------- */}
+
             <Typography variant="h6" gutterBottom>
               Theme Direction
             </Typography>
-            <Stack direction={"row"} gap={2} my={2}>
-              <StyledBox
-                onClick={() => setActiveDir("ltr")}
-                display="flex"
-                gap={1}
-              >
+
+            <Stack direction="row" gap={2} my={2}>
+              <StyledBox onClick={() => setActiveDir("ltr")} display="flex" gap={1}>
                 <SwipeLeftAltTwoToneIcon
                   color={activeDir === "ltr" ? "primary" : "inherit"}
-                />{" "}
+                />
                 LTR
               </StyledBox>
-              <StyledBox
-                onClick={() => setActiveDir("rtl")}
-                display="flex"
-                gap={1}
-              >
+
+              <StyledBox onClick={() => setActiveDir("rtl")} display="flex" gap={1}>
                 <SwipeRightAltTwoToneIcon
                   color={activeDir === "rtl" ? "primary" : "inherit"}
-                />{" "}
+                />
                 RTL
               </StyledBox>
             </Stack>
 
             <Box pt={3} />
-            {/* ------------------------------------------- */}
-            {/* ------------ Theme Color setting ------------- */}
-            {/* ------------------------------------------- */}
+
             <Typography variant="h6" gutterBottom>
               Theme Colors
             </Typography>
+
             <Grid container spacing={2}>
-              {thColors.map((thcolor) => (
-                <Grid key={thcolor.id} size={4}>
-                  <StyledBox onClick={() => addAttributeToBody(thcolor.disp)}>
-                    <Tooltip title={`${thcolor.disp}`} placement="top">
+              {themeColors.map((themeColor) => (
+                <Grid key={themeColor.id} size={4}>
+                  <StyledBox onClick={() => addAttributeToBody(themeColor.disp)}>
+                    <Tooltip title={themeColor.disp ?? ""} placement="top">
                       <Box
                         sx={{
-                          backgroundColor: thcolor.bgColor,
+                          backgroundColor: themeColor.bgColor,
                           width: "25px",
                           height: "25px",
                           borderRadius: "60px",
@@ -239,106 +194,72 @@ const Customizer: FC = () => {
                           display: "flex",
                           color: "white",
                         }}
-                        aria-label={`${thcolor.bgColor}`}
-                        onClick={() => setActiveTheme(thcolor.disp)}
+                        aria-label={themeColor.bgColor}
+                        onClick={() => setActiveTheme(themeColor.disp ?? "")}
                       >
-                        {activeTheme === thcolor.disp ? (
-                          <IconCheck width={13} />
-                        ) : (
-                          ""
-                        )}
+                        {activeTheme === themeColor.disp ? <IconCheck width={13} /> : null}
                       </Box>
                     </Tooltip>
                   </StyledBox>
-
-
                 </Grid>
               ))}
             </Grid>
+
             <Box pt={4} />
-            {/* ------------------------------------------- */}
-            {/* ------------ Layout Horizontal / Vertical ------------- */}
-            {/* ------------------------------------------- */}
+
             <Typography variant="h6" gutterBottom>
               Layout Type
             </Typography>
-            <Stack direction={"row"} gap={2} my={2}>
-              <StyledBox
-                onClick={() => setActiveLayout("vertical")}
-                display="flex"
-                gap={1}
-              >
+
+            <Stack direction="row" gap={2} my={2}>
+              <StyledBox onClick={() => setActiveLayout("vertical")} display="flex" gap={1}>
                 <ViewComfyTwoTone
-                  color={
-                    activeLayout === 'vertical' ? "primary" : "inherit"
-                  }
+                  color={activeLayout === "vertical" ? "primary" : "inherit"}
                 />
                 Vertical
               </StyledBox>
-              <StyledBox
-                onClick={() => setActiveLayout("horizontal")}
-                display="flex"
-                gap={1}
-              >
+
+              <StyledBox onClick={() => setActiveLayout("horizontal")} display="flex" gap={1}>
                 <PaddingTwoTone
-                  color={
-                    activeLayout === 'horizontal' ? "primary" : "inherit"
-                  }
+                  color={activeLayout === "horizontal" ? "primary" : "inherit"}
                 />
                 Horizontal
               </StyledBox>
             </Stack>
+
             <Box pt={4} />
-            {/* ------------------------------------------- */}
-            {/* ------------ Layout Boxed / Full ------------- */}
-            {/* ------------------------------------------- */}
+
             <Typography variant="h6" gutterBottom>
               Container Option
             </Typography>
-            <Stack direction={"row"} gap={2} my={2}>
-              <StyledBox
-                onClick={() => setIsLayout("boxed")}
-                display="flex"
-                gap={1}
-              >
+
+            <Stack direction="row" gap={2} my={2}>
+              <StyledBox onClick={() => setIsLayout("boxed")} display="flex" gap={1}>
                 <CallToActionTwoToneIcon
-                  color={
-                    isLayout === "boxed" ? "primary" : "inherit"
-                  }
+                  color={isLayout === "boxed" ? "primary" : "inherit"}
                 />
                 Boxed
               </StyledBox>
-              <StyledBox
-                onClick={() => setIsLayout("full")}
-                display="flex"
-                gap={1}
-              >
+
+              <StyledBox onClick={() => setIsLayout("full")} display="flex" gap={1}>
                 <AspectRatioTwoToneIcon
                   color={isLayout === "full" ? "primary" : "inherit"}
                 />
                 Full
               </StyledBox>
             </Stack>
-            <Box pt={4} />
-            {/* ------------------------------------------- */}
-            {/* ------------ Sidebar Color setting ------------- */}
-            {/* ------------------------------------------- */}
 
-            {/* ------------------------------------------- */}
-            {/* ------------ Theme Color setting ------------- */}
-            {/* ------------------------------------------- */}
-            {activeLayout === "horizontal" ? (
-              ""
-            ) : (
+            <Box pt={4} />
+
+            {activeLayout !== "horizontal" && (
               <>
                 <Typography variant="h6" gutterBottom>
                   Sidebar Type
                 </Typography>
-                <Stack direction={"row"} gap={2} my={2}>
+
+                <Stack direction="row" gap={2} my={2}>
                   <StyledBox
-                    onClick={() => {
-                      setIsCollapse('full-sidebar')
-                    }}
+                    onClick={() => setIsCollapse("full-sidebar")}
                     display="flex"
                     gap={1}
                   >
@@ -347,6 +268,7 @@ const Customizer: FC = () => {
                     />
                     Full
                   </StyledBox>
+
                   <StyledBox
                     onClick={() => setIsCollapse("mini-sidebar")}
                     display="flex"
@@ -355,41 +277,34 @@ const Customizer: FC = () => {
                     <ViewSidebarTwoToneIcon
                       color={isCollapse === "mini-sidebar" ? "primary" : "inherit"}
                     />
-                    mini
+                    Mini
                   </StyledBox>
                 </Stack>
               </>
             )}
+
             <Box pt={4} />
+
             <Typography variant="h6" gutterBottom>
               Card With
             </Typography>
-            <Stack direction={"row"} gap={2} my={2}>
-              <StyledBox
-                onClick={() => setIsCardShadow(false)}
-                display="flex"
-                gap={1}
-              >
-                <BorderOuter
-                  color={!isCardShadow ? "primary" : "inherit"}
-                />
+
+            <Stack direction="row" gap={2} my={2}>
+              <StyledBox onClick={() => setIsCardShadow(false)} display="flex" gap={1}>
+                <BorderOuter color={!isCardShadow ? "primary" : "inherit"} />
                 Border
               </StyledBox>
-              <StyledBox
-                onClick={() => setIsCardShadow(true)}
-                display="flex"
-                gap={1}
-              >
+
+              <StyledBox onClick={() => setIsCardShadow(true)} display="flex" gap={1}>
                 <CallToActionTwoToneIcon
                   color={isCardShadow ? "primary" : "inherit"}
                 />
                 Shadow
               </StyledBox>
             </Stack>
+
             <Box pt={4} />
-            {/* ------------------------------------------- */}
-            {/* ------------ Theme Color setting ------------- */}
-            {/* ------------------------------------------- */}
+
             <Typography variant="h6" gutterBottom>
               Theme Border Radius
             </Typography>
@@ -400,7 +315,11 @@ const Customizer: FC = () => {
               aria-label="Small"
               min={4}
               max={24}
-              onChange={(event: any) => setIsBorderRadius(event.target.value)}
+              onChange={(_, value) => {
+                if (typeof value === "number") {
+                  setIsBorderRadius(value);
+                }
+              }}
               valueLabelDisplay="auto"
             />
           </Box>

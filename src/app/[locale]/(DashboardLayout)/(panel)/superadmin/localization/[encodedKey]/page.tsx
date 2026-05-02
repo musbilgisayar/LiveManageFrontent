@@ -3,7 +3,7 @@
 
 
 //src/app/[locale]/(DashboardLayout)/(panel)/superadmin/localization/[encodedKey]/page.tsx
-import LocalizationDetailPage from "@/modules/localization/pages/LocalizationDetailPage";
+import LocalizationDetailPage from "@/modules/localization/pages/manager/LocalizationDetailPage";
 
 type PageProps = {
   params: Promise<{

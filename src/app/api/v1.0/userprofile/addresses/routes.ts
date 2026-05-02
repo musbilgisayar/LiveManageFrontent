@@ -1,31 +1,40 @@
+// src/app/api/v1.0/[lang]/profile/addresses/route.ts
+
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
-import globalFetcher from "@/app/api/_shared/globalFetcher.server";
+import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
 
-const BACKEND_BASE =
-  process.env.BACKEND_URL ?? "https://localhost:5002";
+type RouteContext = {
+  params: Promise<{ lang: string }>;
+};
 
-/**
- * 🧩 Profile Addresses BFF Proxy
- * Frontend → /api/v1.0/{lang}/profile/addresses
- * Backend  → /api/v1.0/profile/addresses
- */
-
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ lang: string }> }
-) {
+export async function GET(req: NextRequest, context: RouteContext) {
   const { lang } = await context.params;
-  const backendUrl = `${BACKEND_BASE}/api/v1.0/profile/addresses`;
-  console.log(`🌍 [${lang}] GET → ${backendUrl}`);
-  return globalFetcher(req, backendUrl);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info(`🌍 [${lang}] GET → /api/v1.0/profile/addresses`);
+  }
+
+  return proxyJsonWithWebAuth(req, {
+    url: "/api/v1.0/profile/addresses",
+    method: "GET",
+    logLabel: "ProfileAddresses.GET",
+  });
 }
 
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ lang: string }> }
-) {
+export async function POST(req: NextRequest, context: RouteContext) {
   const { lang } = await context.params;
-  const backendUrl = `${BACKEND_BASE}/api/v1.0/profile/addresses`;
-  console.log(`🌍 [${lang}] POST → ${backendUrl}`);
-  return globalFetcher(req, backendUrl);
+  const body = await req.json().catch(() => null);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info(`🌍 [${lang}] POST → /api/v1.0/profile/addresses`);
+  }
+
+  return proxyJsonWithWebAuth(req, {
+    url: "/api/v1.0/profile/addresses",
+    method: "POST",
+    body,
+    logLabel: "ProfileAddresses.POST",
+  });
 }

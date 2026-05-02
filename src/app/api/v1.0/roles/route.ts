@@ -1,39 +1,137 @@
-// 📁 src/app/api/v1.0/roles/route.ts
+// src/app/api/v1.0/roles/route.ts
+
 import { NextRequest } from "next/server";
-import globalFetcher from "@/app/api/_shared/globalFetcher.server";
+import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
 
-const BACKEND_BASE = process.env.BACKEND_URL ?? "https://localhost:5002";
+const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || "1.0";
 
-/**
- * 🧩 Roles BFF Proxy (AppRole Endpoint)
- * ------------------------------------------------------------
- * 🎯 Frontend → /api/v1.0/roles
- * 🎯 Backend  → /api/v1.0/AppRole
- * ------------------------------------------------------------
- * - locale URL'den gelmez; Accept-Language header ile taşınır.
- * - globalFetcher JWT, AuditLog, CorrelationId başlıklarını uygular.
- */
+function normalizeRoleList(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (payload && typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+
+    if (Array.isArray(obj.data)) {
+      return obj.data;
+    }
+  }
+
+  return [];
+}
+
+function createSuccessResponse(payload: unknown) {
+  const safePayload =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+
+  return {
+    ok:
+      typeof safePayload.ok === "boolean"
+        ? safePayload.ok
+        : true,
+    message:
+      typeof safePayload.message === "string"
+        ? safePayload.message
+        : "Roller başarıyla getirildi.",
+    userMessage:
+      typeof safePayload.userMessage === "string"
+        ? safePayload.userMessage
+        : "Roller başarıyla getirildi.",
+    data: normalizeRoleList(payload),
+  };
+}
+
+function createErrorResponse(payload: unknown) {
+  const safePayload =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+
+  return {
+    ok: false,
+    message:
+      typeof safePayload.message === "string"
+        ? safePayload.message
+        : "Roller alınırken backend hatası oluştu.",
+    userMessage:
+      typeof safePayload.userMessage === "string"
+        ? safePayload.userMessage
+        : "Roller alınırken bir hata oluştu.",
+    data: normalizeRoleList(safePayload.data),
+  };
+}
+
+function transformRolesResponse(
+  payload: unknown,
+  correlationId: string,
+  upstreamStatus: number
+) {
+  const body =
+    upstreamStatus >= 200 && upstreamStatus < 300
+      ? createSuccessResponse(payload)
+      : createErrorResponse(payload);
+
+  return {
+    body,
+    status: upstreamStatus,
+    headers: {
+      "x-correlation-id": correlationId,
+    },
+  };
+}
 
 export async function GET(req: NextRequest) {
-  const backendUrl = `${BACKEND_BASE}/api/v1.0/AppRole`;
-  
-  return globalFetcher(req, backendUrl);
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v${API_VERSION}/AppRole`,
+    method: "GET",
+    timeoutMs: 15_000,
+    logLabel: "RolesList",
+    transformResponse: (payload, context) =>
+      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
+  });
 }
 
 export async function POST(req: NextRequest) {
-  const backendUrl = `${BACKEND_BASE}/api/v1.0/AppRole`;
- 
-  return globalFetcher(req, backendUrl);
+  const body = await req.json();
+
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v${API_VERSION}/AppRole`,
+    method: "POST",
+    body,
+    timeoutMs: 15_000,
+    logLabel: "RolesCreate",
+    transformResponse: (payload, context) =>
+      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
+  });
 }
 
 export async function PUT(req: NextRequest) {
-  const backendUrl = `${BACKEND_BASE}/api/v1.0/AppRole`;
-  console.log(`🌍 [roles] PUT → ${backendUrl}`);
-  return globalFetcher(req, backendUrl);
+  const body = await req.json();
+
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v${API_VERSION}/AppRole`,
+    method: "PUT",
+    body,
+    timeoutMs: 15_000,
+    logLabel: "RolesUpdate",
+    transformResponse: (payload, context) =>
+      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
+  });
 }
 
 export async function DELETE(req: NextRequest) {
-  const backendUrl = `${BACKEND_BASE}/api/v1.0/AppRole`;
-  console.log(`🌍 [roles] DELETE → ${backendUrl}`);
-  return globalFetcher(req, backendUrl);
+  const body = await req.json();
+
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v${API_VERSION}/AppRole`,
+    method: "DELETE",
+    body,
+    timeoutMs: 15_000,
+    logLabel: "RolesDelete",
+    transformResponse: (payload, context) =>
+      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
+  });
 }
