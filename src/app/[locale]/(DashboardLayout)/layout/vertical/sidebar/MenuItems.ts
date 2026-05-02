@@ -61,15 +61,12 @@ import {
   IconUserPlus,
   IconUsers,
   IconZoomCode,
-    IconChecklist,
+  IconChecklist,
   IconPlus,
- 
 } from "@tabler/icons-react";
 
 import { NavGroup } from "@/app/[locale]/(DashboardLayout)/types/layout/sidebar";
 
- 
- 
 const Menuitems: NavGroup[] = [
   // 🛡 Authorization
   {
@@ -131,6 +128,12 @@ const Menuitems: NavGroup[] = [
     href: "/my-spaces",
   },
   {
+    id: "pending-actions",
+    title: "Onay Bekleyen İşlemler",
+    icon: IconChecklist,
+    href: "/pending-actions",
+  },
+  {
     id: uniqueId(),
     title: "sidebar:menu.realEstate.properties",
     icon: IconBuildingEstate,
@@ -141,6 +144,12 @@ const Menuitems: NavGroup[] = [
     title: "sidebar:menu.realEstate.units",
     icon: IconHome,
     href: "/property-management/units",
+  },
+  {
+    id: uniqueId(),
+    title: "Daire / Dükkan Tanımla",
+    icon: IconPlus,
+    href: "/property-management/1/units/create",
   },
   {
     id: uniqueId(),
@@ -160,19 +169,11 @@ const Menuitems: NavGroup[] = [
     navlabel: true,
     subheader: "sidebar:group.operations",
   },
-{
-  id: uniqueId(),
-  title: "sidebar:menu.managementApplications.create",
-  icon: IconPlus,
-  href: "/management-applications/create",
-},
-
   {
     id: uniqueId(),
     title: "sidebar:menu.operations.propertyOperations",
     icon: IconBuildingCommunity,
     href: "/operation-management/properties",
-    
   },
   {
     id: uniqueId(),
@@ -194,56 +195,52 @@ const Menuitems: NavGroup[] = [
   },
 
   // 📢 İlan Yönetimi
+  {
+    navlabel: true,
+    subheader: "sidebar:group.listingManagement",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.listings.create",
+    icon: IconSpeakerphone,
+    href: "/listings-management/create/select-property",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.listings.myListings",
+    icon: IconClipboardList,
+    href: "/listings-management/my-listings",
+  },
 
-// 📢 İlan Yönetimi
-{
-  navlabel: true,
-  subheader: "sidebar:group.listingManagement",
-},
+  // 🧾 Yönetim Başvuruları
+  {
+    navlabel: true,
+    subheader: "sidebar:group.managementApplications",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.managementApplications.create",
+    icon: IconFileDescription,
+    href: "/management-applications/create",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.managementApplications.my",
+    icon: IconChecklist,
+    href: "/management-applications/my",
+  },
 
-{
-  id: uniqueId(),
-  title: "sidebar:menu.listings.create",
-  icon: IconSpeakerphone,
-  href: "/listings-management/create/select-property",
-},
-
-{
-  id: uniqueId(),
-  title: "sidebar:menu.listings.myListings",
-  icon: IconClipboardList,
-  href: "/listings-management/my-listings",
-},
-
-// 🧾 Yönetim Başvuruları (Kullanıcı)
-{
-  id: uniqueId(),
-  title: "sidebar:menu.managementApplications.create",
-icon: IconFileDescription,
-  href: "/management-applications/create",
-},
-
-{
-  id: uniqueId(),
-  title: "sidebar:menu.managementApplications.my",
-  icon: IconChecklist,
-  href: "/management-applications/my",
-},
-
-// 🛡️ Admin Alanı
-{
-  navlabel: true,
-  subheader: "sidebar:group.admin",
-},
-
-{
-  id: uniqueId(),
-  title: "sidebar:menu.managementApplications.review",
-  icon: IconShieldCheck,
-  href: "/management-applications/review",
-  // burada senin permission sistemi gelecek
-  // permission: "ManagementApplications.Review"
-},
+  // 🛡️ Admin Alanı
+  {
+    navlabel: true,
+    subheader: "sidebar:group.admin",
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.managementApplications.review",
+    icon: IconShieldCheck,
+    href: "/management-applications/review",
+  },
 
   // 🧭 Monitoring
   {
