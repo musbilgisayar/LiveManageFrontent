@@ -3,6 +3,8 @@
 import { uniqueId } from "lodash";
 
 import {
+  IconListDetails,
+  IconReceipt2,
   IconLogin,
   IconNotes,
   IconActivity,
@@ -175,11 +177,37 @@ const Menuitems: NavGroup[] = [
     icon: IconBuildingCommunity,
     href: "/operation-management/properties",
   },
+
+
   {
-    id: uniqueId(),
-    title: "sidebar:menu.operations.finance",
+    id: "muhasebe",
+    title: "Muhasebe",
     icon: IconCoin,
-    href: "/superadmin/operations/finance",
+    children: [
+      {
+        id: "muhasebe-dashboard",
+        title: "Dashboard",
+        href: "/muhasebe",
+      },
+      {
+        id: "muhasebe-setup",
+        title: "Tanımlamalar",
+        href: "/muhasebe/setup",
+      },
+      {
+        id: "muhasebe-expenses",
+        title: "Giderler",
+        href: "/muhasebe/expenses",
+        icon: IconReceipt2,
+      },
+
+      {
+  id: uniqueId(),
+  title: "Expense Categories",
+  icon: IconListDetails,
+  href: "/muhasebe/expense-categories",
+}
+    ],
   },
   {
     id: uniqueId(),

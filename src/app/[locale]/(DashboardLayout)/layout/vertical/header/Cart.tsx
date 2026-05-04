@@ -1,39 +1,36 @@
-import React, { useContext, useState } from 'react';
-import { sum } from 'lodash';
-import { IconShoppingCart, IconX } from '@tabler/icons-react';
-import { Box, Typography, Badge, Drawer, IconButton, Button, Stack } from '@mui/material';
-import Link from 'next/link';
-import CartItems from './CartItem';
-import { ProductContext } from '@/app/context/Ecommercecontext';
+// src/app/[locale]/(DashboardLayout)/layout/vertical/header/Cart.tsx
+"use client";
 
+import React, { useContext, useState } from "react";
+import { sum } from "lodash";
+import { IconShoppingCart, IconX } from "@tabler/icons-react";
+import {
+  Badge,
+  Box,
+  Button,
+  Drawer,
+  IconButton,
+  Stack,
+  Typography,
+} from "@mui/material";
+import Link from "next/link";
+import CartItems from "./CartItem";
+import { ProductContext } from "@/app/context/Ecommercecontext";
+import type { ProductType } from "@/app/[locale]/(DashboardLayout)/types/apps/eCommerce";
 
 const Cart = () => {
-  // Get Products
+  const productContext = useContext(ProductContext);
 
-  const {
-    cartItems,
-  } = useContext(ProductContext);
+  if (!productContext) {
+    return null;
+  }
 
-
-  const bcount = cartItems.length > 0 ? cartItems.length : '0';
-
-  const total = sum(cartItems.map((product) => product.price * product.qty));
-
-
+  const { cartItems } = productContext;
   const [showDrawer, setShowDrawer] = useState(false);
-  const handleDrawerClose = () => {
-    setShowDrawer(false);
-  };
 
-  const cartContent = (
-    <Box>
-      {/* ------------------------------------------- */}
-      {/* Cart Content */}
-      {/* ------------------------------------------- */}
-      <Box>
-        <CartItems />
-      </Box>
-    </Box>
+  const bcount = cartItems.length;
+  const total = sum(
+    cartItems.map((product: ProductType) => product.price * product.qty)
   );
 
   return (
@@ -43,49 +40,47 @@ const Cart = () => {
         color="inherit"
         onClick={() => setShowDrawer(true)}
         sx={{
-          color: 'text.secondary',
+          color: "text.secondary",
           ...(showDrawer && {
-            color: 'primary.main',
+            color: "primary.main",
           }),
         }}
       >
         <Badge color="error" badgeContent={bcount}>
-          <IconShoppingCart size="21" stroke="1.5" />
+          <IconShoppingCart size={21} stroke={1.5} />
         </Badge>
       </IconButton>
-      {/* ------------------------------------------- */}
-      {/* Cart Sidebar */}
-      {/* ------------------------------------------- */}
+
       <Drawer
         anchor="right"
         open={showDrawer}
         onClose={() => setShowDrawer(false)}
         slotProps={{
-          paper: { sx: { maxWidth: '500px' } }
+          paper: { sx: { maxWidth: "500px" } },
         }}
       >
         <Box display="flex" alignItems="center" p={3} pb={0} justifyContent="space-between">
           <Typography variant="h5" fontWeight={600}>
             Shopping Cart
           </Typography>
+
           <Box>
             <IconButton
               color="inherit"
               sx={{
                 color: (theme) => theme.palette.grey.A200,
               }}
-              onClick={handleDrawerClose}
+              onClick={() => setShowDrawer(false)}
             >
               <IconX size="1rem" />
             </IconButton>
           </Box>
         </Box>
 
-        {/* component */}
-        {cartContent}
-        {/* ------------------------------------------- */}
-        {/* Checkout  */}
-        {/* ------------------------------------------- */}
+        <Box>
+          <CartItems />
+        </Box>
+
         <Box px={3} mt={2}>
           {cartItems.length > 0 ? (
             <>
@@ -97,6 +92,7 @@ const Cart = () => {
                   ${total}
                 </Typography>
               </Stack>
+
               <Button
                 fullWidth
                 component={Link}
@@ -107,9 +103,7 @@ const Cart = () => {
                 Checkout
               </Button>
             </>
-          ) : (
-            ''
-          )}
+          ) : null}
         </Box>
       </Drawer>
     </Box>

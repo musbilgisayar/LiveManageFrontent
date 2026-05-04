@@ -6,6 +6,7 @@ import React from "react";
 import {
   alpha,
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
@@ -17,8 +18,10 @@ import {
 import type { Theme } from "@mui/material/styles";
 import {
   IconAlertTriangle,
+  IconArrowLeft,
   IconArrowUpRight,
   IconBuildingCommunity,
+  IconChevronRight,
   IconChecklist,
   IconCoin,
   IconHomeStats,
@@ -175,94 +178,126 @@ export default function PropertyManagementDashboardView({
           )} 0%, ${alpha(theme.palette.warning.main, 0.05)} 100%)`,
         }}
       >
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", lg: "1.25fr 0.95fr" },
-            gap: 2,
-            alignItems: "stretch",
-          }}
-        >
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: 4,
-              bgcolor: alpha(theme.palette.background.paper, 0.78),
-              border: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
-            }}
+        <Stack spacing={2}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
           >
-            <Stack spacing={1.25}>
-              <Chip
-                label={property.type}
-                size="small"
-                sx={{
-                  width: "fit-content",
-                  fontWeight: 800,
-                  bgcolor: alpha(theme.palette.primary.main, 0.08),
-                  color: "primary.main",
-                }}
-              />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<IconArrowLeft size={17} />}
+              onClick={() => router.back()}
+              sx={{
+                borderRadius: 999,
+                fontWeight: 800,
+                bgcolor: alpha(theme.palette.background.paper, 0.65),
+              }}
+            >
+              Geri
+            </Button>
 
-              <Typography variant="h4" fontWeight={900} lineHeight={1.1}>
-                {property.name}
-              </Typography>
+            <BreadcrumbText label="Gayrimenkul Yönetimi" />
+            <IconChevronRight size={15} color={theme.palette.text.secondary} />
 
-              <Typography color="text.secondary">{property.description}</Typography>
-            </Stack>
-          </Box>
+            <BreadcrumbText label="Site / Apartmanlar" />
+            <IconChevronRight size={15} color={theme.palette.text.secondary} />
+
+            <BreadcrumbText label={property.name} active />
+          </Stack>
 
           <Box
             sx={{
-              p: 2,
-              borderRadius: 4,
-              bgcolor: alpha(theme.palette.background.paper, 0.78),
-              border: `1px solid ${alpha(
-                hasAttention ? theme.palette.warning.main : theme.palette.success.main,
-                0.16,
-              )}`,
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", lg: "1.25fr 0.95fr" },
+              gap: 2,
+              alignItems: "stretch",
             }}
           >
-            <Stack spacing={1}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Box
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 4,
+                bgcolor: alpha(theme.palette.background.paper, 0.78),
+                border: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
+              }}
+            >
+              <Stack spacing={1.25}>
+                <Chip
+                  label={property.type}
+                  size="small"
                   sx={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 2.5,
-                    display: "grid",
-                    placeItems: "center",
-                    bgcolor: alpha(
-                      hasAttention ? theme.palette.warning.main : theme.palette.success.main,
-                      0.12,
-                    ),
-                    color: hasAttention ? "warning.dark" : "success.dark",
+                    width: "fit-content",
+                    fontWeight: 800,
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
+                    color: "primary.main",
                   }}
-                >
-                  {hasAttention ? (
-                    <IconAlertTriangle size={20} />
-                  ) : (
-                    <IconBuildingCommunity size={20} />
-                  )}
-                </Box>
+                />
 
-                <Box>
-                  <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 0.6 }}>
-                    Genel Durum
-                  </Typography>
-                  <Typography fontWeight={900}>
-                    {hasAttention ? "İşlem Gerektiren Konular Var" : "Durum Kontrol Altında"}
-                  </Typography>
-                </Box>
+                <Typography variant="h4" fontWeight={900} lineHeight={1.1}>
+                  {property.name}
+                </Typography>
+
+                <Typography color="text.secondary">{property.description}</Typography>
               </Stack>
+            </Box>
 
-              <Typography variant="body2" color="text.secondary">
-                {hasAttention
-                  ? `${property.overdueCount} geciken ödeme ve ${property.openRequestCount} açık talep mevcut. Finans ve bakım tarafı öncelikli takip gerektiriyor.`
-                  : "Şu anda kritik bir uyarı görünmüyor. Site operasyonları düzenli ilerliyor."}
-              </Typography>
-            </Stack>
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 4,
+                bgcolor: alpha(theme.palette.background.paper, 0.78),
+                border: `1px solid ${alpha(
+                  hasAttention ? theme.palette.warning.main : theme.palette.success.main,
+                  0.16,
+                )}`,
+              }}
+            >
+              <Stack spacing={1}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 2.5,
+                      display: "grid",
+                      placeItems: "center",
+                      bgcolor: alpha(
+                        hasAttention ? theme.palette.warning.main : theme.palette.success.main,
+                        0.12,
+                      ),
+                      color: hasAttention ? "warning.dark" : "success.dark",
+                    }}
+                  >
+                    {hasAttention ? (
+                      <IconAlertTriangle size={20} />
+                    ) : (
+                      <IconBuildingCommunity size={20} />
+                    )}
+                  </Box>
+
+                  <Box>
+                    <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 0.6 }}>
+                      Genel Durum
+                    </Typography>
+                    <Typography fontWeight={900}>
+                      {hasAttention ? "İşlem Gerektiren Konular Var" : "Durum Kontrol Altında"}
+                    </Typography>
+                  </Box>
+                </Stack>
+
+                <Typography variant="body2" color="text.secondary">
+                  {hasAttention
+                    ? `${property.overdueCount} geciken ödeme ve ${property.openRequestCount} açık talep mevcut. Finans ve bakım tarafı öncelikli takip gerektiriyor.`
+                    : "Şu anda kritik bir uyarı görünmüyor. Site operasyonları düzenli ilerliyor."}
+                </Typography>
+              </Stack>
+            </Box>
           </Box>
-        </Box>
+        </Stack>
       </Box>
 
       <Box
@@ -365,6 +400,30 @@ export default function PropertyManagementDashboardView({
         </SectionCard>
       </Box>
     </Box>
+  );
+}
+
+function BreadcrumbText({
+  label,
+  active,
+}: {
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Typography
+      variant="body2"
+      fontWeight={active ? 900 : 750}
+      color={active ? "primary.main" : "text.secondary"}
+      sx={{
+        cursor: active ? "default" : "pointer",
+        "&:hover": {
+          color: active ? "primary.main" : "text.primary",
+        },
+      }}
+    >
+      {label}
+    </Typography>
   );
 }
 

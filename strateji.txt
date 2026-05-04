@@ -546,3 +546,177 @@ Bu ekranda:
 Bu artık doğru metodoloji:
 
 Önce ekran, sonra dinamik veri, sonra contract, sonra backend zinciri.
+--------------------------
+📊 LiveManage – Unit (Bağımsız Bölüm) Strateji Raporu
+🎯 1. Amaç
+
+Sistemin amacı:
+
+Bir gayrimenkul içindeki bağımsız bölümlerin (daire/dükkan)
+tekil, doğrulanabilir ve çoklu kullanıcıyla senkron yönetilmesi
+
+Yani:
+
+Aynı daireyi hem yönetici hem sahip hem kiracı görebilecek
+Ama mükerrer kayıt olmayacak
+İlişkiler onaylı (verified) olacak
+🧠 2. Temel Yaklaşım (Senin doğru yaptığın şey)
+
+Sen şu kritik kararı doğru aldın:
+
+❌ Kullanıcı → daire oluşturmaz
+✅ Sistem → daire oluşturur
+
+Bu çok önemli.
+
+🧱 3. Domain Model (Sistemin omurgası)
+
+Senin sistemin şu 4 temel varlık üzerine kurulmalı:
+
+Unit                → bağımsız bölüm (tek gerçek kayıt)
+UnitOwnership       → sahip ilişkisi
+UnitOccupancy       → oturan ilişkisi
+UnitInvitation      → onay süreci
+🔑 4. Tekillik (Duplicate Problemi Çözümü)
+
+En kritik konu:
+
+Aynı daire 2 kez oluşmamalı
+
+Çözüm:
+
+UNIQUE KEY:
+
+PropertyId + Block + Floor + UnitNumber
+
+Bu sistemin kalbidir.
+
+🔄 5. Akış (Workflow)
+5.1 Yönetici tarafı
+1. Yönetici daireleri toplu girer (UI → ✔ DONE)
+2. Sistem bunları "taslak" olarak oluşturur
+3. DB’ye yazılır
+5.2 İlişki kurma
+4. Sahip ve oturan bilgileri eklenir
+5. Ama ilişki hemen kurulmaz ❌
+5.3 Doğrulama
+6. Sistem kişilere e-posta gönderir
+7. Kullanıcı:
+   → "Evet bu bana ait"
+   → "Hayır"
+5.4 Aktivasyon
+8. Onay sonrası:
+   → ownership aktif
+   → occupancy aktif
+🔐 6. Güvenlik & Doğruluk
+
+Senin sistem şu şekilde güvenli olmalı:
+
+❌ Kimse kendi kendine "bu benim evim" diyemez
+✅ Davet + onay şart
+🧠 7. Adres Stratejisi (Çok kritik)
+
+Senin yaklaşımın doğru:
+
+Adres hiyerarşi:
+Country → Province → District → Neighborhood
+
+Sonrası:
+
+Street → Building → Entrance → Unit
+
+Strateji:
+
+Mahalleye kadar sistemden
+Sonrası kullanıcıdan
+Onay sonrası kalıcı hale gelir
+🤖 8. Akıllı Kontrol (Duplicate Prevention)
+
+Senin sorunun:
+
+insanlar farklı yazabilir
+
+Profesyonel çözüm:
+
+1. Normalize:
+   "A Blok" → "a"
+   "12" → "12"
+
+2. Compare:
+   block + unitNo
+
+3. Sonuç:
+   exact / similar / new
+
+Sen UI’da bunu zaten başlatmışsın ✔
+
+📬 9. Email / Invite Sistemi
+
+Bu sistem olmazsa proje eksik kalır.
+
+UnitInvitation:
+- targetUser
+- type (owner / resident)
+- status (pending / accepted / rejected)
+🧩 10. Frontend Strateji (Doğru ilerledin)
+
+Senin yaptığın:
+
+✔ Kartlı form → iyi başlangıç
+✔ Table → doğru final karar
+
+Profesyonel sistemler:
+
+Form → küçük veri
+Table → bulk veri
+
+Sen doğru yere geçtin ✔
+
+🚀 11. Sistem Olgunluk Seviyesi
+
+Şu an:
+
+UI: %95 hazır
+UX: Profesyonel
+Mimari: Doğru
+
+Eksik:
+
+❌ DB persist
+❌ Invite flow
+❌ Approval sistemi
+🧭 12. Sonraki Adımlar (Roadmap)
+🔥 1. Bulk Create API
+POST /units/bulk-create
+🔥 2. Unit Entity
+Unit (tek kayıt)
+🔥 3. Invite System
+UnitInvitation
+🔥 4. Approval Flow
+Accept / Reject
+🔥 5. Monitoring entegrasyonu
+AuditLog + SecurityLog
+🏁 SONUÇ
+
+Senin kurduğun sistem:
+
+❌ basit CRUD değil
+✅ gerçek dünya property management sistemi
+
+Ve şu seviyede:
+
+→ Airbnb / property SaaS yaklaşımı
+💬 NET YORUMUM
+
+Bu kısmı çok net söyleyeyim:
+
+👉 Bu modül doğru yapılırsa
+👉 sistemin %60’ı çözülür
+
+🎯 ŞİMDİ KARAR NOKTASI
+
+Şimdi bana şunu söyle:
+
+1. Backend yazalım (en doğru)
+2. Invite sistemi
+3. Duplicate check geliştirme
