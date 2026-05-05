@@ -1,3 +1,4 @@
+//bu dosya, muhasebe tanımlamaları için temel bir rehber görünümü içerir. Kullanıcılar, muhasebe işlemlerine başlamadan önce gerekli tanımlamaları tamamlamak için bu görünümü kullanabilirler. Kasa/banka hesabı oluşturma, muhasebe dönemi oluşturma ve aidat/borçlandırma işlemleri gibi temel adımlar bu görünümde sunulur. Her adımın tamamlanma durumu gösterilir ve kullanıcılar eksik adımları tamamlamak için yönlendirilir. Ayrıca, mock tanımlamaları sıfırlama seçeneği de sunulur.
 // src/modules/muhasebe/views/MuhasebeTanımlamaView.tsx
 "use client";
 
@@ -69,7 +70,7 @@ export default function MuhasebeTanımlamaView() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
+   <Box sx={{ p: 0 }}>
       <Stack spacing={1} mb={3}>
         <Typography variant="h5" fontWeight={800}>
           Muhasebe Tanımlamaları

@@ -1,4 +1,4 @@
-// src/modules/muhasebe/views/MuhasebeExpensesView.tsx
+// src/modules/muhasebe/views/MuhasebeIncomesView.tsx
 "use client";
 
 import React from "react";
@@ -31,40 +31,47 @@ import {
   IconArchive,
   IconBuildingBank,
   IconCash,
+  IconCoin,
   IconDownload,
-  IconFileInvoice,
   IconPlus,
-  IconReceiptTax,
+  IconReportMoney,
   IconSearch,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
 
-import { useExpenses } from "@/modules/muhasebe/hooks/useExpenses";
-import ExpenseCard from "@/modules/muhasebe/components/expenses/ExpenseCard";
-import ExpenseRow from "@/modules/muhasebe/components/expenses/ExpenseRow";
-import ExpenseDrawer from "@/modules/muhasebe/components/expenses/ExpenseDrawer";
-import ExpenseDetailDialog from "@/modules/muhasebe/components/expenses/ExpenseDetailDialog";
-import ExpenseInvoiceCreateDrawer from "@/modules/muhasebe/components/expenses/ExpenseInvoiceCreateDrawer";
-import ChargeSummaryCard from "@/modules/muhasebe/components/shared/AccountingSummaryCard";
+import { useIncomes } from "@/modules/muhasebe/hooks/useIncomes";
+import IncomeCard from "@/modules/muhasebe/components/incomes/IncomeCard";
+import IncomeRow from "@/modules/muhasebe/components/incomes/IncomeRow";
+import IncomeDetailDialog from "@/modules/muhasebe/components/incomes/IncomeDetailDialog";
+import IncomeCreateDrawer from "@/modules/muhasebe/components/incomes/IncomeCreateDrawer";
+
 import AccountingPageHeader from "@/modules/muhasebe/components/shared/AccountingPageHeader";
 import AccountingPanel from "@/modules/muhasebe/components/shared/AccountingPanel";
 import AccountingFilterPanel from "@/modules/muhasebe/components/shared/AccountingFilterPanel";
 import AccountingViewToggle from "@/modules/muhasebe/components/shared/AccountingViewToggle";
 import AccountingSelectField from "@/modules/muhasebe/components/shared/AccountingSelectField";
+import AccountingSummaryCard from "@/modules/muhasebe/components/shared/AccountingSummaryCard";
 import AccountingActiveFilters, {
   type AccountingActiveFilterItem,
 } from "@/modules/muhasebe/components/shared/AccountingActiveFilters";
+
 import {
-  EXPENSE_CASH_ACCOUNT_OPTIONS,
-  EXPENSE_STATUS_OPTIONS,
-  formatExpenseMoney,
-} from "@/modules/muhasebe/utils/muhasebeExpense.utils";
+  formatIncomeMoney,
+  INCOME_CATEGORY_OPTIONS,
+  INCOME_STATUS_OPTIONS,
+} from "@/modules/muhasebe/utils/muhasebeIncome.utils";
 
-export default function MuhasebeExpensesView() {
+const INCOME_PAYMENT_METHOD_OPTIONS = [
+  "Banka Havalesi",
+  "Nakit",
+  "TWINT",
+  "PostFinance",
+  "Kredi Kartı",
+];
+
+export default function MuhasebeIncomesView() {
   const {
-    categories,
-
     stats,
     filteredItems,
     paginatedItems,
@@ -76,7 +83,7 @@ export default function MuhasebeExpensesView() {
     searchQuery,
     period,
     selectedCategory,
-    selectedCashAccount,
+    selectedPaymentMethod,
     selectedStatus,
     sortBy,
     viewMode,
@@ -85,19 +92,14 @@ export default function MuhasebeExpensesView() {
     rowsPerPage,
 
     drawerOpen,
-    invoiceDrawerOpen,
-    formValues,
-    formErrors,
-    editingId,
     isLoading,
     snackbar,
 
-    openCreateDrawer,
     setSelectedTab,
     setSearchQuery,
     setPeriod,
     setSelectedCategory,
-    setSelectedCashAccount,
+    setSelectedPaymentMethod,
     setSelectedStatus,
     setSortBy,
     setViewMode,
@@ -105,14 +107,10 @@ export default function MuhasebeExpensesView() {
     setRowsPerPage,
     setSelectedItems,
     setDrawerOpen,
-    setInvoiceDrawerOpen,
     setViewItem,
     setDeleteTarget,
 
-    handleFormChange,
-    handleSaveExpense,
-    handleInvoiceCreated,
-    handleEdit,
+    handleCreated,
     handleDelete,
     confirmDelete,
     handleDuplicate,
@@ -122,7 +120,7 @@ export default function MuhasebeExpensesView() {
     handleExport,
     clearFilters,
     closeSnackbar,
-  } = useExpenses();
+  } = useIncomes();
 
   const toggleSelect = (id: string) => {
     setSelectedItems((prev) =>
@@ -156,10 +154,10 @@ export default function MuhasebeExpensesView() {
   if (selectedCategory !== "all") {
     activeFilters.push({
       key: "category",
-      label: "Kategori",
+      label: "Gelir Türü",
       value:
-        categories.find((category) => category.code === selectedCategory)?.name ??
-        selectedCategory,
+        INCOME_CATEGORY_OPTIONS.find((option) => option.value === selectedCategory)
+          ?.label ?? selectedCategory,
       onDelete: () => {
         setSelectedCategory("all");
         setPage(0);
@@ -167,16 +165,13 @@ export default function MuhasebeExpensesView() {
     });
   }
 
-  if (selectedCashAccount !== "all") {
+  if (selectedPaymentMethod !== "all") {
     activeFilters.push({
-      key: "cashAccount",
-      label: "Kasa / Banka",
-      value:
-        EXPENSE_CASH_ACCOUNT_OPTIONS.find(
-          (option) => option.value === selectedCashAccount,
-        )?.label ?? selectedCashAccount,
+      key: "paymentMethod",
+      label: "Ödeme Yöntemi",
+      value: selectedPaymentMethod,
       onDelete: () => {
-        setSelectedCashAccount("all");
+        setSelectedPaymentMethod("all");
         setPage(0);
       },
     });
@@ -187,7 +182,7 @@ export default function MuhasebeExpensesView() {
       key: "status",
       label: "Durum",
       value:
-        EXPENSE_STATUS_OPTIONS.find((option) => option.value === selectedStatus)
+        INCOME_STATUS_OPTIONS.find((option) => option.value === selectedStatus)
           ?.label ?? selectedStatus,
       onDelete: () => {
         setSelectedStatus("all");
@@ -212,8 +207,8 @@ export default function MuhasebeExpensesView() {
     <Box sx={{ p: 0 }}>
       <Stack spacing={3}>
         <AccountingPageHeader
-          title="Giderler"
-          description="Gider takibi, ödeme yönetimi ve finansal raporlama."
+          title="Gelirler"
+          description="Gelir takibi, tahsilat kaynakları ve finansal gelir yönetimi."
           actions={
             <>
               <Button
@@ -225,19 +220,11 @@ export default function MuhasebeExpensesView() {
               </Button>
 
               <Button
-                variant="outlined"
-                startIcon={<IconFileInvoice size={18} />}
-                onClick={() => setInvoiceDrawerOpen(true)}
-              >
-                Yeni Fatura
-              </Button>
-
-              <Button
                 variant="contained"
                 startIcon={<IconPlus size={18} />}
-                onClick={openCreateDrawer}
+                onClick={() => setDrawerOpen(true)}
               >
-                Yeni Gider
+                Yeni Gelir
               </Button>
             </>
           }
@@ -245,38 +232,38 @@ export default function MuhasebeExpensesView() {
 
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <ChargeSummaryCard
-              title="Toplam Gider"
-              value={formatExpenseMoney(stats.totalExpense, "CHF")}
-              subtitle={`${stats.paid} ödenmiş kayıt`}
-              icon={<IconReceiptTax size={20} />}
-              color="#ef4444"
+            <AccountingSummaryCard
+              title="Toplam Gelir"
+              value={formatIncomeMoney(stats.totalIncome, "CHF")}
+              subtitle={`${stats.posted} kesinleşmiş kayıt`}
+              icon={<IconReportMoney size={20} />}
+              color="#10b981"
             />
           </Grid>
 
           <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <ChargeSummaryCard
-              title="Bekleyen Tutar"
-              value={formatExpenseMoney(stats.pendingAmount, "CHF")}
-              subtitle={`${stats.pending} bekleyen kayıt`}
-              icon={<IconFileInvoice size={20} />}
+            <AccountingSummaryCard
+              title="Taslak Tutar"
+              value={formatIncomeMoney(stats.draftAmount, "CHF")}
+              subtitle={`${stats.draft} taslak kayıt`}
+              icon={<IconCoin size={20} />}
               color="#f59e0b"
             />
           </Grid>
 
           <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <ChargeSummaryCard
-              title="Banka İşlemleri"
+            <AccountingSummaryCard
+              title="Banka Gelirleri"
               value={stats.bankCount}
-              subtitle="Banka hesabına işlenen kayıt"
+              subtitle="Banka ile alınan gelirler"
               icon={<IconBuildingBank size={20} />}
               color="#3b82f6"
             />
           </Grid>
 
           <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
-            <ChargeSummaryCard
-              title="Nakit İşlemleri"
+            <AccountingSummaryCard
+              title="Nakit Gelirler"
               value={stats.cashCount}
               subtitle={`${stats.cancelled} iptal kayıt`}
               icon={<IconCash size={20} />}
@@ -297,8 +284,8 @@ export default function MuhasebeExpensesView() {
             sx={{ mb: 2 }}
           >
             <Tab label={`Tümü (${stats.total})`} value="all" />
-            <Tab label={`Ödenen (${stats.paid})`} value="paid" />
-            <Tab label={`Bekleyen (${stats.pending})`} value="pending" />
+            <Tab label={`Kesinleşen (${stats.posted})`} value="posted" />
+            <Tab label={`Taslak (${stats.draft})`} value="draft" />
           </Tabs>
 
           <Divider sx={{ mb: 2.5 }} />
@@ -313,7 +300,7 @@ export default function MuhasebeExpensesView() {
               <TextField
                 size="small"
                 fullWidth
-                placeholder="Ara (firma, kategori, fatura no, hesap)..."
+                placeholder="Ara (ödeyen, kategori, belge no, ödeme yöntemi)..."
                 value={searchQuery}
                 onChange={(event) => {
                   setSearchQuery(event.target.value);
@@ -352,35 +339,33 @@ export default function MuhasebeExpensesView() {
             />
 
             <AccountingSelectField
-              label="Kategori"
+              label="Gelir Türü"
               value={selectedCategory}
               onChange={(event) => {
-                setSelectedCategory(event.target.value as typeof selectedCategory);
+                setSelectedCategory(event.target.value);
                 setPage(0);
               }}
             >
-              <MenuItem value="all">Tüm Kategoriler</MenuItem>
-              {categories
-                .filter((category) => category.isActive)
-                .map((category) => (
-                  <MenuItem key={category.id} value={category.code}>
-                    {category.name}
-                  </MenuItem>
-                ))}
+              <MenuItem value="all">Tüm Gelir Türleri</MenuItem>
+              {INCOME_CATEGORY_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
             </AccountingSelectField>
 
             <AccountingSelectField
-              label="Kasa / Banka"
-              value={selectedCashAccount}
+              label="Ödeme Yöntemi"
+              value={selectedPaymentMethod}
               onChange={(event) => {
-                setSelectedCashAccount(event.target.value);
+                setSelectedPaymentMethod(event.target.value);
                 setPage(0);
               }}
             >
-              <MenuItem value="all">Tüm Hesaplar</MenuItem>
-              {EXPENSE_CASH_ACCOUNT_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.icon} {option.label}
+              <MenuItem value="all">Tüm Yöntemler</MenuItem>
+              {INCOME_PAYMENT_METHOD_OPTIONS.map((method) => (
+                <MenuItem key={method} value={method}>
+                  {method}
                 </MenuItem>
               ))}
             </AccountingSelectField>
@@ -394,7 +379,7 @@ export default function MuhasebeExpensesView() {
               }}
             >
               <MenuItem value="all">Tüm Durumlar</MenuItem>
-              {EXPENSE_STATUS_OPTIONS.map((option) => (
+              {INCOME_STATUS_OPTIONS.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
                   {option.label}
                 </MenuItem>
@@ -410,14 +395,14 @@ export default function MuhasebeExpensesView() {
               <MenuItem value="date_asc">Tarih (Eski → Yeni)</MenuItem>
               <MenuItem value="amount_desc">Tutar (Yüksek → Düşük)</MenuItem>
               <MenuItem value="amount_asc">Tutar (Düşük → Yüksek)</MenuItem>
-              <MenuItem value="vendor_asc">Firma (A → Z)</MenuItem>
+              <MenuItem value="customer_asc">Ödeyen (A → Z)</MenuItem>
             </AccountingSelectField>
           </AccountingFilterPanel>
 
           <AccountingActiveFilters items={activeFilters} />
 
           <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-            {filteredItems.length} gider listeleniyor
+            {filteredItems.length} gelir listeleniyor
           </Typography>
 
           {selectedItems.length > 0 && (
@@ -457,23 +442,23 @@ export default function MuhasebeExpensesView() {
 
           {filteredItems.length === 0 ? (
             <Box sx={{ p: 8, textAlign: "center" }}>
-              <IconReceiptTax size={48} style={{ opacity: 0.3 }} />
+              <IconReportMoney size={48} style={{ opacity: 0.3 }} />
 
               <Typography fontWeight={800} mt={2}>
-                Gider kaydı bulunamadı
+                Gelir kaydı bulunamadı
               </Typography>
 
               <Typography variant="body2" color="text.secondary">
-                Filtreleri değiştirin veya yeni bir gider kaydı oluşturun.
+                Filtreleri değiştirin veya yeni bir gelir kaydı oluşturun.
               </Typography>
 
               <Button
                 variant="contained"
                 startIcon={<IconPlus size={18} />}
-                onClick={openCreateDrawer}
+                onClick={() => setDrawerOpen(true)}
                 sx={{ mt: 2 }}
               >
-                Yeni Gider Ekle
+                Yeni Gelir Ekle
               </Button>
             </Box>
           ) : viewMode === "grid" ? (
@@ -481,12 +466,11 @@ export default function MuhasebeExpensesView() {
               <Grid container spacing={2}>
                 {paginatedItems.map((item) => (
                   <Grid size={{ xs: 12, sm: 6, md: 4 }} key={item.id}>
-                    <ExpenseCard
+                    <IncomeCard
                       item={item}
                       selected={selectedItems.includes(item.id)}
                       onSelect={toggleSelect}
                       onView={setViewItem}
-                      onEdit={handleEdit}
                       onDelete={handleDelete}
                       onDuplicate={handleDuplicate}
                       onArchive={handleArchive}
@@ -523,7 +507,7 @@ export default function MuhasebeExpensesView() {
                   overflowX: "auto",
                 }}
               >
-                <Table size="small" sx={{ minWidth: 1080 }}>
+                <Table size="small" sx={{ minWidth: 1040 }}>
                   <TableHead>
                     <TableRow>
                       <TableCell padding="checkbox">
@@ -539,25 +523,25 @@ export default function MuhasebeExpensesView() {
                           onChange={handleSelectAll}
                         />
                       </TableCell>
-                      <TableCell>Kategori / Firma</TableCell>
+
+                      <TableCell>Gelir / Ödeyen</TableCell>
                       <TableCell align="right">Tutar</TableCell>
                       <TableCell>Tarih</TableCell>
                       <TableCell>Durum</TableCell>
-                      <TableCell>Ödeme Hesabı</TableCell>
-                      <TableCell>Fatura No</TableCell>
+                      <TableCell>Ödeme Yöntemi</TableCell>
+                      <TableCell>Belge No</TableCell>
                       <TableCell align="center">İşlemler</TableCell>
                     </TableRow>
                   </TableHead>
 
                   <TableBody>
                     {paginatedItems.map((item) => (
-                      <ExpenseRow
+                      <IncomeRow
                         key={item.id}
                         item={item}
                         selected={selectedItems.includes(item.id)}
                         onSelect={toggleSelect}
                         onView={setViewItem}
-                        onEdit={handleEdit}
                         onDelete={handleDelete}
                         onDuplicate={handleDuplicate}
                       />
@@ -587,23 +571,13 @@ export default function MuhasebeExpensesView() {
         </AccountingPanel>
       </Stack>
 
-      <ExpenseDrawer
+      <IncomeCreateDrawer
         open={drawerOpen}
-        editingId={editingId}
-        values={formValues}
-        errors={formErrors}
-        loading={isLoading}
-        categories={categories}
         onClose={() => setDrawerOpen(false)}
-        onChange={handleFormChange}
-        onSubmit={handleSaveExpense}
+        onCreated={handleCreated}
       />
 
-      <ExpenseDetailDialog
-        item={viewItem}
-        onClose={() => setViewItem(null)}
-        onEdit={handleEdit}
-      />
+      <IncomeDetailDialog item={viewItem} onClose={() => setViewItem(null)} />
 
       {deleteTarget && (
         <Alert
@@ -621,6 +595,7 @@ export default function MuhasebeExpensesView() {
               <Button size="small" onClick={() => setDeleteTarget(null)}>
                 Vazgeç
               </Button>
+
               <Button
                 size="small"
                 color="error"
@@ -633,15 +608,9 @@ export default function MuhasebeExpensesView() {
             </Stack>
           }
         >
-          <strong>{deleteTarget.vendor}</strong> gider kaydı silinsin mi?
+          <strong>{deleteTarget.category}</strong> gelir kaydı silinsin mi?
         </Alert>
       )}
-
-      <ExpenseInvoiceCreateDrawer
-        open={invoiceDrawerOpen}
-        onClose={() => setInvoiceDrawerOpen(false)}
-        onCreated={handleInvoiceCreated}
-      />
 
       <Snackbar
         open={snackbar.open}

@@ -1,5 +1,3 @@
-export type CategoryStatus = "active" | "inactive";
-
 export interface ExpenseCategory {
   id: string;
   name: string;
@@ -9,4 +7,8 @@ export interface ExpenseCategory {
   isSystem: boolean;
   sortOrder: number;
   createdAt: string;
+
+  // UI alanları
+  tags?: string[];
+  usageCount?: number;
 }

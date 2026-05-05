@@ -200,13 +200,19 @@ const Menuitems: NavGroup[] = [
         href: "/muhasebe/expenses",
         icon: IconReceipt2,
       },
+      {
+        id: uniqueId(),
+        title: "Gelir Kalemleri",
+        icon: IconCoin,
+        href: "/muhasebe/income-categories",
+      },
 
       {
-  id: uniqueId(),
-  title: "Expense Categories",
-  icon: IconListDetails,
-  href: "/muhasebe/expense-categories",
-}
+        id: uniqueId(),
+        title: "Expense Categories",
+        icon: IconListDetails,
+        href: "/muhasebe/expense-categories",
+      }
     ],
   },
   {

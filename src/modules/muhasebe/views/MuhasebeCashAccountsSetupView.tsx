@@ -1,3 +1,4 @@
+//bu dosya kasa ve banka hesaplarının tanımlandığı setup ekranının view componentidir. Muhasebe yönetimi setup sürecinde "Kasa / Banka Tanımlama" adımında bu view gösterilir. Kullanıcılar bu ekranda yeni bir kasa veya banka hesabı ekleyebilir, mevcut hesapları görebilir ve düzenleyebilirler. Form doğrulaması yapılır ve geçerli bir hesap oluşturulduğunda setup sürecinin bir sonraki adımına geçilir. Şimdilik backend olmadığı için tüm işlemler local state üzerinde gerçekleştirilir ve mock data kullanılır.
 //src/modules/muhasebe/views/MuhasebeCashAccountsSetupView.tsx
 "use client";
 

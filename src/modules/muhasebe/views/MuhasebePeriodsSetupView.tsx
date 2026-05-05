@@ -1,3 +1,5 @@
+//bu dosya, muhasebe dönemleri oluşturma ve yönetme görünümünü içerir. Kullanıcılar yeni muhasebe dönemi oluşturabilir, mevcut dönemleri görüntüleyebilir ve düzenleyebilir. Her dönem için ad, başlangıç tarihi, bitiş tarihi, son ödeme tarihi ve durum gibi bilgileri girebilirler. Oluşturulan dönemler listelenir ve durumlarına göre filtrelenebilir. Ayrıca, oluşturulan dönemin aktif hale gelmesi için gerekli işlemler yapılır.
+//src/modules/muhasebe/views/MuhasebePeriodsSetupView.tsx
 "use client";
 
 import React, { useState } from "react";

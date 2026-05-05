@@ -1,3 +1,5 @@
+//bu dosya muhasebe yönetimi dashboard'unda kullanılan custom hook'tur. useMuhasebeDashboard, verilen propertyId'ye göre muhasebe dashboard verilerini almak için kullanılır. Hook, data, loading, error ve refresh fonksiyonlarını döner. data, MuhasebeDashboardSummaryDto tipinde olup dashboard için gerekli özet bilgileri içerir. loading, veri yüklenme durumunu belirtir. error, veri alma sırasında oluşan hatayı tutar. refresh ise veriyi yeniden yüklemek için kullanılan bir fonksiyondur. propertyId değiştiğinde veya hook ilk kez kullanıldığında veri otomatik olarak yüklenir.
+//src/modules/muhasebe/hooks/useMuhasebeDashboard.ts
 "use client";
 
 import { useCallback, useEffect, useState } from "react";

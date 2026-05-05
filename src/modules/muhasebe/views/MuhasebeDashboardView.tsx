@@ -1,3 +1,4 @@
+//bu sayfa, muhasebe modülü için ana dashboard görünümünü sağlar. Kullanıcı, seçilen site/apartmana ait muhasebe özetini görebilir, tanımlamalara erişebilir ve önemli finansal göstergeleri inceleyebilir. Dashboard, toplam tahakkuk, tahsilat, bekleyen borç, gecikmiş borç, giderler ve kasa/banka bakiyesi gibi bilgileri özet kartlar halinde sunar. Ayrıca, tahsilat oranı grafiği, kasa/banka hesap özeti, son işlemler ve gecikmiş borçlar gibi detaylı bileşenler içerir. Veriler mock olarak sağlanır ve gerçek backend bağlantısı tamamlandığında canlı verilerle güncellenecektir.
 // src/modules/muhasebe/views/MuhasebeDashboardView.tsx
 "use client";
 
@@ -243,7 +244,7 @@ export default function MuhasebeDashboardView() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
+   <Box sx={{ p: 0 }}>
       <Card
         elevation={0}
         sx={{

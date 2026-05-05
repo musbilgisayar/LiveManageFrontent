@@ -1,3 +1,5 @@
+//bu dosya muhasebe yönetimi dashboard'unda son tahsilatlar ve son gider kayıtlarını gösteren kart componentidir. RecentTransactionsCard, payments ve expenses prop'ları alır ve bu verileri kullanarak iki ayrı bölümde son tahsilatları ve son giderleri listeler. Her işlem için ilgili bilgiler (birim, ödeyen, kategori, firma, tutar, durum vb.) gösterilir. Eğer tahsilat veya gider kaydı yoksa uygun bir mesaj görüntülenir.
+//src/modules/muhasebe/components/dashboard/RecentTransactionsCard.tsx
 "use client";
 
 import React from "react";

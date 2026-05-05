@@ -1,3 +1,5 @@
+//bu dosya muhasebe yönetimi ekranında gider kategorilerini yönetmek için kullanılan custom hook'tur. useMuhasebeExpenseCategories, gider kategorilerini listelemek, yeni kategori oluşturmak, mevcut kategoriyi güncellemek, aktif/pasif durumunu değiştirmek ve kategori silmek için fonksiyonlar sağlar. Şimdilik backend olmadığı için global bir mock store kullanılarak kategoriler yönetilmektedir. Hook, categories, create, update, toggleActive, refresh ve remove fonksiyonlarını döner. categories, mevcut gider kategorilerini içerir. create, yeni bir kategori oluşturmak için kullanılır. update, mevcut bir kategoriyi güncellemek için kullanılır. toggleActive, bir kategorinin aktif/pasif durumunu değiştirmek için kullanılır. refresh, kategorileri yeniden yüklemek için kullanılır. remove ise bir kategoriyi silmek için kullanılır.
+//src/modules/muhasebe/hooks/useMuhasebeExpenseCategories.ts
 "use client";
 
 import { useCallback, useState } from "react";
@@ -63,6 +65,9 @@ export function useMuhasebeExpenseCategories() {
     refresh();
   }, [refresh]);
 
+  const remove = (id: string) => {
+  setCategories((prev) => prev.filter((item) => item.id !== id));
+};
   const toggleActive = useCallback((id: string) => {
     CATEGORY_STORE = CATEGORY_STORE.map((x) =>
       x.id === id ? { ...x, isActive: !x.isActive } : x,
@@ -76,5 +81,6 @@ export function useMuhasebeExpenseCategories() {
     update,
     toggleActive,
     refresh,
+      remove,
   };
 }

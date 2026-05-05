@@ -1,3 +1,4 @@
+//bu sayfa, muhasebe modülü için bir tahakkuk (charge) oluşturma formu içerir. Kullanıcı, dönem adı, borçlandırma başlığı, uygulama şekli, tutar, para birimi, son ödeme tarihi ve açıklama gibi bilgileri girebilir. Form gönderildiğinde, mock setup durumunu günceller ve kullanıcıyı muhasebe ana sayfasına yönlendirir.
 //src/modules/muhasebe/views/MuhasebeChargesSetupView.tsx
 "use client";
 
