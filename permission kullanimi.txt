@@ -1,0 +1,173 @@
+LiveManage Permission Kullanım Raporu
+1. Temel kural
+LiveManage’de artık permission sistemi şu mantıkla ilerlemeli:
+Controller endpoint → PermissionConstants → PermissionCatalog → Seed → DB Permission → Role/User assignment → Runtime authorization
+Yani controller içinde doğrudan string yazmamalısın.
+Kötü kullanım:
+[Authorize(Policy = "roles.view.tenant")]
+Doğru kullanım:
+[Authorize(Policy = PermissionConstants.Roles.View)]
+Bunun nedeni basit: string elle yazılırsa yazım hatası olur, compile-time kontrol olmaz. Constant kullanınca hata erken yakalanır.
+
+2. Permission code standardı
+Artık permission code formatın şu:
+domain.module.action.scope
+veya daha kısa:
+module.action.scope
+En önemli kural: son segment mutlaka şunlardan biri olmalı:
+selftenantglobal
+Örnekler:
+account.profile.view.selfprofile.phone_numbers.create.selfusers.update.tenantmonitoring.lockouts.unlock_user.tenantlocalization.manage.global
+Scope anlamları
+self
+Kullanıcının kendi verisi için kullanılır.
+Örnek:
+account.profile.view.selfprofile.phone_numbers.update.self
+
+tenant
+Aktif tenant içindeki yönetimsel işlemler için kullanılır.
+Örnek:
+users.view.tenantpermissions.assign.tenantmonitoring.lockouts.view.tenant
+
+global
+Sistem geneli / tenant bağımsız işlemler için kullanılır.
+Örnek:
+localization.manage.globalculture.cache.clear.global
+
+3. Controller yazarken dikkat edilecekler
+Her protected endpoint şu üç soruya göre permission almalı:
+Bu endpoint ne yapıyor?Kimin verisi üzerinde çalışıyor?Risk seviyesi nedir?
+Örnek:
+[HttpGet("me")][Authorize(Policy = PermissionConstants.Account.ViewProfile)]
+Kendi profilini görme → self.
+[HttpGet("{userId:guid}/detail")][Authorize(Policy = PermissionConstants.Users.Detail)]
+Admin başka kullanıcı detayı görüyor → tenant.
+[HttpPost("cache/clear")][Authorize(Policy = PermissionConstants.Culture.CacheClear)]
+Sistemsel cache temizleme → global.
+
+4. Controller’da eski rol bazlı kontrol kullanılmamalı
+Eski kullanım:
+[Authorize(Roles = "Admin,SuperAdmin")]
+Yeni standart:
+[Authorize(Policy = PermissionConstants.Users.Update)]
+Rol artık doğrudan endpoint korumamalı. Rol sadece permission taşır.
+Yani:
+Role → PermissionUser → PermissionEndpoint → Permission ister
+Bu daha esnek olur. Mesela normal bir kullanıcıya sadece belirli bir işlem hakkı verebilirsin.
+
+5. PermissionConstants nasıl kullanılmalı?
+PermissionConstants tek merkezi sabit dosya gibi düşünülmeli.
+Örnek:
+public static class Users{    public const string View = "users.view.tenant";    public const string Detail = "users.detail.tenant";    public const string Create = "users.create.tenant";    public const string Update = "users.update.tenant";    public const string Delete = "users.delete.tenant";}
+Controller’da:
+[Authorize(Policy = PermissionConstants.Users.View)]
+Frontend’de de aynı isimlendirme mantığı kullanılmalı. Backend constant doğrudan frontend’e import edilemez ama frontend tarafında aynı code stringleri API’den veya shared type dosyasından yönetilebilir.
+
+6. PermissionCatalog ne işe yarar?
+PermissionCatalog, sistemde tanımlı permissionların seed kaynağıdır.
+Yani burada olmayan permission DB’ye eklenmez.
+Controller’da yeni permission kullandıysan mutlaka catalog’a da eklemelisin.
+Örnek:
+new PermissionDefinition{    Module = "users",    Action = "update",    Scope = "tenant",    Group = "users",    Level = "2"}
+Bu şunu üretir:
+users.update.tenant
+Kural:
+Controller’da kullanılan her PermissionConstants değeri PermissionCatalog’da karşılığına sahip olmalı.
+
+7. Level alanı nasıl kullanılmalı?
+Level, permission’ın risk seviyesidir.
+Level 1 → görüntüleme / listelemeLevel 2 → oluşturma / güncellemeLevel 3 → silme / atama / onaylama / kritik işlemLevel 4 → test-write / development-only / çok hassas işlem
+Örnek:
+Level = "1" // ViewLevel = "2" // UpdateLevel = "3" // Delete, Assign, ApproveLevel = "4" // TestWrite, Debug, Sensitive operation
+Bu alan ileride frontend’de badge, risk filtresi, audit uyarısı, role template ve SuperAdmin dışı engelleme için kullanılabilir.
+
+8. Frontend’de permission nasıl kullanılmalı?
+Frontend’de permission sadece görünürlük içindir. Asıl güvenlik backend’dedir.
+Frontend şunu yapabilir:
+Menü göster / gizleButon göster / gizleSayfa erişimini UI seviyesinde engelleTab veya action kapat
+Ama kesin güvenlik backend’de kalmalı.
+Yanlış düşünce:
+Butonu gizledim, artık güvenli.
+Doğru düşünce:
+Butonu gizledim ama endpoint yine de backend permission ile korunuyor.
+
+9. Menü permission mantığı
+Menü item’larında permission code bulunmalı.
+Örnek frontend menu item:
+{  title: "Kullanıcılar",  path: "/admin/users",  permission: "users.view.tenant"}
+Sonra frontend:
+const canSee = userPermissions.includes(item.permission);
+Eğer permission yoksa menü gösterilmez.
+Ama endpoint yine şu şekilde korunmalı:
+[Authorize(Policy = PermissionConstants.Users.View)]
+
+10. Button permission mantığı
+Örnek:
+const canDeleteUser = permissions.includes("users.delete.tenant");
+Sonra:
+{canDeleteUser && (  <Button>Sil</Button>)}
+Ama backend’de de:
+[Authorize(Policy = PermissionConstants.Users.Delete)]
+olmalı.
+
+11. EffectivePermissions ne zaman kullanılır?
+Frontend login olduktan sonra kullanıcının effective permission listesi alınmalı.
+Effective permission şudur:
+RolePermission + UserPermission birleşimi
+Yani kullanıcıya gelen bütün aktif permissionların toplamıdır.
+Bunu frontend’e verirsen:
+Menü filtrelemeButon filtrelemeSayfa guardUI aksiyon kontrolü
+yapabilirsin.
+
+12. DynamicPermission ile static permission farkı
+Bu çok önemli.
+Static permission
+Endpoint, menü, buton ve genel sistem işlemleri içindir.
+Örnek:
+users.view.tenantroles.create.tenantmonitoring.lockouts.view.tenant
+DynamicPermission
+Belirli bir entity / kayıt üzerinde özel yetki içindir.
+Örnek:
+Musa sadece PropertyId=123 üzerinde Edit yapabilir.Ahmet sadece DocumentId=456 üzerinde Read yapabilir.
+Yani:
+Menü / endpoint / buton → Static PermissionBelirli kayıt / belge / mülk → DynamicPermission
+
+13. Yeni controller eklerken kontrol listesi
+Yeni controller yazarken şu sırayı izle:
+1. Endpointleri listele2. Her endpoint için action belirle3. Scope seç: self / tenant / global4. PermissionConstants içine ekle5. PermissionCatalog içine ekle6. Controller’a [Authorize(Policy = ...)] ekle7. RolePermissionMatrix içine kimlere verileceğini ekle8. Seeder çalıştır9. Frontend menü/buton permissionlarını aynı code ile bağla
+
+14. Örnek controller permission tasarımı
+Endpoint:
+GET /api/v1.0/admin/monitoring/lockouts
+Permission:
+monitoring.lockouts.view.tenant
+Constant:
+public const string View = "monitoring.lockouts.view.tenant";
+Catalog:
+new PermissionDefinition{    Module = "monitoring.lockouts",    Action = "view",    Scope = "tenant",    Group = "monitoring",    Level = "2"}
+Controller:
+[Authorize(Policy = PermissionConstants.MonitoringLockouts.View)]
+Frontend menu:
+permission: "monitoring.lockouts.view.tenant"
+
+15. Dikkat edilmesi gereken hatalar
+En sık hata şunlar olur:
+PermissionConstants içine ekledim ama PermissionCatalog’a eklemedim.
+Sonuç: seed veya runtime permission eksikliği.
+
+Controller’da string yazdım.
+Sonuç: typo riski.
+
+Frontend butonu gizledim ama backend endpoint koruması yok.
+Sonuç: güvenlik açığı.
+
+self olması gereken permission tenant yazıldı.
+Sonuç: kullanıcı kendi işlemi için gereksiz admin permission ister.
+
+tenant olması gereken permission self yazıldı.
+Sonuç: admin başka kullanıcının verisine erişirken yanlış model oluşur.
+
+16. Senin proje için net standart
+Bundan sonra LiveManage’de şu standartla ilerleyelim:
+Account / kendi işlemler → account.*.selfProfile / kendi profil alt verileri → profile.*.selfUsers admin işlemleri → users.*.tenantRoles admin işlemleri → roles.*.tenantPermission yönetimi → permissions.*.tenantMonitoring → monitoring.*.tenantAudit → audit.*.tenantLocalization public read → AllowAnonymousLocalization management → localization.*.globalCulture list/set → AllowAnonymousCulture cache clear → culture.cache.clear.global
+Bu sistemle hem kullanıcı bazlı özel yetki verebilirsin, hem rol bazlı yetki verebilirsin, hem de ileride DynamicPermission ile kayıt bazlı güvenliği genişletebilirsin.

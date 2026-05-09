@@ -6,37 +6,34 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Box,
   Button,
-  TextField,
-  FormControlLabel,
   Checkbox,
-  Typography,
-  Stack,
-  InputAdornment,
-  IconButton,
-  Alert,
   CircularProgress,
+  FormControlLabel,
+  IconButton,
+  InputAdornment,
   MenuItem,
+  Stack,
+  TextField,
+  Typography,
 } from "@mui/material";
-import { textFieldStyle } from "@/app/components/shared/styles";
-import AuthSocialButtons from "./AuthSocialButtons";
-import { useI18nNs } from "@/app/context/i18nContext";
-import { useCustomizer } from "@/app/context/customizerContext";
-import { useRouter, useParams } from "next/navigation";
 import EmailIcon from "@mui/icons-material/Email";
 import LockIcon from "@mui/icons-material/Lock";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import BusinessIcon from "@mui/icons-material/Business";
-import { jwtDecode } from "jwt-decode";
+import { useParams, useRouter } from "next/navigation";
 
+import { textFieldStyle } from "@/app/components/shared/styles";
+import { useCustomizer } from "@/app/context/customizerContext";
+import { useI18nNs } from "@/app/context/i18nContext";
 import { getWebFetcher, postWebFetcher } from "@/utils/fetchers.web.client";
 import { getTenantKey, setTenantKey } from "@/utils/tenant.client";
 
-/* ============================================================
-   🔐 Types
-============================================================ */
+import AuthSocialButtons from "./AuthSocialButtons";
+
 type LoginResponse = {
   ok: boolean;
   data?: {
@@ -84,11 +81,8 @@ function setLocaleCookie(prefixOrCulture: string) {
       : "";
 
   const prefix = toPrefix(prefixOrCulture);
-  document.cookie = `lm.lang=${prefix}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
-}
 
-function replaceLocaleInPath(path: string, nextLocale: string) {
-  return path.replace(/^\/[a-z]{2}(?=\/|$)/i, `/${nextLocale}`);
+  document.cookie = `lm.lang=${prefix}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
 }
 
 function extractCultureCode(raw: any): string | null {
@@ -103,48 +97,10 @@ function extractCultureCode(raw: any): string | null {
   );
 }
 
-function resolveRoleFromJwt(accessToken: string): string | null {
-  try {
-    const decoded: any = jwtDecode(accessToken);
-
-    return (
-      decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
-      decoded["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"] ||
-      decoded.role ||
-      decoded.roles?.[0] ||
-      null
-    );
-  } catch {
-    return null;
-  }
+function getDashboardPath(locale: string) {
+  return `/${locale}/dashboard`;
 }
 
-function getDashboardPathByRole(locale: string, role?: string | null) {
-  const lower = String(role || "user").toLowerCase();
-
-  switch (lower) {
-    case "superadmin":
-      return `/${locale}/superadmin/dashboard`;
-    case "admin":
-      return `/${locale}/admin/dashboard`;
-    case "manager":
-      return `/${locale}/manager/dashboard`;
-    case "staff":
-      return `/${locale}/staff/dashboard`;
-    case "employee":
-      return `/${locale}/employee/dashboard`;
-    case "auditor":
-      return `/${locale}/auditor/dashboard`;
-    case "member":
-      return `/${locale}/member/dashboard`;
-    default:
-      return `/${locale}/user/dashboard`;
-  }
-}
-
-/* ============================================================
-   🚀 Component
-============================================================ */
 export default function AuthLogin() {
   const { t } = useI18nNs(["auth"]);
   const { setIsLanguage } = useCustomizer();
@@ -164,6 +120,7 @@ export default function AuthLogin() {
 
   useEffect(() => {
     const existingTenant = getTenantKey();
+
     if (existingTenant) {
       setTenantKeyState(existingTenant);
       return;
@@ -213,7 +170,6 @@ export default function AuthLogin() {
     try {
       setLoading(true);
 
-      // Login request'inden önce tenant bilgisini session kaynağı olarak sabitle.
       setTenantKey(tenantKey);
 
       const result = (await postWebFetcher(
@@ -224,7 +180,6 @@ export default function AuthLogin() {
       const data = (result.data as any)?.data ?? result.data;
       const accessToken = data?.accessToken;
       const refreshToken = data?.refreshToken;
-      const backendRedirect = data?.redirectTo;
 
       if (!result?.ok || !accessToken) {
         const msg =
@@ -250,6 +205,7 @@ export default function AuthLogin() {
           const meResult = (await getWebFetcher(
             "/api/v1.0/account/me"
           )) as AccountMeResponse;
+
           console.log("🔹 account/me result:", meResult);
 
           effectiveCultureCode = extractCultureCode(meResult);
@@ -261,6 +217,10 @@ export default function AuthLogin() {
         }
       }
 
+      const targetLocale = effectiveCultureCode
+        ? toPrefix(effectiveCultureCode)
+        : locale;
+
       if (effectiveCultureCode) {
         setLocaleCookie(effectiveCultureCode);
         setIsLanguage(effectiveCultureCode);
@@ -270,28 +230,7 @@ export default function AuthLogin() {
         );
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      let target: string;
-
-      if (backendRedirect && typeof backendRedirect === "string") {
-        target = backendRedirect.startsWith("/")
-          ? `/${locale}${backendRedirect}`
-          : `/${locale}/${backendRedirect}`;
-      } else {
-        const role =
-          data?.user?.primaryRole ||
-          data?.user?.role ||
-          data?.user?.roles?.[0] ||
-          resolveRoleFromJwt(accessToken);
-
-        target = getDashboardPathByRole(locale, role);
-      }
-
-      if (effectiveCultureCode) {
-        const targetLocale = toPrefix(effectiveCultureCode);
-        target = replaceLocaleInPath(target, targetLocale);
-      }
+      const target = getDashboardPath(targetLocale);
 
       router.replace(target);
       router.refresh();

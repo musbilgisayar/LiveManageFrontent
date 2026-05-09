@@ -1,33 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
-import https from "https";
 
-const BACKEND_BASE = process.env.BACKEND_BASE ?? "https://localhost:5002";
-const BE_SSL_INSECURE = process.env.BE_SSL_INSECURE === "true";
-const agent = BE_SSL_INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+const BACKEND_BASE =
+  process.env.BACKEND_BASE ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "https://localhost:5002";
+
+const UPSTREAM_PATH = "/api/v1.0/Account/forgot-password";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email } = await req.json();
+    const body = await req.json().catch(() => null);
+    const email = body?.email;
+
     if (!email) {
-      return NextResponse.json({ ok: false, error: "missing_email" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "missing_email" },
+        { status: 400 }
+      );
     }
 
-    const res = await fetch(`${BACKEND_BASE}/api/Auth/forgot-password`, {
+    const res = await fetch(`${BACKEND_BASE}${UPSTREAM_PATH}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "accept-language": req.headers.get("accept-language") ?? "tr-TR",
+        "x-tenant-key": req.headers.get("x-tenant-key") ?? "default",
+        "x-correlation-id":
+          req.headers.get("x-correlation-id") ?? crypto.randomUUID(),
+      },
       body: JSON.stringify({ email }),
-      ...(agent ? { dispatcher: agent } : {}),
+      cache: "no-store",
     });
 
-    const text = await res.text();
-    if (!res.ok) {
-      console.error("❌ Backend forgot-password error:", text);
-      return NextResponse.json({ ok: false, error: "backend_error", details: text }, { status: res.status });
-    }
+    const json = await res.json().catch(async () => {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: "invalid_json", details: text };
+    });
 
-    return NextResponse.json({ ok: true, data: text }, { status: 200 });
-  } catch (err) {
+    return NextResponse.json(json, {
+      status: res.status,
+      headers: {
+        "x-correlation-id":
+          req.headers.get("x-correlation-id") ?? crypto.randomUUID(),
+      },
+    });
+  } catch (err: any) {
     console.error("❌ Forgot-password proxy error:", err);
-    return NextResponse.json({ ok: false, error: "proxy_error" }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "proxy_error",
+        detail: err?.message ?? String(err),
+      },
+      { status: 500 }
+    );
   }
 }

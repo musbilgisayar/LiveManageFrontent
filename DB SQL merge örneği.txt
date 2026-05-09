@@ -1,0 +1,48 @@
+DECLARE @TenantId UNIQUEIDENTIFIER = '7784BCF1-E504-49BE-8FD1-0B754E7A4CEB';
+DECLARE @IsActive BIT = 1;
+
+MERGE Localization.Translations AS target
+USING (VALUES
+    -- validation:password.current_required
+    (N'validation:password.current_required', N'Mevcut parola gereklidir.',                              1, N'tr-TR', @IsActive, @TenantId),
+    (N'validation:password.current_required', N'Current password is required.',                          2, N'en-US', @IsActive, @TenantId),
+    (N'validation:password.current_required', N'Das aktuelle Passwort ist erforderlich.',               3, N'de-DE', @IsActive, @TenantId),
+    (N'validation:password.current_required', N'Le mot de passe actuel est requis.',                    4, N'fr-FR', @IsActive, @TenantId),
+    (N'validation:password.current_required', N'La password attuale è obbligatoria.',                   5, N'it-IT', @IsActive, @TenantId),
+    (N'validation:password.current_required', N'كلمة المرور الحالية مطلوبة.',                            6, N'ar-SA', @IsActive, @TenantId),
+
+    -- validation:password.same_as_old
+    (N'validation:password.same_as_old', N'Yeni parola mevcut parola ile aynı olamaz.',                 1, N'tr-TR', @IsActive, @TenantId),
+    (N'validation:password.same_as_old', N'New password cannot be the same as the current password.',   2, N'en-US', @IsActive, @TenantId),
+    (N'validation:password.same_as_old', N'Das neue Passwort darf nicht mit dem aktuellen Passwort identisch sein.', 3, N'de-DE', @IsActive, @TenantId),
+    (N'validation:password.same_as_old', N'Le nouveau mot de passe ne peut pas être identique au mot de passe actuel.', 4, N'fr-FR', @IsActive, @TenantId),
+    (N'validation:password.same_as_old', N'La nuova password non può essere uguale a quella attuale.', 5, N'it-IT', @IsActive, @TenantId),
+    (N'validation:password.same_as_old', N'لا يمكن أن تكون كلمة المرور الجديدة مطابقة لكلمة المرور الحالية.', 6, N'ar-SA', @IsActive, @TenantId),
+
+    -- validation:password.current_invalid
+    (N'validation:password.current_invalid', N'Mevcut parola hatalı.',                                  1, N'tr-TR', @IsActive, @TenantId),
+    (N'validation:password.current_invalid', N'Current password is incorrect.',                         2, N'en-US', @IsActive, @TenantId),
+    (N'validation:password.current_invalid', N'Das aktuelle Passwort ist falsch.',                      3, N'de-DE', @IsActive, @TenantId),
+    (N'validation:password.current_invalid', N'Le mot de passe actuel est incorrect.',                  4, N'fr-FR', @IsActive, @TenantId),
+    (N'validation:password.current_invalid', N'La password attuale non è corretta.',                   5, N'it-IT', @IsActive, @TenantId),
+    (N'validation:password.current_invalid', N'كلمة المرور الحالية غير صحيحة.',                          6, N'ar-SA', @IsActive, @TenantId),
+
+    -- Messages:Account.PasswordChangedSuccess
+    (N'Messages:Account.PasswordChangedSuccess', N'Parolanız başarıyla değiştirildi.',                  1, N'tr-TR', @IsActive, @TenantId),
+    (N'Messages:Account.PasswordChangedSuccess', N'Your password has been changed successfully.',       2, N'en-US', @IsActive, @TenantId),
+    (N'Messages:Account.PasswordChangedSuccess', N'Ihr Passwort wurde erfolgreich geändert.',           3, N'de-DE', @IsActive, @TenantId),
+    (N'Messages:Account.PasswordChangedSuccess', N'Votre mot de passe a été modifié avec succès.',     4, N'fr-FR', @IsActive, @TenantId),
+    (N'Messages:Account.PasswordChangedSuccess', N'La tua password è stata modificata correttamente.', 5, N'it-IT', @IsActive, @TenantId),
+    (N'Messages:Account.PasswordChangedSuccess', N'تم تغيير كلمة المرور بنجاح.',                         6, N'ar-SA', @IsActive, @TenantId)
+) AS src([Key], Value, LanguageId, CultureCode, IsActive, TenantId)
+ON target.[Key] = src.[Key]
+   AND target.LanguageId = src.LanguageId
+   AND target.TenantId = src.TenantId
+WHEN MATCHED THEN
+    UPDATE SET
+        target.Value = src.Value,
+        target.CultureCode = src.CultureCode,
+        target.IsActive = src.IsActive
+WHEN NOT MATCHED THEN
+    INSERT ([Key], Value, LanguageId, CultureCode, IsActive, TenantId)
+    VALUES (src.[Key], src.Value, src.LanguageId, src.CultureCode, src.IsActive, src.TenantId);

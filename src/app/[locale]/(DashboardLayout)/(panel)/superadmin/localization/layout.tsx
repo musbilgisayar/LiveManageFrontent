@@ -1,5 +1,6 @@
 import { headers, cookies } from "next/headers";
 import { I18nProvider } from "@/app/context/i18nContext";
+import PermissionGuard from "@/modules/auth/components/PermissionGuard";
 
 type Props = {
   children: React.ReactNode;
@@ -19,7 +20,14 @@ type I18nDictResponse = {
   detail?: string;
 };
 
-const MODULE_NS = ["localization", "common","detailPage"] as const;
+const MODULE_NS = ["localization", "common", "detailPage"] as const;
+
+const SUPERADMIN_REQUIRED_PERMISSIONS = [
+  "monitoring.summary.view.tenant",
+  "permissions.view.tenant",
+  "audit.entity_history.view.tenant",
+  "localization.manage.global",
+];
 
 function normalizeLocale(locale?: string): string {
   return (locale ?? "tr").trim().toLowerCase() || "tr";
@@ -66,6 +74,7 @@ async function fetchModuleDict(locale: string): Promise<Dict> {
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? `${proto}://${host}`;
   const url = new URL(`/api/i18n/${encodeURIComponent(locale)}/dict`, baseUrl);
+
   url.searchParams.set("ns", MODULE_NS.join(","));
 
   const cookieHeader = buildCookieHeader(c);
@@ -76,7 +85,9 @@ async function fetchModuleDict(locale: string): Promise<Dict> {
       accept: "application/json",
       "accept-language": locale,
       ...(cookieHeader ? { cookie: cookieHeader } : {}),
-      ...(h.get("x-tenant-key") ? { "x-tenant-key": h.get("x-tenant-key")! } : {}),
+      ...(h.get("x-tenant-key")
+        ? { "x-tenant-key": h.get("x-tenant-key")! }
+        : {}),
       ...(h.get("x-correlation-id")
         ? { "x-correlation-id": h.get("x-correlation-id")! }
         : {}),
@@ -85,7 +96,9 @@ async function fetchModuleDict(locale: string): Promise<Dict> {
     next: { revalidate: 0 },
   });
 
-  const json = (await response.json().catch(() => null)) as I18nDictResponse | null;
+  const json = (await response.json().catch(
+    () => null
+  )) as I18nDictResponse | null;
 
   if (!response.ok || !json?.ok) {
     console.error("[LocalizationLayout] Çeviri preload isteği başarısız", {
@@ -95,6 +108,7 @@ async function fetchModuleDict(locale: string): Promise<Dict> {
       error: json?.error,
       detail: json?.detail,
     });
+
     return {};
   }
 
@@ -108,24 +122,17 @@ export default async function LocalizationLayout({ children, params }: Props) {
   try {
     const dict = await fetchModuleDict(lang);
 
-    if (Object.keys(dict).length === 0) {
-      console.warn("[LocalizationLayout] Çeviri sözlüğü boş geldi, alt ağaç doğrudan render ediliyor.", {
-        lang,
-        namespaces: MODULE_NS,
-      });
-      return <>{children}</>;
-    }
-
-    console.log("[LocalizationLayout] Modül çevirileri başarıyla yüklendi.", {
-      lang,
-      namespaces: MODULE_NS,
-      keyCount: Object.keys(dict).length,
-    });
+    const content =
+      Object.keys(dict).length === 0 ? (
+        <>{children}</>
+      ) : (
+        <I18nProvider lang={lang} dict={dict}>{children}</I18nProvider>
+      );
 
     return (
-      <I18nProvider lang={lang} dict={dict}>
-        {children}
-      </I18nProvider>
+      <PermissionGuard requiredAnyPermissions={SUPERADMIN_REQUIRED_PERMISSIONS}>
+        {content}
+      </PermissionGuard>
     );
   } catch (error) {
     console.error("[LocalizationLayout] Çeviri preload sırasında hata oluştu", {
@@ -133,6 +140,10 @@ export default async function LocalizationLayout({ children, params }: Props) {
       error: error instanceof Error ? error.message : String(error),
     });
 
-    return <>{children}</>;
+    return (
+      <PermissionGuard requiredAnyPermissions={SUPERADMIN_REQUIRED_PERMISSIONS}>
+        {children}
+      </PermissionGuard>
+    );
   }
 }

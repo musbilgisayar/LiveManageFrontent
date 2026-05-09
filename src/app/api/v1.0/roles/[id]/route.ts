@@ -1,14 +1,18 @@
+// src/app/api/v1.0/roles/[id]/route.ts
+
 import { NextRequest } from "next/server";
-import globalFetcher from "@/app/api/_shared/globalFetcher.server";
+import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
 
-const BACKEND_BASE = process.env.BACKEND_URL ?? "https://localhost:5002";
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { id } = await context.params;
 
-/**
- * 🔹 DELETE → Tek rol sil
- * 
- */
-export async function DELETE(req: NextRequest, { params }: { params: { lang: string; id: string } }) {
-  const backendUrl = `${BACKEND_BASE}/api/v1.0/AppRole/${params.id}`;
-  console.log(`🗑️ [${params.lang}] DELETE → ${backendUrl}`);
-  return globalFetcher(req, backendUrl);
+  return proxyJsonWithWebAuth(req, {
+    url: `/api/v1.0/AppRole/${id}`,
+    method: "DELETE",
+    timeoutMs: 15_000,
+    logLabel: "RoleDelete",
+  });
 }

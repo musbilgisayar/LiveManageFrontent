@@ -2,7 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const LOCALE_RE = /^[a-z]{2}(?:-[A-Za-z]{2})?$/i;
-const toPrefix = (seg: string) => seg.split("-")[0].toLowerCase();
+
+const toPrefix = (seg: string) =>
+  (seg || "tr").split("-")[0].toLowerCase();
 
 const AUTH_ROUTES = [
   "/auth",
@@ -27,6 +29,15 @@ const PROTECTED_ROOTS = [
   "user",
   "profile",
   "settings",
+  "dashboard",
+  "muhasebe",
+  "my-spaces",
+  "pending-actions",
+  "property-management",
+  "operation-management",
+  "listings-management",
+  "management-applications",
+  "account",
 ];
 
 const shouldBypass = (pathname: string) =>
@@ -54,7 +65,10 @@ function makeCorrId(req: NextRequest) {
 
 function withCommonHeaders(res: NextResponse, corrId: string) {
   res.headers.set("x-correlation-id", corrId);
-  res.cookies.set("x-correlation-id", corrId, { path: "/" });
+  res.cookies.set("x-correlation-id", corrId, {
+    path: "/",
+    sameSite: "lax",
+  });
   return res;
 }
 
@@ -133,104 +147,8 @@ function getAuthSignals(request: NextRequest) {
 
 function isAuthenticatedLike(request: NextRequest) {
   const s = getAuthSignals(request);
+
   return s.hasAccessToken || (s.hasSessionMarker && s.hasDeviceId);
-}
-
-function tryDecodeJwtPayload(token: string): Record<string, any> | null {
-  try {
-    const payload = token.split(".")[1];
-    if (!payload) return null;
-
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(
-      normalized.length + ((4 - (normalized.length % 4)) % 4),
-      "="
-    );
-
-    const json = atob(padded);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function extractRoleFromToken(token: string): string {
-  const decoded = tryDecodeJwtPayload(token);
-  if (!decoded) return "user";
-
-  const roleClaim =
-    decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
-    decoded["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"] ||
-    decoded["role"] ||
-    decoded["roles"]?.[0] ||
-    "User";
-
-  return String(roleClaim).toLowerCase();
-}
-
-function getDashboardPathByRole(locale: string, role?: string | null) {
-  const lower = String(role || "").toLowerCase();
-
-  switch (lower) {
-    case "superadmin":
-      return `/${locale}/superadmin/dashboard`;
-    case "admin":
-      return `/${locale}/admin/dashboard`;
-    case "manager":
-      return `/${locale}/manager/dashboard`;
-    case "staff":
-      return `/${locale}/staff/dashboard`;
-    case "employee":
-      return `/${locale}/employee/dashboard`;
-    case "auditor":
-      return `/${locale}/auditor/dashboard`;
-    case "member":
-      return `/${locale}/member/dashboard`;
-    case "user":
-      return `/${locale}/user/dashboard`;
-    default:
-      return `/${locale}/dashboard`;
-  }
-}
-
-function isRoleAuthorized(pathWithoutLocale: string, role: string) {
-  const guard = (segment: string, allowed: string[]) =>
-    !(
-      (pathWithoutLocale === `/${segment}` ||
-        pathWithoutLocale.startsWith(`/${segment}/`)) &&
-      !allowed.includes(role)
-    );
-
-  return (
-    guard("admin", ["admin", "superadmin"]) &&
-    guard("manager", ["manager", "admin", "superadmin"]) &&
-    guard("staff", ["staff", "admin", "superadmin"]) &&
-    guard("employee", ["employee", "admin", "superadmin"]) &&
-    guard("auditor", ["auditor", "admin", "superadmin"]) &&
-    guard("member", ["member", "admin", "superadmin"]) &&
-    guard("superadmin", ["superadmin"]) &&
-    guard("user", ["user"]) &&
-    guard("profile", [
-      "user",
-      "member",
-      "employee",
-      "staff",
-      "manager",
-      "auditor",
-      "admin",
-      "superadmin",
-    ]) &&
-    guard("settings", [
-      "user",
-      "member",
-      "employee",
-      "staff",
-      "manager",
-      "auditor",
-      "admin",
-      "superadmin",
-    ])
-  );
 }
 
 export function middleware(request: NextRequest) {
@@ -243,19 +161,21 @@ export function middleware(request: NextRequest) {
 
   if (shouldBypass(originalPath)) {
     console.log(
-      `[MW][${now()}][${corrId}] bypassed by shouldBypass (static/api/_next)`
+      `[MW][${now()}][${corrId}] bypassed by shouldBypass`
     );
+
     return NextResponse.next();
   }
 
   const cleanedFromGroups = stripGroupSegments(originalPath);
+
   console.log(
     `[MW][${now()}][${corrId}] stripGroupSegments → original='${originalPath}' cleaned='${cleanedFromGroups}'`
   );
 
   if (cleanedFromGroups !== originalPath) {
     console.log(
-      `[MW][${now()}][${corrId}] will REDIRECT from '${originalPath}' -> '${cleanedFromGroups}' for debugging.`
+      `[MW][${now()}][${corrId}] redirect group-cleaned path '${originalPath}' -> '${cleanedFromGroups}'`
     );
 
     return redirectWithCommonHeaders(request, cleanedFromGroups, corrId);
@@ -268,20 +188,23 @@ export function middleware(request: NextRequest) {
   const hasLocale = LOCALE_RE.test(first);
 
   console.log(
-    `[MW][${now()}][${corrId}] path parts: ${JSON.stringify(parts)} hasLocale=${hasLocale}`
+    `[MW][${now()}][${corrId}] path parts=${JSON.stringify(
+      parts
+    )} hasLocale=${hasLocale}`
   );
 
   if (hasLocale && LOCALE_RE.test(second)) {
     const normalized =
-      toPrefix(second) !== toPrefix(first) ? toPrefix(second) : toPrefix(first);
+      toPrefix(second) !== toPrefix(first)
+        ? toPrefix(second)
+        : toPrefix(first);
 
-    const targetPath = `/${normalized}/${parts.slice(2).join("/")}`.replace(
-      /\/+$/,
-      ""
-    ) || `/${normalized}`;
+    const targetPath =
+      `/${normalized}/${parts.slice(2).join("/")}`.replace(/\/+$/, "") ||
+      `/${normalized}`;
 
     console.log(
-      `[MW][${now()}][${corrId}] double-locale detected -> redirect to ${targetPath}`
+      `[MW][${now()}][${corrId}] double-locale detected -> ${targetPath}`
     );
 
     return redirectWithCommonHeaders(request, targetPath, corrId);
@@ -291,6 +214,7 @@ export function middleware(request: NextRequest) {
     const cookieLocale = request.cookies.get("lm.lang")?.value;
     const headerLangRaw =
       request.headers.get("accept-language")?.split(",")[0] || "tr-TR";
+
     const chosen = cookieLocale || headerLangRaw;
     const prefix = toPrefix(chosen) || "tr";
 
@@ -299,14 +223,16 @@ export function middleware(request: NextRequest) {
     }`;
 
     console.log(
-      `[MW][${now()}][${corrId}] no-locale -> redirect to '${targetPath}' (cookie='${cookieLocale}', accept-language='${headerLangRaw}')`
+      `[MW][${now()}][${corrId}] no-locale -> redirect to '${targetPath}'`
     );
 
     const res = redirectWithCommonHeaders(request, targetPath, corrId);
+
     res.cookies.set("lm.lang", prefix, {
       path: "/",
       sameSite: "lax",
     });
+
     return res;
   }
 
@@ -316,15 +242,11 @@ export function middleware(request: NextRequest) {
   const authenticatedLike = isAuthenticatedLike(request);
 
   console.log(
-    `[MW][${now()}][${corrId}] locale normalized -> ${normalizedLocale}`
-  );
-
-  console.log(
-    `[MW][${now()}][${corrId}] pathWithoutLocale='${pathWithoutLocale}', isAuthRoute=${isAuthRoute(
+    `[MW][${now()}][${corrId}] locale='${normalizedLocale}' pathWithoutLocale='${pathWithoutLocale}' authRoute=${isAuthRoute(
       pathWithoutLocale
-    )}, isProtectedRoute=${isProtectedRoute(
+    )} protected=${isProtectedRoute(
       pathWithoutLocale
-    )}, authenticatedLike=${authenticatedLike}`
+    )} authenticatedLike=${authenticatedLike}`
   );
 
   console.log(
@@ -332,72 +254,37 @@ export function middleware(request: NextRequest) {
   );
 
   const loginUrl = `/${normalizedLocale}/auth/login`;
-  const unauthorizedUrl = `/${normalizedLocale}/unauthorized`;
+  const dashboardUrl = `/${normalizedLocale}/dashboard`;
 
   const res = NextResponse.next();
+
   res.cookies.set("lm.lang", normalizedLocale, {
     path: "/",
     sameSite: "lax",
   });
+
   withCommonHeaders(res, corrId);
 
-  let authRouteRedirectTarget = `/${normalizedLocale}/dashboard`;
-  let resolvedRole: string | null = null;
-
-  if (authSignals.hasAccessToken) {
-    resolvedRole = extractRoleFromToken(authSignals.accessToken);
-    authRouteRedirectTarget = getDashboardPathByRole(
-      normalizedLocale,
-      resolvedRole
-    );
-
-    console.log(
-      `[MW][${now()}][${corrId}] auth-route redirect role resolved -> role='${resolvedRole}', target='${authRouteRedirectTarget}'`
-    );
-  } else {
-    console.log(
-      `[MW][${now()}][${corrId}] auth-route redirect skipped role resolution because access token is missing`
-    );
-  }
-
-  // 1) Auth sayfalarına sadece access token ile gerçekten login olanları sokma.
-  // session marker + device id tek başına redirect için yeterli değil.
   if (authSignals.hasAccessToken && isAuthRoute(pathWithoutLocale)) {
     console.log(
-      `[MW][${now()}][${corrId}] access-token authenticated user requested auth route '${pathWithoutLocale}' -> redirect to ${authRouteRedirectTarget}`
+      `[MW][${now()}][${corrId}] authenticated user requested auth route -> redirect to ${dashboardUrl}`
     );
-    return redirectWithCommonHeaders(request, authRouteRedirectTarget, corrId);
+
+    return redirectWithCommonHeaders(request, dashboardUrl, corrId);
   }
 
-  // 2) Guest protected sayfaya giremesin
   if (!authenticatedLike && isProtectedRoute(pathWithoutLocale)) {
     console.warn(
-      `[MW][${now()}][${corrId}] unauthenticated access to protected route '${pathWithoutLocale}' -> redirect to ${loginUrl}`
+      `[MW][${now()}][${corrId}] guest access to protected route '${pathWithoutLocale}' -> redirect to ${loginUrl}`
     );
+
     return redirectWithCommonHeaders(request, loginUrl, corrId);
   }
 
-  // 3) Access token varsa rol bazlı guard uygula
-  if (authSignals.hasAccessToken && isProtectedRoute(pathWithoutLocale)) {
-    const role = resolvedRole ?? extractRoleFromToken(authSignals.accessToken);
+  console.log(
+    `[MW][${now()}][${corrId}] middleware end — permission guard will be handled in app layer.`
+  );
 
-    console.log(`[MW][${now()}][${corrId}] token decoded role='${role}'`);
-
-    const passed = isRoleAuthorized(pathWithoutLocale, role);
-
-    if (!passed) {
-      console.warn(
-        `[MW][${now()}][${corrId}] authorization guard failed for role='${role}' path='${pathWithoutLocale}' -> redirect to ${unauthorizedUrl}`
-      );
-      return redirectWithCommonHeaders(request, unauthorizedUrl, corrId);
-    }
-
-    console.log(
-      `[MW][${now()}][${corrId}] authorization passed for role='${role}'`
-    );
-  }
-
-  console.log(`[MW][${now()}][${corrId}] middleware end — allowing request.`);
   return res;
 }
 

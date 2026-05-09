@@ -720,3 +720,1064 @@ Bu kısmı çok net söyleyeyim:
 1. Backend yazalım (en doğru)
 2. Invite sistemi
 3. Duplicate check geliştirme
+
+---------
+1. Temel Property / Unit Entityleri
+ManagedProperty
+public class ManagedProperty : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public string Name { get; set; } = default!;
+    public string? PropertyCode { get; set; }
+    public string? InternalCode { get; set; }
+    public string? ExternalReferenceNo { get; set; }
+
+    public PropertyType Type { get; set; }
+
+    public string? BuildingName { get; set; }
+    public string? SiteName { get; set; }
+
+    public Guid? AddressId { get; set; }
+
+    public int TotalUnits { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public string? Description { get; set; }
+}
+PropertyTechnicalDetail
+public class PropertyTechnicalDetail : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public decimal? GrossArea { get; set; }
+    public decimal? NetArea { get; set; }
+
+    public string? LayoutType { get; set; }
+    public int? BathroomCount { get; set; }
+    public int? ToiletCount { get; set; }
+
+    public int? Floor { get; set; }
+    public int? TotalFloors { get; set; }
+    public int? BuildingAge { get; set; }
+    public int? ConstructionYear { get; set; }
+
+    public string? Heating { get; set; }
+    public string? HeatingInfrastructure { get; set; }
+    public string? CoolingInfrastructure { get; set; }
+
+    public bool? Furnished { get; set; }
+    public bool? HasElevator { get; set; }
+
+    public ParkingType ParkingType { get; set; }
+    public FrontageType? Frontage { get; set; }
+
+    public string? BuildingCondition { get; set; }
+    public string? StructureType { get; set; }
+}
+PropertyFacilityDetail
+public class PropertyFacilityDetail : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public bool HasBuildingManagement { get; set; }
+    public bool HasSecurity { get; set; }
+    public bool HasCameraSystem { get; set; }
+    public bool HasGenerator { get; set; }
+    public bool HasWaterTank { get; set; }
+    public bool HasHydrophore { get; set; }
+
+    public string? EarthquakeCompliance { get; set; }
+
+    public string? EnergyClass { get; set; }
+    public bool HasThermalInsulation { get; set; }
+    public bool HasSoundInsulation { get; set; }
+}
+PropertyLegalDetail
+public class PropertyLegalDetail : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public string? DeedStatus { get; set; }
+    public string? ParcelBlockNo { get; set; }
+    public string? ParcelNo { get; set; }
+    public string? LotNo { get; set; }
+    public string? IndependentSectionNo { get; set; }
+    public string? ZoningStatus { get; set; }
+
+    public bool HasOccupancyPermit { get; set; }
+    public int? ConstructionPermitYear { get; set; }
+    public string? UsageTypeOnDeed { get; set; }
+}
+2. Unit Entityleri
+PropertyUnit
+public class PropertyUnit : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public string? BlockName { get; set; }
+    public string Floor { get; set; } = default!;
+    public string UnitNumber { get; set; } = default!;
+
+    public UnitType UnitType { get; set; }
+    public UnitStatus Status { get; set; }
+
+    public decimal? GrossArea { get; set; }
+    public decimal? NetArea { get; set; }
+
+    public string? RoomCount { get; set; }
+    public int? BathroomCount { get; set; }
+
+    public int? BuildingAge { get; set; }
+    public string? HeatingType { get; set; }
+    public bool? Furnished { get; set; }
+
+    public string? UsageStatus { get; set; }
+    public string? TitleDeedStatus { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    // Duplicate prevention
+    public string NormalizedBlockName { get; set; } = default!;
+    public string NormalizedUnitNumber { get; set; } = default!;
+}
+Unique index şart
+TenantId + PropertyId + NormalizedBlockName + Floor + NormalizedUnitNumber
+PropertyUnitOwnership
+public class PropertyUnitOwnership : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyUnitId { get; set; }
+    public Guid? OwnerUserId { get; set; }
+
+    public string OwnerFullName { get; set; } = default!;
+    public string? OwnerEmail { get; set; }
+    public string? OwnerPhone { get; set; }
+
+    public UnitRelationStatus Status { get; set; }
+
+    public DateTimeOffset? StartsAt { get; set; }
+    public DateTimeOffset? EndsAt { get; set; }
+
+    public bool IsPrimary { get; set; } = true;
+    public bool IsVerified { get; set; }
+    public DateTimeOffset? VerifiedAt { get; set; }
+}
+PropertyUnitOccupancy
+public class PropertyUnitOccupancy : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyUnitId { get; set; }
+    public Guid? ResidentUserId { get; set; }
+
+    public string ResidentFullName { get; set; } = default!;
+    public string? ResidentEmail { get; set; }
+    public string? ResidentPhone { get; set; }
+
+    public OccupancyType OccupancyType { get; set; }
+    public UnitRelationStatus Status { get; set; }
+
+    public DateTimeOffset? StartsAt { get; set; }
+    public DateTimeOffset? EndsAt { get; set; }
+
+    public bool IsVerified { get; set; }
+    public DateTimeOffset? VerifiedAt { get; set; }
+}
+PropertyUnitInvitation
+public class PropertyUnitInvitation : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyUnitId { get; set; }
+
+    public UnitInvitationType InvitationType { get; set; }
+    public UnitInvitationStatus Status { get; set; }
+
+    public string TargetFullName { get; set; } = default!;
+    public string TargetEmail { get; set; } = default!;
+    public string? TargetPhone { get; set; }
+
+    public Guid? TargetUserId { get; set; }
+
+    public string InvitationTokenHash { get; set; } = default!;
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    public DateTimeOffset? RespondedAt { get; set; }
+    public string? ResponseNote { get; set; }
+}
+3. Listing / Marketplace Entityleri
+PropertyListing
+public class PropertyListing : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+    public Guid? PropertyUnitId { get; set; }
+
+    public string ListingNo { get; set; } = default!;
+    public string Title { get; set; } = default!;
+
+    public ListingType Type { get; set; }
+    public ListingStatus Status { get; set; }
+    public ListingCondition Condition { get; set; }
+    public ListedByType ListedBy { get; set; }
+
+    public string? OwnerDisplayName { get; set; }
+    public string? ContactRoleLabel { get; set; }
+
+    public decimal PriceValue { get; set; }
+    public decimal? Dues { get; set; }
+    public decimal? Deposit { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public string Description { get; set; } = default!;
+
+    public DateTimeOffset? AvailableAt { get; set; }
+    public string? OccupancyStatus { get; set; }
+
+    public bool HasVideo { get; set; }
+    public bool Has3DTour { get; set; }
+    public bool IsFeatured { get; set; }
+    public bool IsPinned { get; set; }
+
+    public DateTimeOffset? PublishedAt { get; set; }
+    public DateTimeOffset? PassiveAt { get; set; }
+}
+PropertyListingPhoto
+public class PropertyListingPhoto : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid ListingId { get; set; }
+
+    public Guid? FileDocumentId { get; set; }
+    public string? Url { get; set; }
+
+    public bool IsCover { get; set; }
+    public int SortOrder { get; set; }
+}
+PropertyListingMetric
+public class PropertyListingMetric : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid ListingId { get; set; }
+
+    public int ViewCount { get; set; }
+    public int FavoriteCount { get; set; }
+    public int LeadCount { get; set; }
+
+    public int AverageStaySeconds { get; set; }
+    public decimal ClickThroughRate { get; set; }
+    public decimal ConversionRate { get; set; }
+
+    public int? RankingPosition { get; set; }
+}
+4. Accounting Core Entityleri
+PropertyAccountingPeriod
+public class PropertyAccountingPeriod : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public string Name { get; set; } = default!;
+
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public DateOnly? DueDate { get; set; }
+
+    public AccountingPeriodStatus Status { get; set; }
+
+    public bool IsActive { get; set; }
+
+    public DateTimeOffset? PublishedAt { get; set; }
+    public DateTimeOffset? ClosedAt { get; set; }
+    public DateTimeOffset? CancelledAt { get; set; }
+
+    public string? CloseReason { get; set; }
+    public string? CancelReason { get; set; }
+}
+PropertyCharge
+public class PropertyCharge : BaseAuditableEntity, IEntityWithTenant, ISoftDelete
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+    public Guid AccountingPeriodId { get; set; }
+    public Guid PropertyUnitId { get; set; }
+
+    public string ReferenceNo { get; set; } = default!;
+
+    public ChargeType ChargeType { get; set; }
+    public string? Title { get; set; }
+
+    public decimal Amount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public DateOnly DueDate { get; set; }
+
+    public ChargeStatus Status { get; set; }
+
+    public string? Description { get; set; }
+
+    public Guid? BulkBatchId { get; set; }
+
+    public DateTimeOffset? PostedAt { get; set; }
+    public Guid? PostedByUserId { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+    public Guid? CancelledByUserId { get; set; }
+    public string? CancelReason { get; set; }
+
+    public bool IsArchived { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
+    public string? DeleteReason { get; set; }
+}
+PropertyChargeBatch
+public class PropertyChargeBatch : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+    public Guid AccountingPeriodId { get; set; }
+
+    public ChargeType ChargeType { get; set; }
+
+    public BulkChargeScope Scope { get; set; }
+    public string? BlockName { get; set; }
+
+    public decimal AmountPerUnit { get; set; }
+    public string Currency { get; set; } = "CHF";
+    public DateOnly DueDate { get; set; }
+
+    public int TargetUnitCount { get; set; }
+    public int CreatedChargeCount { get; set; }
+    public int DuplicateSkippedCount { get; set; }
+
+    public string? Description { get; set; }
+}
+PropertyPayment
+public class PropertyPayment : BaseAuditableEntity, IEntityWithTenant, ISoftDelete
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+    public Guid? AccountingPeriodId { get; set; }
+    public Guid? PropertyUnitId { get; set; }
+
+    public string ReceiptNo { get; set; } = default!;
+
+    public string PayerName { get; set; } = default!;
+    public Guid? PayerUserId { get; set; }
+
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public DateOnly PaymentDate { get; set; }
+
+    public PaymentMethodType PaymentMethod { get; set; }
+
+    public Guid CashAccountId { get; set; }
+
+    public PaymentStatus Status { get; set; }
+
+    public string? Description { get; set; }
+
+    public bool IsArchived { get; set; }
+
+    public DateTimeOffset? PostedAt { get; set; }
+    public Guid? PostedByUserId { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+    public Guid? CancelledByUserId { get; set; }
+    public string? CancelReason { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
+    public string? DeleteReason { get; set; }
+}
+PropertyPaymentAllocation
+public class PropertyPaymentAllocation : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyPaymentId { get; set; }
+    public Guid PropertyChargeId { get; set; }
+
+    public decimal AllocatedAmount { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public DateTimeOffset AllocatedAt { get; set; }
+
+    public bool IsReversed { get; set; }
+    public DateTimeOffset? ReversedAt { get; set; }
+    public string? ReverseReason { get; set; }
+}
+PropertyExpenseCategory
+public class PropertyExpenseCategory : BaseAuditableEntity, IEntityWithTenant, ISoftDelete
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public string Name { get; set; } = default!;
+    public string Code { get; set; } = default!;
+    public string? Description { get; set; }
+
+    public bool IsActive { get; set; } = true;
+    public bool IsSystem { get; set; }
+    public bool IsArchived { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public string? TagsJson { get; set; }
+
+    public int UsageCount { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
+}
+PropertyIncomeCategory
+public class PropertyIncomeCategory : BaseAuditableEntity, IEntityWithTenant, ISoftDelete
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public string Name { get; set; } = default!;
+    public string Code { get; set; } = default!;
+    public string? Description { get; set; }
+
+    public bool IsTaxable { get; set; }
+    public bool IsRecurring { get; set; }
+
+    public bool IsActive { get; set; } = true;
+    public bool IsArchived { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public string? TagsJson { get; set; }
+
+    public int UsageCount { get; set; }
+    public decimal TotalAmount { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
+}
+PropertyExpense
+public class PropertyExpense : BaseAuditableEntity, IEntityWithTenant, ISoftDelete
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+    public Guid? AccountingPeriodId { get; set; }
+
+    public Guid ExpenseCategoryId { get; set; }
+
+    public string VendorName { get; set; } = default!;
+
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public DateOnly ExpenseDate { get; set; }
+
+    public ExpenseStatus Status { get; set; }
+
+    public Guid? CashAccountId { get; set; }
+
+    public string? InvoiceNo { get; set; }
+    public DateOnly? InvoiceDate { get; set; }
+    public DateOnly? InvoiceDueDate { get; set; }
+
+    public string? Description { get; set; }
+
+    public bool IsArchived { get; set; }
+
+    public DateTimeOffset? PaidAt { get; set; }
+    public Guid? PaidByUserId { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+    public Guid? CancelledByUserId { get; set; }
+    public string? CancelReason { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
+}
+PropertyIncome
+public class PropertyIncome : BaseAuditableEntity, IEntityWithTenant, ISoftDelete
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+    public Guid? AccountingPeriodId { get; set; }
+
+    public Guid? IncomeCategoryId { get; set; }
+
+    public string CustomerName { get; set; } = default!;
+
+    public DateOnly IncomeDate { get; set; }
+
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public PaymentMethodType PaymentMethod { get; set; }
+
+    public Guid? CashAccountId { get; set; }
+
+    public string? InvoiceNo { get; set; }
+    public string? Description { get; set; }
+
+    public IncomeStatus Status { get; set; }
+
+    public bool IsArchived { get; set; }
+
+    public DateTimeOffset? PostedAt { get; set; }
+    public Guid? PostedByUserId { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+    public Guid? CancelledByUserId { get; set; }
+    public string? CancelReason { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
+}
+5. Cash / Bank Entityleri
+PropertyCashAccount
+public class PropertyCashAccount : BaseAuditableEntity, IEntityWithTenant, ISoftDelete
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public string Name { get; set; } = default!;
+    public string Code { get; set; } = default!;
+
+    public CashAccountType Type { get; set; }
+
+    public string? BankName { get; set; }
+    public string? IbanMasked { get; set; }
+    public string? IbanEncrypted { get; set; }
+    public string? IbanHash { get; set; }
+
+    public string Currency { get; set; } = "CHF";
+
+    public decimal OpeningBalance { get; set; }
+    public decimal CurrentBalance { get; set; }
+
+    public CashAccountStatus Status { get; set; }
+
+    public bool IsDefault { get; set; }
+
+    public string? Description { get; set; }
+
+    public DateTimeOffset? LastTransactionAt { get; set; }
+
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
+}
+PropertyCashTransaction
+public class PropertyCashTransaction : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+    public Guid CashAccountId { get; set; }
+
+    public string TransactionNo { get; set; } = default!;
+
+    public CashTransactionType Type { get; set; }
+    public CashTransactionStatus Status { get; set; }
+
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public string Description { get; set; } = default!;
+
+    public CashSourceModule SourceModule { get; set; }
+    public Guid? SourceEntityId { get; set; }
+    public string? SourceReference { get; set; }
+
+    public DateTimeOffset OccurredAt { get; set; }
+
+    public bool IsReversal { get; set; }
+    public Guid? ReversalOfTransactionId { get; set; }
+    public DateTimeOffset? ReversedAt { get; set; }
+    public string? ReverseReason { get; set; }
+}
+PropertyCashTransfer
+public class PropertyCashTransfer : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public string TransferNo { get; set; } = default!;
+
+    public Guid FromAccountId { get; set; }
+    public Guid ToAccountId { get; set; }
+
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CHF";
+
+    public CashTransferStatus Status { get; set; }
+
+    public string? Description { get; set; }
+
+    public DateTimeOffset TransferredAt { get; set; }
+
+    public Guid? OutTransactionId { get; set; }
+    public Guid? InTransactionId { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+    public Guid? CancelledByUserId { get; set; }
+    public string? CancelReason { get; set; }
+}
+6. Document / Attachment
+AccountingAttachment
+public class AccountingAttachment : BaseAuditableEntity, IEntityWithTenant
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid PropertyId { get; set; }
+
+    public AccountingAttachmentOwnerType OwnerType { get; set; }
+    public Guid OwnerId { get; set; }
+
+    public Guid FileDocumentId { get; set; }
+
+    public string? Description { get; set; }
+}
+
+Bu şu alanları karşılar:
+
+Expense.attachments
+Invoice attachments
+İleride payment receipt attachment
+7. Statements / Ledger Read Model
+
+Entity olarak transaction üretmeye gerek yok. Ama DTO/read model şart.
+
+PropertyUnitLedgerEntry read DTO
+public sealed class PropertyUnitLedgerEntryDto
+{
+    public Guid Id { get; set; }
+    public Guid PropertyId { get; set; }
+    public Guid? PropertyUnitId { get; set; }
+
+    public DateTimeOffset OccurredAt { get; set; }
+
+    public string EntryType { get; set; } = default!;
+    public string ReferenceNo { get; set; } = default!;
+
+    public string Description { get; set; } = default!;
+
+    public decimal DebitAmount { get; set; }
+    public decimal CreditAmount { get; set; }
+    public decimal BalanceAfter { get; set; }
+
+    public string Currency { get; set; } = "CHF";
+}
+
+Ekstre entity değil; şu tablolardan üretilir:
+
+PropertyCharge
+PropertyPayment
+PropertyPaymentAllocation
+PropertyExpense
+PropertyIncome
+PropertyCashTransaction
+8. Dashboard Read DTO
+
+Entity değil, projection olmalı.
+
+public sealed class MuhasebeDashboardSummaryDto
+{
+    public Guid PropertyId { get; set; }
+    public string PropertyName { get; set; } = default!;
+
+    public AccountingPeriodBriefDto? ActivePeriod { get; set; }
+
+    public AccountingTotalsDto Totals { get; set; } = default!;
+
+    public List<CashAccountBriefDto> CashAccounts { get; set; } = [];
+    public List<RecentPaymentDto> RecentPayments { get; set; } = [];
+    public List<RecentExpenseDto> RecentExpenses { get; set; } = [];
+    public List<OverdueChargeDto> OverdueCharges { get; set; } = [];
+}
+9. Enum Listesi
+public enum PropertyType
+{
+    Site = 1,
+    Apartment = 2,
+    Shop = 3,
+    Office = 4,
+    Villa = 5
+}
+
+public enum UnitType
+{
+    Apartment = 1,
+    Shop = 2,
+    Office = 3
+}
+
+public enum UnitStatus
+{
+    Vacant = 1,
+    Occupied = 2
+}
+
+public enum UnitRelationStatus
+{
+    Pending = 1,
+    Active = 2,
+    Rejected = 3,
+    Ended = 4
+}
+
+public enum OccupancyType
+{
+    Tenant = 1,
+    Resident = 2,
+    OwnerResident = 3,
+    Temporary = 4
+}
+
+public enum UnitInvitationType
+{
+    Owner = 1,
+    Resident = 2,
+    Tenant = 3
+}
+
+public enum UnitInvitationStatus
+{
+    Pending = 1,
+    Accepted = 2,
+    Rejected = 3,
+    Expired = 4,
+    Cancelled = 5
+}
+
+public enum ListingType
+{
+    Rent = 1,
+    Sale = 2
+}
+
+public enum ListingStatus
+{
+    Draft = 1,
+    Published = 2,
+    Passive = 3
+}
+
+public enum ListingCondition
+{
+    New = 1,
+    Used = 2
+}
+
+public enum ListedByType
+{
+    RealEstateOffice = 1,
+    Owner = 2,
+    Tenant = 3
+}
+
+public enum AccountingPeriodStatus
+{
+    Draft = 1,
+    Published = 2,
+    Closed = 3,
+    Cancelled = 4
+}
+
+public enum ChargeStatus
+{
+    Draft = 1,
+    Posted = 2,
+    Cancelled = 3
+}
+
+public enum ChargeType
+{
+    Dues = 1,
+    Penalty = 2,
+    SharedExpense = 3,
+    Special = 4
+}
+
+public enum BulkChargeScope
+{
+    All = 1,
+    Block = 2,
+    Selected = 3
+}
+
+public enum PaymentStatus
+{
+    Draft = 1,
+    Posted = 2,
+    Cancelled = 3
+}
+
+public enum ExpenseStatus
+{
+    Pending = 1,
+    Approved = 2,
+    Paid = 3,
+    Cancelled = 4
+}
+
+public enum IncomeStatus
+{
+    Draft = 1,
+    Posted = 2,
+    Cancelled = 3
+}
+
+public enum CashAccountType
+{
+    Cash = 1,
+    Bank = 2,
+    PostFinance = 3,
+    Twint = 4,
+    Other = 5
+}
+
+public enum CashAccountStatus
+{
+    Active = 1,
+    Inactive = 2
+}
+
+public enum CashTransactionType
+{
+    Income = 1,
+    Expense = 2,
+    TransferIn = 3,
+    TransferOut = 4,
+    Correction = 5
+}
+
+public enum CashTransactionStatus
+{
+    Completed = 1,
+    Pending = 2,
+    Cancelled = 3,
+    Reversed = 4
+}
+
+public enum CashTransferStatus
+{
+    Completed = 1,
+    Pending = 2,
+    Cancelled = 3
+}
+
+public enum CashSourceModule
+{
+    Payment = 1,
+    Expense = 2,
+    Income = 3,
+    Transfer = 4,
+    Manual = 5,
+    Correction = 6
+}
+
+public enum PaymentMethodType
+{
+    BankTransfer = 1,
+    Cash = 2,
+    Twint = 3,
+    PostFinance = 4,
+    CreditCard = 5,
+    Other = 99
+}
+10. Frontend ile Sağlama
+Uyuşmazlık 1
+
+Frontend:
+
+cashAccount: string
+
+Backend nihai:
+
+CashAccountId: Guid
+CashAccountName DTO’da üretilecek
+
+Doğru çözüm:
+
+Entity’de Guid tutulur.
+Frontend DTO’da cashAccountName / cashAccountLabel döner.
+Uyuşmazlık 2
+
+Frontend:
+
+unit
+block
+residentName
+ownerName
+payerName
+
+Backend nihai:
+
+PropertyUnitId
+OwnerUserId / ResidentUserId optional
+Display alanlar DTO projection
+
+Doğru çözüm:
+
+Entity relation tutar.
+DTO kullanıcıya label verir.
+Uyuşmazlık 3
+
+Frontend Expense status:
+
+paid | pending | cancelled
+
+Dashboard type içinde:
+
+draft | approved | paid | cancelled
+
+Nihai backend:
+
+Pending
+Approved
+Paid
+Cancelled
+
+Frontend’e gerekirse:
+
+pending = Pending
+paid = Paid
+cancelled = Cancelled
+
+şeklinde map edilir.
+
+Uyuşmazlık 4
+
+Frontend CashAccount type bazı yerlerde:
+
+cash | bank
+
+Setup tarafında:
+
+cash | bank | postfinance | twint | other
+
+Nihai backend:
+
+Cash
+Bank
+PostFinance
+Twint
+Other
+Uyuşmazlık 5
+
+Frontend Payment allocation göstermiyor ama Charge alanında:
+
+paidAmount
+remainingAmount
+partial
+paid
+unpaid
+
+var.
+
+Bu yüzden backend’de mutlaka:
+
+PropertyPaymentAllocation
+
+olmalı.
+
+Uyuşmazlık 6
+
+Frontend bazı yerlerde delete diyor.
+
+Finansal backend’de gerçek silme yapılmamalı.
+
+Nihai çözüm:
+
+Archive
+Cancel
+SoftDelete
+Reverse
+
+Hard delete yok.
+
+Nihai Entity Listesi
+ManagedProperty
+PropertyTechnicalDetail
+PropertyFacilityDetail
+PropertyLegalDetail
+
+PropertyUnit
+PropertyUnitOwnership
+PropertyUnitOccupancy
+PropertyUnitInvitation
+
+PropertyListing
+PropertyListingPhoto
+PropertyListingMetric
+
+PropertyAccountingPeriod
+PropertyCharge
+PropertyChargeBatch
+PropertyPayment
+PropertyPaymentAllocation
+PropertyExpenseCategory
+PropertyIncomeCategory
+PropertyExpense
+PropertyIncome
+PropertyCashAccount
+PropertyCashTransaction
+PropertyCashTransfer
+AccountingAttachment
+
+Bu nihai liste frontend’in mevcut ihtiyacını karşılıyor ve backend tarafında eksik kalacak kritik kolonları da içeriyor.

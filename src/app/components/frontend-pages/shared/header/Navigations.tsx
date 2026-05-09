@@ -1,5 +1,3 @@
-
-
 // src/app/components/frontend-pages/shared/header/Navigations.tsx
 "use client";
 
@@ -9,16 +7,11 @@ import {
   Chip,
   Typography,
   Button,
-  IconButton,
-  Avatar,
-  Menu,
-  MenuItem,
-  Tooltip,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { usePathname } from "next/navigation";
+
 import { CustomizerContext } from "@/app/context/customizerContext";
-//import LanguageSelector from "@/app/components/shared/LanguageSelector";
 import LocaleLink from "@/app/components/shared/LocaleLink";
 import { fetchTopMenu, type TopMenuItem } from "@/services/menuService";
 
@@ -30,30 +23,33 @@ const StyledButton = styled(Button)(({ theme }) => ({
   },
 }));
 
-const toPrefix = (seg: string) => (seg || "tr").split("-")[0].toLowerCase();
-const normPath = (p: string) => (p.replace(/\/+$/, "") || "/");
+const toPrefix = (seg: string) =>
+  (seg || "tr").split("-")[0].toLowerCase();
+
+const normPath = (p: string) =>
+  p.replace(/\/+$/, "") || "/";
 
 export default function Navigations() {
   const pathname = usePathname() || "/";
-  const { isLanguage } = React.useContext(CustomizerContext);
+
+  // ✅ Context güvenli erişim
+  const customizer = React.useContext(CustomizerContext);
+  const isLanguage = customizer?.isLanguage;
 
   const prefix = React.useMemo(() => {
     const raw =
       (typeof isLanguage === "string" && isLanguage) ||
-      (typeof navigator !== "undefined" ? navigator.language : "tr-TR") ||
+      (typeof navigator !== "undefined"
+        ? navigator.language
+        : "tr-TR") ||
       "tr-TR";
+
     return toPrefix(raw);
   }, [isLanguage]);
 
   const [items, setItems] = React.useState<TopMenuItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-
-  // 👤 User menu state
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const handleUserClick = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
-  const handleClose = () => setAnchorEl(null);
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -65,7 +61,10 @@ export default function Navigations() {
         setError(null);
 
         const res = await fetchTopMenu(prefix);
-        if (!alive || ac.signal.aborted) return;
+
+        if (!alive || ac.signal.aborted) {
+          return;
+        }
 
         if (res.error) {
           setItems([]);
@@ -75,12 +74,26 @@ export default function Navigations() {
 
         setItems(res.data ?? []);
       } catch (e: any) {
-        if (!alive || ac.signal.aborted) return;
-        console.error("🔴 Menü verisi alınamadı:", e?.message || e);
+        if (!alive || ac.signal.aborted) {
+          return;
+        }
+
+        console.error(
+          "🔴 Menü verisi alınamadı:",
+          e?.message || e
+        );
+
         setItems([]);
-        setError(`Menü yüklenirken hata: ${e?.message || "Bilinmeyen hata"}`);
+
+        setError(
+          `Menü yüklenirken hata: ${
+            e?.message || "Bilinmeyen hata"
+          }`
+        );
       } finally {
-        if (alive && !ac.signal.aborted) setLoading(false);
+        if (alive && !ac.signal.aborted) {
+          setLoading(false);
+        }
       }
     })();
 
@@ -90,7 +103,8 @@ export default function Navigations() {
     };
   }, [prefix]);
 
-  const isActive = (href: string) => normPath(pathname) === normPath(href || "#");
+  const isActive = (href: string) =>
+    normPath(pathname) === normPath(href || "#");
 
   return (
     <Box
@@ -105,31 +119,49 @@ export default function Navigations() {
         borderBottom: "1px solid #e0e0e0",
       }}
     >
-      {/* Sol taraf: Menü öğeleri */}
-      <Box display="flex" gap={1} flexWrap="wrap">
+      {/* Sol taraf: Menü */}
+      <Box
+        display="flex"
+        gap={1}
+        flexWrap="wrap"
+      >
         {loading ? (
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+          >
             Menü yükleniyor…
           </Typography>
         ) : error ? (
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="error"
+          >
             {error}
           </Typography>
         ) : items.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+          >
             Menü bulunamadı.
           </Typography>
         ) : (
           items.map((nav, i) => (
             <StyledButton
               key={`${nav.href}-${i}`}
-              className={isActive(nav.href) ? "active" : ""}
+              className={
+                isActive(nav.href)
+                  ? "active"
+                  : ""
+              }
               variant="text"
               LinkComponent={LocaleLink}
               href={nav.href}
               title={nav.tooltip}
             >
               {nav.title}
+
               {nav.new && (
                 <Chip
                   label="New"
@@ -138,7 +170,8 @@ export default function Navigations() {
                     ml: "6px",
                     borderRadius: "8px",
                     color: "primary.main",
-                    backgroundColor: "rgba(93, 135, 255, 0.15)",
+                    backgroundColor:
+                      "rgba(93, 135, 255, 0.15)",
                   }}
                 />
               )}
@@ -146,10 +179,6 @@ export default function Navigations() {
           ))
         )}
       </Box>
-
-       
     </Box>
   );
 }
-
-

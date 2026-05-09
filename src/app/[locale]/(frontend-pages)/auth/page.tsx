@@ -8,27 +8,8 @@ function extractUser(raw: any) {
   return raw?.user || raw?.data?.user || raw?.data?.data?.user || null;
 }
 
-function getDashboardByRole(locale: string, role?: string) {
-  const r = String(role || "user").toLowerCase();
-
-  switch (r) {
-    case "superadmin":
-      return `/${locale}/superadmin/dashboard`;
-    case "admin":
-      return `/${locale}/admin/dashboard`;
-    case "manager":
-      return `/${locale}/manager/dashboard`;
-    case "staff":
-      return `/${locale}/staff/dashboard`;
-    case "employee":
-      return `/${locale}/employee/dashboard`;
-    case "auditor":
-      return `/${locale}/auditor/dashboard`;
-    case "member":
-      return `/${locale}/member/dashboard`;
-    default:
-      return `/${locale}/user/dashboard`;
-  }
+function getDashboardPath(locale: string) {
+  return `/${locale}/dashboard`;
 }
 
 async function getServerAuth(locale: string) {
@@ -44,8 +25,7 @@ async function getServerAuth(locale: string) {
     const host = headerStore.get("host");
     const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
 
     const res = await fetch(`${baseUrl}/api/v1.0/account/me`, {
       method: "GET",
@@ -82,12 +62,7 @@ export default async function AuthPage({
   const user = await getServerAuth(locale);
 
   if (user) {
-    const role =
-      user?.primaryRole ||
-      user?.role ||
-      user?.roles?.[0];
-
-    redirect(getDashboardByRole(locale, role));
+    redirect(getDashboardPath(locale));
   }
 
   return (

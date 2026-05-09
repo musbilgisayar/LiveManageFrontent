@@ -1,4 +1,4 @@
-//src/modules/profile/hooks/useAccountMe.ts
+// src/modules/profile/hooks/useAccountMe.ts
 // 📌 Bu hook, şu anki (authenticated) kullanıcının bilgilerini fetch etmek için kullanılır.
 "use client";
 
@@ -30,7 +30,25 @@ export function useAccountMe() {
 
       const userData = json?.data ?? null;
 
-      setUser(userData);
+      if (!userData) {
+        setUser(null);
+        setError("Kullanıcı bilgileri alınamadı.");
+        return;
+      }
+
+      const normalizedUserData = {
+        ...userData,
+
+        // ✅ Backend effectivePermissions dolu döndüğü için
+        // frontend menü/permission kontrollerinde permissions alanını da besliyoruz.
+        permissions: userData.effectivePermissions ?? userData.permissions ?? [],
+
+        // ✅ effectivePermissions alanını da kaybetmiyoruz.
+        effectivePermissions:
+          userData.effectivePermissions ?? userData.permissions ?? [],
+      };
+
+      setUser(normalizedUserData);
     } catch (err: any) {
       setUser(null);
       setError(err?.message ?? "Kullanıcı bilgileri alınamadı (network).");

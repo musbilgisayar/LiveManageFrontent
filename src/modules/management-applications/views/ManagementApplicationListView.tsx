@@ -1,5 +1,3 @@
-// src/modules/management-applications/views/ManagementApplicationListView.tsx
-
 "use client";
 
 import React, { useMemo, useState } from "react";
@@ -25,11 +23,20 @@ import {
   IconClock,
   IconFileDescription,
   IconPlus,
+  IconRefresh,
   IconSearch,
   IconShieldCheck,
 } from "@tabler/icons-react";
 
-type ApplicationStatus = "in_review" | "revision_required" | "approved" | "rejected";
+import   useManagementApplicationList   from "../hooks/useManagementApplicationList";
+import type { ManagedPropertyApplicationListItemDto, ManagedPropertyApplicationStatus,} from "../types/managementApplication.types";
+
+type ApplicationStatus =
+  | "pending"
+  | "underReview"
+  | "approved"
+  | "rejected"
+  | "cancelled";
 
 type ManagementApplicationItem = {
   id: string;
@@ -45,57 +52,19 @@ type ManagementApplicationItem = {
   description: string;
 };
 
-const applications: ManagementApplicationItem[] = [
-  {
-    id: "1",
-    applicationNumber: "APP-2026-0012",
-    propertyName: "Green Park Sitesi",
-    location: "Zürich / Altstetten",
-    status: "in_review",
-    applicationType: "Yeni yapı başvurusu",
-    requestedRole: "Tam Yetkili Yönetici",
-    documentCount: 2,
-    createdAt: "02 Mayıs 2026",
-    updatedAt: "02 Mayıs 2026",
-    description:
-      "Yeni dönem yönetim yapısı için başvuru oluşturuldu. Yetki ve vekalet belgeleri eklendi.",
-  },
-  {
-    id: "2",
-    applicationNumber: "APP-2026-0013",
-    propertyName: "Mavi Bahçe Konakları",
-    location: "İstanbul / Ataşehir",
-    status: "revision_required",
-    applicationType: "Mevcut yapıya yetki talebi",
-    requestedRole: "Muhasebe Yetkilisi",
-    documentCount: 1,
-    createdAt: "01 Mayıs 2026",
-    updatedAt: "03 Mayıs 2026",
-    description:
-      "Muhasebe yetkisi talep edildi. Admin ek belge ve görev yazısı revizyonu istedi.",
-  },
-  {
-    id: "3",
-    applicationNumber: "APP-2026-0010",
-    propertyName: "Nova İş Merkezi",
-    location: "İzmir / Konak",
-    status: "approved",
-    applicationType: "Mevcut yapıya yetki talebi",
-    requestedRole: "Operasyon Sorumlusu",
-    documentCount: 3,
-    createdAt: "28 Nisan 2026",
-    updatedAt: "30 Nisan 2026",
-    description:
-      "Operasyon sorumluluğu için başvuru onaylandı. İlgili yapıya üyelik ataması tamamlandı.",
-  },
-];
-
 export default function ManagementApplicationListView() {
   const theme = useTheme<Theme>();
   const router = useRouter();
 
+  const { items, isLoading, errorMessage, reload } =
+    useManagementApplicationList();
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ApplicationStatus | "all">("all");
+
+  const applications = useMemo(() => {
+    return items.map(mapApplicationListItem);
+  }, [items]);
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -112,11 +81,13 @@ export default function ManagementApplicationListView() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [search, status]);
+  }, [applications, search, status]);
 
   const totalCount = applications.length;
-  const inReviewCount = applications.filter((x) => x.status === "in_review").length;
-  const revisionCount = applications.filter((x) => x.status === "revision_required").length;
+  const inReviewCount = applications.filter(
+    (x) => x.status === "pending" || x.status === "underReview",
+  ).length;
+  const revisionCount = 0;
   const approvedCount = applications.filter((x) => x.status === "approved").length;
 
   return (
@@ -156,7 +127,7 @@ export default function ManagementApplicationListView() {
                   />
 
                   <Chip
-                    label={`${totalCount} kayıt`}
+                    label={isLoading ? "Yükleniyor..." : `${totalCount} kayıt`}
                     size="small"
                     variant="outlined"
                     sx={{
@@ -243,6 +214,7 @@ export default function ManagementApplicationListView() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Başvuru no, yapı adı, konum veya rol ara..."
               fullWidth
+              disabled={isLoading}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -263,6 +235,7 @@ export default function ManagementApplicationListView() {
               size="small"
               label="Durum"
               value={status}
+              disabled={isLoading}
               onChange={(event) => setStatus(event.target.value as ApplicationStatus | "all")}
               sx={{
                 minWidth: { xs: "100%", md: 220 },
@@ -273,25 +246,74 @@ export default function ManagementApplicationListView() {
               }}
             >
               <MenuItem value="all">Tümü</MenuItem>
-              <MenuItem value="in_review">İncelemede</MenuItem>
-              <MenuItem value="revision_required">Revizyon Gerekli</MenuItem>
+              <MenuItem value="pending">Beklemede</MenuItem>
+              <MenuItem value="underReview">İncelemede</MenuItem>
               <MenuItem value="approved">Onaylandı</MenuItem>
               <MenuItem value="rejected">Reddedildi</MenuItem>
+              <MenuItem value="cancelled">İptal Edildi</MenuItem>
             </TextField>
           </Stack>
         </CardContent>
       </Card>
 
-      <Stack spacing={1.6}>
-        {filteredItems.map((item) => (
-          <ApplicationCard
-            key={item.id}
-            item={item}
-       
-            onOpen={() => router.push(`/management-applications/review/${item.id}`)}
-          />
-        ))}
-      </Stack>
+      {isLoading && (
+        <Card variant="outlined" sx={{ borderRadius: 4 }}>
+          <CardContent>
+            <Typography fontWeight={900}>Başvurular yükleniyor...</Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      {errorMessage && !isLoading && (
+        <Card variant="outlined" sx={{ borderRadius: 4 }}>
+          <CardContent>
+            <Stack spacing={1.5}>
+              <Typography color="error" fontWeight={900}>
+                {errorMessage}
+              </Typography>
+
+              <Button
+                variant="outlined"
+                startIcon={<IconRefresh size={17} />}
+                onClick={reload}
+                sx={{
+                  width: "fit-content",
+                  borderRadius: 999,
+                  textTransform: "none",
+                  fontWeight: 900,
+                }}
+              >
+                Tekrar dene
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && !errorMessage && filteredItems.length === 0 && (
+        <Card variant="outlined" sx={{ borderRadius: 4 }}>
+          <CardContent>
+            <Stack spacing={1}>
+              <Typography fontWeight={900}>Henüz başvuru bulunamadı</Typography>
+              <Typography color="text.secondary">
+                Yeni bir site/apartman yönetim başvurusu oluşturabilirsiniz.
+              </Typography>
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && !errorMessage && filteredItems.length > 0 && (
+        <Stack spacing={1.6}>
+          {filteredItems.map((item) => (
+            <ApplicationCard
+              key={item.id}
+              item={item}
+              onOpen={() => router.push(`/management-applications/review/${item.id}`)}
+            />
+          ))}
+        </Stack>
+      )}
     </Box>
   );
 }
@@ -478,6 +500,55 @@ function MetaChip({ label }: { label: string }) {
   );
 }
 
+function mapApplicationListItem(
+  item: ManagedPropertyApplicationListItemDto,
+): ManagementApplicationItem {
+  const status = mapApplicationStatus(item.status);
+
+  return {
+    id: item.id,
+    applicationNumber: `APP-${item.id.slice(0, 8).toUpperCase()}`,
+    propertyName: item.propertyName,
+    location: item.addressId ? `Adres ID: ${item.addressId}` : "Adres bilgisi yok",
+    status,
+    applicationType: "Yönetim başvurusu",
+    requestedRole: "Yönetici",
+    documentCount: 0,
+    createdAt: formatDate(item.submittedAtUtc),
+    updatedAt: formatDate(item.reviewedAtUtc || item.submittedAtUtc),
+    description:
+      item.description ||
+      `${item.residentialUnitCount} konut, ${item.commercialUnitCount} ticari birim, ${
+        item.blockCount ?? 0
+      } blok için oluşturulmuş yönetim başvurusu.`,
+  };
+}
+
+function mapApplicationStatus(
+  status: ManagedPropertyApplicationStatus,
+): ApplicationStatus {
+  if (status === 1) return "underReview";
+  if (status === 2) return "approved";
+  if (status === 3) return "rejected";
+  if (status === 4) return "cancelled";
+
+  return "pending";
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "-";
+
+  try {
+    return new Intl.DateTimeFormat("tr-TR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
 function getToneColor(theme: Theme, tone: "default" | "success" | "warning" | "error") {
   if (tone === "success") return theme.palette.success.main;
   if (tone === "warning") return theme.palette.warning.main;
@@ -487,14 +558,16 @@ function getToneColor(theme: Theme, tone: "default" | "success" | "warning" | "e
 
 function getStatusColor(theme: Theme, status: ApplicationStatus) {
   if (status === "approved") return theme.palette.success.main;
-  if (status === "revision_required") return theme.palette.warning.main;
-  if (status === "rejected") return theme.palette.error.main;
+  if (status === "underReview" || status === "pending") return theme.palette.warning.main;
+  if (status === "rejected" || status === "cancelled") return theme.palette.error.main;
   return theme.palette.primary.main;
 }
 
 function statusLabel(status: ApplicationStatus) {
+  if (status === "pending") return "Beklemede";
+  if (status === "underReview") return "İncelemede";
   if (status === "approved") return "Onaylandı";
-  if (status === "revision_required") return "Revizyon Gerekli";
   if (status === "rejected") return "Reddedildi";
-  return "İncelemede";
+  if (status === "cancelled") return "İptal Edildi";
+  return "Beklemede";
 }

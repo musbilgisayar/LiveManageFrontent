@@ -16,6 +16,9 @@ export type NavGroup = {
   external?: boolean;
   level?: number;
 
+  requiredAnyPermissions?: string[];
+  requiredAllPermissions?: string[];
+
   onClick?: (event: MouseEvent<HTMLElement>) => void;
 };
 
@@ -36,6 +39,9 @@ export interface NavGroupProps {
   icon?: ElementType;
   href?: string;
   children?: NavGroup[];
+
+  requiredAnyPermissions?: string[];
+  requiredAllPermissions?: string[];
 }
 
 export interface NavCollapseProps {

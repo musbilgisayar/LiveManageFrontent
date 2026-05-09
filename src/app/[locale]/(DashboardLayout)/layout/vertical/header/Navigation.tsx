@@ -1,14 +1,19 @@
-import { SetStateAction, useState } from "react";
+"use client";
+
+import { useState } from "react";
 import { Box, Menu, Typography, Button, Divider, Grid } from "@mui/material";
 import Link from "next/link";
 import { IconChevronDown, IconHelp } from "@tabler/icons-react";
+
 import AppLinks from "./AppLinks";
 import QuickLinks from "./QuickLinks";
 
 const AppDD = () => {
-  const [anchorEl2, setAnchorEl2] = useState<HTMLElement | null>(null);
+  const [anchorEl2, setAnchorEl2] = useState<HTMLButtonElement | null>(null);
 
-  const handleClick2 = (event: React.MouseEvent<HTMLElement>) => {
+  const open = Boolean(anchorEl2);
+
+  const handleClick2 = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl2(event.currentTarget);
   };
 
@@ -20,14 +25,16 @@ const AppDD = () => {
     <>
       <Box>
         <Button
-          aria-label="show 11 new notifications"
+          id="apps-menu-button"
+          aria-label="apps menu"
+          aria-controls={open ? "msgs-menu" : undefined}
+          aria-expanded={open ? "true" : undefined}
+          aria-haspopup="true"
           color="inherit"
           variant="text"
-          aria-controls="msgs-menu"
-          aria-haspopup="true"
           sx={{
-            bgcolor: anchorEl2 ? "primary.light" : "",
-            color: anchorEl2
+            bgcolor: open ? "primary.light" : "",
+            color: open
               ? "primary.main"
               : (theme) => theme.palette.text.secondary,
           }}
@@ -41,17 +48,19 @@ const AppDD = () => {
         >
           Apps
         </Button>
-        {/* ------------------------------------------- */}
-        {/* Message Dropdown */}
-        {/* ------------------------------------------- */}
+
         <Menu
           id="msgs-menu"
           anchorEl={anchorEl2}
-          keepMounted
-          open={Boolean(anchorEl2)}
+          open={open}
           onClose={handleClose2}
           anchorOrigin={{ horizontal: "left", vertical: "bottom" }}
           transformOrigin={{ horizontal: "left", vertical: "top" }}
+          disableAutoFocusItem
+          MenuListProps={{
+            "aria-labelledby": "apps-menu-button",
+            autoFocus: false,
+          }}
           sx={{
             "& .MuiMenu-paper": {
               width: "850px",
@@ -65,11 +74,14 @@ const AppDD = () => {
             <Grid
               display="flex"
               size={{
-                sm: 8
-              }}>
+                sm: 8,
+              }}
+            >
               <Box p={4} pr={0} pb={3}>
                 <AppLinks />
+
                 <Divider />
+
                 <Box
                   sx={{
                     display: {
@@ -82,7 +94,7 @@ const AppDD = () => {
                   pt={2}
                   pr={4}
                 >
-                  <Link href="/faq">
+                  <Link href="/faq" onClick={handleClose2}>
                     <Typography
                       variant="subtitle2"
                       fontWeight="600"
@@ -95,17 +107,21 @@ const AppDD = () => {
                       Frequently Asked Questions
                     </Typography>
                   </Link>
+
                   <Button variant="contained" color="primary">
                     Check
                   </Button>
                 </Box>
               </Box>
+
               <Divider orientation="vertical" />
             </Grid>
+
             <Grid
               size={{
-                sm: 4
-              }}>
+                sm: 4,
+              }}
+            >
               <Box p={4}>
                 <QuickLinks />
               </Box>
@@ -113,6 +129,7 @@ const AppDD = () => {
           </Grid>
         </Menu>
       </Box>
+
       <Button
         color="inherit"
         sx={{ color: (theme) => theme.palette.text.secondary }}
@@ -122,6 +139,7 @@ const AppDD = () => {
       >
         Chat
       </Button>
+
       <Button
         color="inherit"
         sx={{ color: (theme) => theme.palette.text.secondary }}
@@ -131,6 +149,7 @@ const AppDD = () => {
       >
         Calendar
       </Button>
+
       <Button
         color="inherit"
         sx={{ color: (theme) => theme.palette.text.secondary }}
