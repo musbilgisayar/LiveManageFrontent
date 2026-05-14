@@ -277,7 +277,7 @@ export default function ManagementApplicationReviewListView() {
           <ApplicationRow
             key={item.id}
             item={item}
-            onOpen={() => router.push(`/superadmin/management-applications/${item.id}`)}
+            onOpen={() => router.push(`/management-applications/review/${item.id}`)}
           />
         ))}
       </Stack>

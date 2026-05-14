@@ -109,7 +109,7 @@ export default function MonitoringDashboardView() {
             })}
             icon={<IconLock size={20} />}
             tone="danger"
-            href="/superadmin/monitoring/lockouts"
+            href="/monitoring/lockouts"
           />
 
           <MonitoringSummaryCard
@@ -122,7 +122,7 @@ export default function MonitoringDashboardView() {
             })}
             icon={<IconShieldCheck size={20} />}
             tone="warning"
-            href="/superadmin/monitoring/lockouts"
+            href="/monitoring/lockouts"
           />
         </SectionGrid>
       </Box>
@@ -146,7 +146,7 @@ export default function MonitoringDashboardView() {
             })}
             icon={<IconAlertTriangle size={20} />}
             tone="warning"
-            href="/superadmin/monitoring/security-timeline"
+            href="/monitoring/security-timeline"
           />
 
           <MonitoringSummaryCard
@@ -171,7 +171,7 @@ export default function MonitoringDashboardView() {
             })}
             icon={<IconLock size={20} />}
             tone="danger"
-            href="/superadmin/monitoring/security-timeline"
+            href="/monitoring/security-timeline"
           />
 
           <MonitoringSummaryCard

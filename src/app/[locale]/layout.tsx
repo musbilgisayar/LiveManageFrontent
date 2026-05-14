@@ -30,7 +30,7 @@ const DEBUG_LOCALE =
 /* 🔥 LOG HELPER */
 const log = (...args: any[]) => {
   if (!DEBUG_LOCALE) return;
-   
+
 };
 
 function normalizeLocale(locale?: string) {
@@ -136,7 +136,7 @@ export default async function LocaleLayout({
     <I18nProvider lang={lang} dict={dict}>
       <AuthProvider>
         <MuiProviders dir={dir} mode={themeMode}>
-          <MuiAndIntlProvider>
+          <MuiAndIntlProvider locale={lang}>
             <CustomizerContextProvider initialSettings={customizerInitial}>
               <ReactQueryProvider>
                 <MyApp>{children}</MyApp>

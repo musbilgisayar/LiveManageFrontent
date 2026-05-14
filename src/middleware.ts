@@ -145,10 +145,10 @@ function getAuthSignals(request: NextRequest) {
   };
 }
 
-function isAuthenticatedLike(request: NextRequest) {
+function hasRenewableWebSession(request: NextRequest) {
   const s = getAuthSignals(request);
 
-  return s.hasAccessToken || (s.hasSessionMarker && s.hasDeviceId);
+  return s.hasRefreshToken;
 }
 
 export function middleware(request: NextRequest) {
@@ -239,14 +239,14 @@ export function middleware(request: NextRequest) {
   const normalizedLocale = toPrefix(first);
   const pathWithoutLocale = getPathWithoutLocale(cleanPath);
   const authSignals = getAuthSignals(request);
-  const authenticatedLike = isAuthenticatedLike(request);
+  const renewableWebSession = hasRenewableWebSession(request);
 
   console.log(
     `[MW][${now()}][${corrId}] locale='${normalizedLocale}' pathWithoutLocale='${pathWithoutLocale}' authRoute=${isAuthRoute(
       pathWithoutLocale
     )} protected=${isProtectedRoute(
       pathWithoutLocale
-    )} authenticatedLike=${authenticatedLike}`
+    )} renewableWebSession=${renewableWebSession}`
   );
 
   console.log(
@@ -265,7 +265,7 @@ export function middleware(request: NextRequest) {
 
   withCommonHeaders(res, corrId);
 
-  if (authSignals.hasAccessToken && isAuthRoute(pathWithoutLocale)) {
+  if (renewableWebSession && isAuthRoute(pathWithoutLocale)) {
     console.log(
       `[MW][${now()}][${corrId}] authenticated user requested auth route -> redirect to ${dashboardUrl}`
     );
@@ -273,7 +273,7 @@ export function middleware(request: NextRequest) {
     return redirectWithCommonHeaders(request, dashboardUrl, corrId);
   }
 
-  if (!authenticatedLike && isProtectedRoute(pathWithoutLocale)) {
+  if (!renewableWebSession && isProtectedRoute(pathWithoutLocale)) {
     console.warn(
       `[MW][${now()}][${corrId}] guest access to protected route '${pathWithoutLocale}' -> redirect to ${loginUrl}`
     );

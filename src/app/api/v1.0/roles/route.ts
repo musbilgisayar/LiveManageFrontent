@@ -1,9 +1,23 @@
-// src/app/api/v1.0/roles/route.ts
+//src/app/api/v1.0/roles/route.ts
 
 import { NextRequest } from "next/server";
 import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
 
 const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || "1.0";
+const ROLES_GET_CACHE_TTL_MS = 2_000;
+
+type RolesCacheEntry = {
+  expiresAt: number;
+  response: Response;
+};
+
+let rolesGetPromise: Promise<Response> | null = null;
+let rolesGetCache: RolesCacheEntry | null = null;
+
+function clearRolesGetCache() {
+  rolesGetCache = null;
+  rolesGetPromise = null;
+}
 
 function normalizeRoleList(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
@@ -28,10 +42,7 @@ function createSuccessResponse(payload: unknown) {
       : {};
 
   return {
-    ok:
-      typeof safePayload.ok === "boolean"
-        ? safePayload.ok
-        : true,
+    ok: typeof safePayload.ok === "boolean" ? safePayload.ok : true,
     message:
       typeof safePayload.message === "string"
         ? safePayload.message
@@ -84,17 +95,50 @@ function transformRolesResponse(
 }
 
 export async function GET(req: NextRequest) {
-  return proxyJsonWithWebAuth(req, {
+  const now = Date.now();
+
+  if (rolesGetCache && rolesGetCache.expiresAt > now) {
+    return rolesGetCache.response.clone();
+  }
+
+  if (rolesGetPromise) {
+    const response = await rolesGetPromise;
+    return response.clone();
+  }
+
+  rolesGetPromise = proxyJsonWithWebAuth(req, {
     url: `/api/v${API_VERSION}/AppRole`,
     method: "GET",
     timeoutMs: 15_000,
     logLabel: "RolesList",
     transformResponse: (payload, context) =>
-      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
-  });
+      transformRolesResponse(
+        payload,
+        context.correlationId,
+        context.upstreamStatus
+      ),
+  })
+    .then((response) => {
+      if (response.ok) {
+        rolesGetCache = {
+          expiresAt: Date.now() + ROLES_GET_CACHE_TTL_MS,
+          response: response.clone(),
+        };
+      }
+
+      return response;
+    })
+    .finally(() => {
+      rolesGetPromise = null;
+    });
+
+  const response = await rolesGetPromise;
+  return response.clone();
 }
 
 export async function POST(req: NextRequest) {
+  clearRolesGetCache();
+
   const body = await req.json();
 
   return proxyJsonWithWebAuth(req, {
@@ -104,11 +148,17 @@ export async function POST(req: NextRequest) {
     timeoutMs: 15_000,
     logLabel: "RolesCreate",
     transformResponse: (payload, context) =>
-      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
+      transformRolesResponse(
+        payload,
+        context.correlationId,
+        context.upstreamStatus
+      ),
   });
 }
 
 export async function PUT(req: NextRequest) {
+  clearRolesGetCache();
+
   const body = await req.json();
 
   return proxyJsonWithWebAuth(req, {
@@ -118,11 +168,17 @@ export async function PUT(req: NextRequest) {
     timeoutMs: 15_000,
     logLabel: "RolesUpdate",
     transformResponse: (payload, context) =>
-      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
+      transformRolesResponse(
+        payload,
+        context.correlationId,
+        context.upstreamStatus
+      ),
   });
 }
 
 export async function DELETE(req: NextRequest) {
+  clearRolesGetCache();
+
   const body = await req.json();
 
   return proxyJsonWithWebAuth(req, {
@@ -132,6 +188,10 @@ export async function DELETE(req: NextRequest) {
     timeoutMs: 15_000,
     logLabel: "RolesDelete",
     transformResponse: (payload, context) =>
-      transformRolesResponse(payload, context.correlationId, context.upstreamStatus),
+      transformRolesResponse(
+        payload,
+        context.correlationId,
+        context.upstreamStatus
+      ),
   });
 }

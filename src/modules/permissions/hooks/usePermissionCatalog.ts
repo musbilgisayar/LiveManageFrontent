@@ -55,7 +55,7 @@ export function usePermissionCatalog() {
       }
     };
 
-    load();
+    void load();
 
     return () => {
       alive = false;
@@ -63,17 +63,21 @@ export function usePermissionCatalog() {
   }, []);
 
   const permissions = useMemo<PermissionDefinitionDto[]>(() => {
-    if (!data) return [];
-
+    const sourcePermissions = data?.permissions ?? [];
     const search = filters.search.trim().toLowerCase();
 
-    return data.permissions.filter((permission) => {
+    return sourcePermissions.filter((permission) => {
+      const code = permission.code?.toLowerCase() ?? "";
+      const module = permission.module?.toLowerCase() ?? "";
+      const action = permission.action?.toLowerCase() ?? "";
+      const group = permission.group?.toLowerCase() ?? "";
+
       const matchesSearch =
         !search ||
-        permission.code.toLowerCase().includes(search) ||
-        permission.module.toLowerCase().includes(search) ||
-        permission.action.toLowerCase().includes(search) ||
-        permission.group.toLowerCase().includes(search);
+        code.includes(search) ||
+        module.includes(search) ||
+        action.includes(search) ||
+        group.includes(search);
 
       const matchesModule =
         filters.module === "all" || permission.module === filters.module;
@@ -97,7 +101,7 @@ export function usePermissionCatalog() {
         matchesSensitive
       );
     });
-  }, [data, filters]);
+  }, [data?.permissions, filters]);
 
   const updateFilter = <K extends keyof PermissionCatalogFilterState>(
     key: K,
@@ -119,7 +123,7 @@ export function usePermissionCatalog() {
     resetFilters,
     permissions,
     modules: data?.modules ?? [],
-    totalCount: data?.permissions.length ?? 0,
+    totalCount: data?.permissions?.length ?? 0,
     filteredCount: permissions.length,
     isLoading,
     error,

@@ -23,6 +23,7 @@ export type PermissionRecentChangeTargetType =
   | "catalog";
 
 export type PermissionDefinitionDto = {
+  description?: string;
   id: string;
   code: string;
   module: string;

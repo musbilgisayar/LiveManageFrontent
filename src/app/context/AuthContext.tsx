@@ -1,4 +1,3 @@
-//bu dosya, uygulamanın genelinde kullanıcı kimlik doğrulama durumunu ve bilgilerini yönetmek için kullanılan bir React Context sağlayıcısıdır. Kullanıcı bilgilerini saklar, günceller ve kullanıcı izinlerini kontrol etmek için yardımcı fonksiyonlar sunar. Ayrıca, kullanıcı oturumu açma, kapatma ve yenileme işlemlerini de yönetir. Bu yapı, uygulamanın herhangi bir yerinde kullanıcı durumuna kolayca erişilmesini ve yönetilmesini sağlar.
 // src/app/context/AuthContext.tsx
 
 "use client";
@@ -60,38 +59,32 @@ interface MeResponseDto {
 
 interface AuthContextType {
   user: AuthUser | null;
-
   setUser: (user: AuthUser | null) => void;
-
   clearUser: () => void;
-
   refreshUser: () => Promise<void>;
 
   isAuthenticated: boolean;
   loading: boolean;
+  permissionsReady: boolean;
 
   logout: () => void;
 
   effectivePermissions: string[];
 
   hasPermission: (permission: string) => boolean;
-
   hasAnyPermission: (permissions: string[]) => boolean;
-
   hasAllPermissions: (permissions: string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-
   setUser: () => {},
-
   clearUser: () => {},
-
   refreshUser: async () => {},
 
   isAuthenticated: false,
   loading: true,
+  permissionsReady: false,
 
   logout: () => {},
 
@@ -114,25 +107,29 @@ function resolveLocaleFromParams(
   return (raw ?? "tr").toLowerCase();
 }
 
-function normalizeAuthUser(json: any): AuthUser | null {
-  // ✅ Bazı endpointlerde:
-  // json.data
-  // bazılarında:
-  // json.data.data
-  // dönebildiği için normalize ediyoruz.
+function normalizePermissions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
 
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeAuthUser(json: any): AuthUser | null {
   const root = json?.data?.data ?? json?.data ?? null;
 
   if (!root) {
     return null;
   }
 
-  const effectivePermissions =
+  const effectivePermissions = normalizePermissions(
     root?.effectivePermissions ??
-    root?.permissions ??
-    root?.user?.effectivePermissions ??
-    root?.user?.permissions ??
-    [];
+      root?.permissions ??
+      root?.user?.effectivePermissions ??
+      root?.user?.permissions ??
+      []
+  );
 
   return {
     ...root,
@@ -174,7 +171,6 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
   const normalizedUser = normalizeAuthUser(json);
 
   console.log("[AuthContext] Normalized user:", normalizedUser);
-
   console.log(
     "[AuthContext] Effective permissions:",
     normalizedUser?.effectivePermissions
@@ -183,17 +179,11 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
   return normalizedUser;
 }
 
-export const AuthProvider = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
-
   const [loading, setLoading] = useState(true);
 
   const router = useRouter();
-
   const params = useParams();
 
   const locale = resolveLocaleFromParams(
@@ -209,14 +199,9 @@ export const AuthProvider = ({
 
     try {
       const currentUser = await fetchCurrentUser();
-
       setUser(currentUser);
     } catch (error) {
-      console.warn(
-        "[AuthContext] Kullanıcı bilgisi yenilenemedi:",
-        error
-      );
-
+      console.warn("[AuthContext] Kullanıcı bilgisi yenilenemedi:", error);
       setUser(null);
     } finally {
       setLoading(false);
@@ -232,26 +217,16 @@ export const AuthProvider = ({
       try {
         const currentUser = await fetchCurrentUser();
 
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         setUser(currentUser);
       } catch (error) {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
-        console.warn(
-          "[AuthContext] İlk kullanıcı yüklemesi başarısız:",
-          error
-        );
-
+        console.warn("[AuthContext] İlk kullanıcı yüklemesi başarısız:", error);
         setUser(null);
       } finally {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         setLoading(false);
       }
@@ -278,7 +253,6 @@ export const AuthProvider = ({
       console.warn("[AuthContext] Logout isteği başarısız:", error);
     } finally {
       setUser(null);
-
       router.replace(`/${locale}/auth/login`);
     }
   }, [locale, router]);
@@ -287,11 +261,14 @@ export const AuthProvider = ({
     return user?.effectivePermissions ?? user?.permissions ?? [];
   }, [user]);
 
+const permissionsReady = useMemo(() => {
+  return !loading;
+}, [loading]);
+
   const hasPermission = useCallback(
     (permission: string) =>
       effectivePermissions.some(
-        (item) =>
-          item.toLowerCase() === permission.toLowerCase()
+        (item) => item.toLowerCase() === permission.toLowerCase()
       ),
     [effectivePermissions]
   );
@@ -300,8 +277,7 @@ export const AuthProvider = ({
     (permissions: string[]) =>
       permissions.some((permission) =>
         effectivePermissions.some(
-          (item) =>
-            item.toLowerCase() === permission.toLowerCase()
+          (item) => item.toLowerCase() === permission.toLowerCase()
         )
       ),
     [effectivePermissions]
@@ -311,8 +287,7 @@ export const AuthProvider = ({
     (permissions: string[]) =>
       permissions.every((permission) =>
         effectivePermissions.some(
-          (item) =>
-            item.toLowerCase() === permission.toLowerCase()
+          (item) => item.toLowerCase() === permission.toLowerCase()
         )
       ),
     [effectivePermissions]
@@ -321,25 +296,20 @@ export const AuthProvider = ({
   const value = useMemo<AuthContextType>(
     () => ({
       user,
-
       setUser,
-
       clearUser,
-
       refreshUser,
 
       isAuthenticated: !!user,
-
       loading,
+      permissionsReady,
 
       logout,
 
       effectivePermissions,
 
       hasPermission,
-
       hasAnyPermission,
-
       hasAllPermissions,
     }),
     [
@@ -347,6 +317,7 @@ export const AuthProvider = ({
       clearUser,
       refreshUser,
       loading,
+      permissionsReady,
       logout,
       effectivePermissions,
       hasPermission,
@@ -355,11 +326,7 @@ export const AuthProvider = ({
     ]
   );
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);

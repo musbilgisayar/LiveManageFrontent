@@ -2,7 +2,7 @@
 
 "use client";
 import { useSearchParams } from "next/navigation";
-import AuthTabs from "@/app/[locale]/(frontend-pages)/auth/authForms/AuthTabs";
+import AuthTabs from "@/modules/auth/components/AuthTabs";
 
 export default function AuthPage() {
   const searchParams = useSearchParams();

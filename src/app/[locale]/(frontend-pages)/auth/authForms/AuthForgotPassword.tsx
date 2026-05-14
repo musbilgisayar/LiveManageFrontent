@@ -1,3 +1,4 @@
+//src/app/[locale]/(frontend-pages)/auth/authForms/AuthForgotPassword.tsx
 "use client";
 import React, { useState } from "react";
 import {

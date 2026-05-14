@@ -13,6 +13,8 @@ export const WEB_AUTH_BACKEND_BASE =
 
 export const DEFAULT_JSON_TIMEOUT_MS = 15_000;
 export const DEFAULT_RAW_TIMEOUT_MS = 30_000;
+export const ACCESS_REFRESH_SKEW_SECONDS =
+  process.env.NODE_ENV === "production" ? 120 : 14 * 60;
 
 export type WebProxyMethod =
   | "GET"
@@ -189,6 +191,75 @@ export function mergeCookie(
     .join("; ");
 }
 
+function base64UrlDecode(input: string): string {
+  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+
+  return Buffer.from(padded, "base64").toString("utf8");
+}
+
+function readCookieValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+
+  const parts = cookieHeader.split(";");
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    const index = trimmed.indexOf("=");
+
+    if (index <= 0) continue;
+
+    const cookieName = trimmed.slice(0, index).trim();
+    const cookieValue = trimmed.slice(index + 1).trim();
+
+    if (cookieName === name) {
+      return decodeURIComponent(cookieValue);
+    }
+  }
+
+  return null;
+}
+
+function getJwtExpUnixSeconds(token: string): number | null {
+  const parts = token.split(".");
+
+  if (parts.length < 2) return null;
+
+  try {
+    const payload = JSON.parse(base64UrlDecode(parts[1])) as {
+      exp?: unknown;
+    };
+
+    return typeof payload.exp === "number" ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+export function shouldProactivelyRefreshAccessToken(
+  req: NextRequest,
+  skewSeconds: number = ACCESS_REFRESH_SKEW_SECONDS
+): boolean {
+  const accessToken = readCookieValue(req.headers.get("cookie"), "accessToken");
+
+  if (!accessToken) {
+    return false;
+  }
+
+  const exp = getJwtExpUnixSeconds(accessToken);
+
+  if (!exp) {
+    return false;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const remainingSeconds = exp - now;
+
+  return remainingSeconds > 0 && remainingSeconds <= skewSeconds;
+}
 export function buildWebAuthHeaders(
   req: NextRequest,
   correlationId: string,
@@ -280,9 +351,18 @@ export async function tryRefreshWebSession(
         cache: "no-store",
         signal,
       });
-
       const cookies = extractSetCookies(res.headers);
-      const ok = res.ok && cookies.length > 0;
+
+      let bodyOk = false;
+
+      try {
+        const payload = await res.clone().json().catch(() => null);
+        bodyOk = payload?.ok === true;
+      } catch {
+        bodyOk = false;
+      }
+
+      const ok = res.ok && (cookies.length > 0 || bodyOk);
 
       if (process.env.NODE_ENV !== "production") {
         console.info(`[BFF][${logLabel}][REFRESH]`, {
@@ -290,6 +370,7 @@ export async function tryRefreshWebSession(
           refreshUrl,
           status: res.status,
           ok: res.ok,
+          bodyOk,
           effectiveOk: ok,
           refreshCookieCount: cookies.length,
           refreshCookieNames: cookies.map((c) => c.split("=")[0]),

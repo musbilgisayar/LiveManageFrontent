@@ -54,30 +54,23 @@ export function filterMenuByPermissions(
 ): NavGroup[] {
   const permissionSet = toPermissionSet(permissions);
 
-  return items
+  const filtered = items
     .map((item) => {
       const cloned: NavGroup = { ...item };
 
       if (cloned.children?.length) {
-        cloned.children = filterMenuByPermissions(
-          cloned.children,
-          permissions
-        );
+        cloned.children = filterMenuByPermissions(cloned.children, permissions);
       }
 
       return cloned;
     })
-    .filter((item, index, array) => {
+    .filter((item) => {
+      if (item.navlabel) {
+        return true;
+      }
+
       const selfVisible = canAccessItem(item, permissionSet);
       const hasVisibleChildren = !!item.children?.length;
-
-      if (item.navlabel) {
-        const nextItems = array.slice(index + 1);
-        return nextItems.some((nextItem) => {
-          if (nextItem.navlabel) return false;
-          return canAccessItem(nextItem, permissionSet) || !!nextItem.children?.length;
-        });
-      }
 
       if (item.children?.length) {
         return selfVisible || hasVisibleChildren;
@@ -85,4 +78,20 @@ export function filterMenuByPermissions(
 
       return selfVisible;
     });
+
+  return filtered.filter((item, index, array) => {
+    if (!item.navlabel) {
+      return true;
+    }
+
+    const nextItems = array.slice(index + 1);
+
+    return nextItems.some((nextItem) => {
+      if (nextItem.navlabel) {
+        return false;
+      }
+
+      return true;
+    });
+  });
 }

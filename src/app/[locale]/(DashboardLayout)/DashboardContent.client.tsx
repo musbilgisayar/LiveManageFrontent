@@ -5,29 +5,14 @@
 import React, { useContext, useEffect, useState } from "react";
 import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
-import { styled, useTheme } from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
+
 import Header from "./layout/vertical/header/Header";
 import Sidebar from "./layout/vertical/sidebar/Sidebar";
 import Customizer from "./layout/shared/customizer/Customizer";
 import Navigation from "./layout/horizontal/navbar/Navigation";
 import HorizontalHeader from "./layout/horizontal/header/Header";
 import { CustomizerContext } from "@/app/context/customizerContext";
-
-const MainWrapper = styled("div")(() => ({
-  display: "flex",
-  minHeight: "100vh",
-  width: "100%",
-}));
-
-const PageWrapper = styled("div")(() => ({
-  display: "flex",
-  flexGrow: 1,
-  paddingBottom: "60px",
-  flexDirection: "column",
-  zIndex: 1,
-  width: "100%",
-  backgroundColor: "transparent",
-}));
 
 export default function DashboardContent({
   children,
@@ -42,59 +27,65 @@ export default function DashboardContent({
     setMounted(true);
   }, []);
 
-  const activeLayout = customizer?.activeLayout ?? "vertical";
-  const isLayout = customizer?.isLayout ?? "full";
-  const activeMode = customizer?.activeMode ?? "light";
-  const isCollapse = customizer?.isCollapse ?? "";
-
-  if (!mounted) {
-    return (
-      <MainWrapper suppressHydrationWarning className="mainwrapper">
-        <PageWrapper className="page-wrapper">
-          <Container
-            sx={{
-              pt: "30px",
-              maxWidth: "100%!important",
-            }}
-          >
-            <Box sx={{ minHeight: "calc(100vh - 170px)" }} />
-          </Container>
-        </PageWrapper>
-      </MainWrapper>
-    );
-  }
+  const activeLayout = mounted ? customizer?.activeLayout ?? "vertical" : "vertical";
+  const isLayout = mounted ? customizer?.isLayout ?? "full" : "full";
+  const activeMode = mounted ? customizer?.activeMode ?? "light" : "light";
+  const isCollapse = mounted ? customizer?.isCollapse ?? "" : "";
 
   return (
-    <MainWrapper
+    <div
       suppressHydrationWarning
       className={activeMode === "dark" ? "darkbg mainwrapper" : "mainwrapper"}
+      style={{
+        display: "flex",
+        minHeight: "100vh",
+        width: "100%",
+      }}
     >
-      {activeLayout === "horizontal" ? null : <Sidebar />}
+      {mounted && activeLayout !== "horizontal" ? <Sidebar /> : null}
 
-      <PageWrapper
+      <Box
+        suppressHydrationWarning
         className="page-wrapper"
         sx={{
-          ...(isCollapse === "mini-sidebar" && {
-            [theme.breakpoints.up("lg")]: {
-              ml: "87px",
-            },
-          }),
+          display: "flex",
+          flexGrow: 1,
+          paddingBottom: "60px",
+          flexDirection: "column",
+          zIndex: 1,
+          width: "100%",
+          backgroundColor: "transparent",
+          ...(mounted &&
+            isCollapse === "mini-sidebar" && {
+              [theme.breakpoints.up("lg")]: {
+                ml: "87px",
+              },
+            }),
         }}
       >
-        {activeLayout === "horizontal" ? <HorizontalHeader /> : <Header />}
-        {activeLayout === "horizontal" ? <Navigation /> : null}
+        {mounted ? (
+          activeLayout === "horizontal" ? (
+            <HorizontalHeader />
+          ) : (
+            <Header />
+          )
+        ) : null}
+
+        {mounted && activeLayout === "horizontal" ? <Navigation /> : null}
 
         <Container
           sx={{
             pt: "30px",
-            maxWidth: isLayout === "boxed" ? "lg" : "100%!important",
+            maxWidth: mounted && isLayout === "boxed" ? "lg" : "100%!important",
           }}
         >
-          <Box sx={{ minHeight: "calc(100vh - 170px)" }}>{children}</Box>
+          <Box sx={{ minHeight: "calc(100vh - 170px)" }}>
+            {mounted ? children : null}
+          </Box>
         </Container>
 
-        <Customizer />
-      </PageWrapper>
-    </MainWrapper>
+        {mounted ? <Customizer /> : null}
+      </Box>
+    </div>
   );
 }

@@ -14,7 +14,14 @@ export type ServerAuthState =
     };
 
 function extractUser(raw: any) {
-  return raw?.user || raw?.data?.user || raw?.data?.data?.user || null;
+  return (
+    raw?.user ||
+    raw?.data?.user ||
+    raw?.data?.data?.user ||
+    raw?.data?.data ||
+    raw?.data ||
+    null
+  );
 }
 
 function extractCultureCode(raw: any): string | null {
@@ -51,7 +58,7 @@ export async function getServerAuthState(
       headerStore.get("accept-language")?.split(",")[0] ||
       "tr";
 
-    const response = await fetch(`${baseUrl}/api/v1.0/account/me`, {
+    const response = await fetch(`${baseUrl}/api/v1.0/account/users/me`, {
       method: "GET",
       headers: {
         cookie: cookieHeader,

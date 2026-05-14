@@ -850,7 +850,7 @@ export default function MyListingsView() {
 
                   <Button
                     component={Link}
-                    href="/listings-management/create"
+                    href="/listings-management/create/select-property"
                     variant="contained"
                     startIcon={<IconPlus size={20} stroke={2.5} />}
                     sx={{

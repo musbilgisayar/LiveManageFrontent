@@ -184,7 +184,14 @@ export async function GET(req: NextRequest) {
         headers.set("x-correlation-id", context.correlationId);
         headers.set("vary", VARY_HEADER);
 
+        console.log("[BFF][localization/bundle] upstream payload", {
+          correlationId: context.correlationId,
+          upstreamStatus: context.upstreamStatus,
+          payload,
+        });
+
         if (context.upstreamStatus >= 200 && context.upstreamStatus < 300) {
+
           const bundle = normalizeBundlePayload(payload);
           cacheSet(cacheKey, bundle, CACHE_TTL_SECONDS);
 
@@ -208,7 +215,12 @@ export async function GET(req: NextRequest) {
         }
 
         headers.set("x-audit-log", "failed");
-
+        
+        console.error("[BFF][localization/bundle] upstream not ok", {
+          correlationId: context.correlationId,
+          upstreamStatus: context.upstreamStatus,
+          payload,
+        });
         return {
           body: {
             ok: false,
@@ -230,6 +242,11 @@ export async function GET(req: NextRequest) {
 
     return response;
   }).catch((error: unknown) => {
+    console.error("[BFF][localization/bundle] exception", {
+      cacheKey,
+      correlationId,
+      error,
+    });
     return jsonResponse<BundleData>(
       {
         ok: false,

@@ -22,7 +22,7 @@ export const PANEL_ACCESS_RULES: PanelAccessRule[] = [
   {
     key: "superadmin",
     label: "SuperAdmin Panel",
-    path: "/superadmin/dashboard",
+    path: "/dashboard",
     priority: 100,
     requiredAnyPermissions: [
       "monitoring.summary.view.tenant",
@@ -35,7 +35,7 @@ export const PANEL_ACCESS_RULES: PanelAccessRule[] = [
   {
     key: "admin",
     label: "Admin Panel",
-    path: "/admin/dashboard",
+    path: "/dashboard",
     priority: 90,
     requiredAnyPermissions: [
       "users.view.tenant",
@@ -47,7 +47,7 @@ export const PANEL_ACCESS_RULES: PanelAccessRule[] = [
   {
     key: "manager",
     label: "Manager Panel",
-    path: "/manager/dashboard",
+    path: "/dashboard",
     priority: 80,
     requiredAnyPermissions: [
       "admin.property.applications.view_pending.tenant",
@@ -56,7 +56,7 @@ export const PANEL_ACCESS_RULES: PanelAccessRule[] = [
   {
     key: "user",
     label: "User Panel",
-    path: "/user/dashboard",
+    path: "/dashboard",
     priority: 10,
     requiredAnyPermissions: [
       "account.me.view.self",

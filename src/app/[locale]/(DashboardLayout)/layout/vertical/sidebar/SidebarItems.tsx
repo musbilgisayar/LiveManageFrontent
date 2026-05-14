@@ -27,14 +27,18 @@ const SidebarItems = () => {
   const isMobileSidebar = customizer?.isMobileSidebar ?? false;
   const setIsMobileSidebar = customizer?.setIsMobileSidebar ?? (() => {});
 
-  const { effectivePermissions } = useAuth();
+  const { effectivePermissions, loading, permissionsReady } = useAuth();
 
   const lgUp = useMediaQuery((theme) => theme.breakpoints.up("lg"));
   const hideMenu = lgUp ? isCollapse === "mini-sidebar" && !isSidebarHover : "";
 
   const filteredMenuItems = useMemo(() => {
+    if (loading || !permissionsReady) {
+      return [];
+    }
+
     return filterMenuByPermissions(Menuitems, effectivePermissions);
-  }, [effectivePermissions]);
+  }, [effectivePermissions, loading, permissionsReady]);
 
   return (
     <Box sx={{ px: 3 }}>

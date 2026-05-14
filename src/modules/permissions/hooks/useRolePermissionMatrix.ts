@@ -4,12 +4,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+
 import {
   getPermissionRoles,
   getRolePermissionMatrix,
   syncRolePermissions,
 } from "../services/rolePermission.service";
-
 import type {
   PermissionRoleDto,
   RolePermissionMatrixFilterState,
@@ -23,6 +23,18 @@ const INITIAL_FILTERS: RolePermissionMatrixFilterState = {
   level: "all",
   sensitive: "all",
   assigned: "all",
+};
+
+let rolesRequestPromise: Promise<PermissionRoleDto[]> | null = null;
+
+const getPermissionRolesOnce = async () => {
+  if (!rolesRequestPromise) {
+    rolesRequestPromise = getPermissionRoles().finally(() => {
+      rolesRequestPromise = null;
+    });
+  }
+
+  return rolesRequestPromise;
 };
 
 const cloneMatrix = (
@@ -65,7 +77,7 @@ export function useRolePermissionMatrix() {
       setError(null);
 
       try {
-        const result = await getPermissionRoles();
+        const result = await getPermissionRolesOnce();
 
         if (!alive) return;
 
@@ -78,9 +90,7 @@ export function useRolePermissionMatrix() {
         if (!alive) return;
 
         setError(
-          err instanceof Error
-            ? err.message
-            : "Roles could not be loaded."
+          err instanceof Error ? err.message : "Roles could not be loaded."
         );
       } finally {
         if (alive) {
@@ -224,6 +234,37 @@ export function useRolePermissionMatrix() {
   const resetChanges = () => {
     setMatrixItems(cloneMatrix(initialMatrixItems));
   };
+  const bulkAssignVisible = () => {
+    const visibleCodes = new Set(
+      filteredPermissions
+        .filter((item) => !item.locked)
+        .map((item) => item.permission.code)
+    );
+
+    setMatrixItems((current) =>
+      current.map((item) =>
+        visibleCodes.has(item.permission.code)
+          ? { ...item, assigned: true }
+          : item
+      )
+    );
+  };
+
+  const bulkUnassignVisible = () => {
+    const visibleCodes = new Set(
+      filteredPermissions
+        .filter((item) => !item.locked)
+        .map((item) => item.permission.code)
+    );
+
+    setMatrixItems((current) =>
+      current.map((item) =>
+        visibleCodes.has(item.permission.code)
+          ? { ...item, assigned: false }
+          : item
+      )
+    );
+  };
 
   const saveChanges = async () => {
     if (!selectedRoleId || changedItems.length === 0) return;
@@ -232,16 +273,22 @@ export function useRolePermissionMatrix() {
     setError(null);
 
     try {
-      const assignedPermissionCodes = matrixItems
+      const assignedPermissionIds = matrixItems
         .filter((item) => item.assigned)
-        .map((item) => item.permission.code);
+        .map((item) => item.permission.id)
+        .filter(Boolean);
 
       await syncRolePermissions({
         roleId: selectedRoleId,
-        permissionCodes: assignedPermissionCodes,
+        permissionIds: assignedPermissionIds,
+        reason: "Role permission matrix üzerinden senkronize edildi.",
       });
 
-      setInitialMatrixItems(cloneMatrix(matrixItems));
+      const refreshed = await getRolePermissionMatrix(selectedRoleId);
+      const cloned = cloneMatrix(refreshed.permissions);
+
+      setMatrixItems(cloned);
+      setInitialMatrixItems(cloneMatrix(refreshed.permissions));
     } catch (err) {
       setError(
         err instanceof Error
@@ -252,6 +299,7 @@ export function useRolePermissionMatrix() {
       setIsSaving(false);
     }
   };
+
 
   return {
     roles,
@@ -273,6 +321,10 @@ export function useRolePermissionMatrix() {
     togglePermission,
     resetChanges,
     saveChanges,
+
+    bulkAssignVisible,
+    bulkUnassignVisible,
+
 
     isLoading,
     isSaving,

@@ -753,7 +753,7 @@ export default function UsersTable({ locale }: Props) {
                       <TableCell align="right">
                         <Button
                           component={Link}
-                          href={`/${locale}/superadmin/users/${user.id}`}
+                          href={`/${locale}/users/${user.id}`}
                           variant="outlined"
                           size="small"
                           endIcon={<IconChevronRight size={16} />}

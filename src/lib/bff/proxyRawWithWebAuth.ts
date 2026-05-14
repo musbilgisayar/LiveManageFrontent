@@ -1,400 +1,328 @@
-//src/lib/bff/proxyRawWithWebAuth.ts
-/**
- * Web auth için raw/file odaklı BFF proxy helper.
- *
- * Kapsam:
- * - HttpOnly cookie + BFF session tabanlı web auth
- * - FormData upload
- * - file download
- * - binary / blob / pdf / excel / zip
- * - 401 → refresh → retry
- * - tenant + correlation-id + language forwarding
- *
- * Bilinçli sınırlar:
- * - JSON response normalize etmez
- * - response body'yi ham/raw geçirir
- * - mobile bearer-first auth için kullanılmaz
- */
+// src/lib/bff/proxyRawWithWebAuth.ts
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenant } from "./resolveTenant";
-const BACKEND_BASE =
-  process.env.BACKEND_BASE ??
-  process.env.BACKEND_URL ??
-  "https://localhost:5002";
+import {
+  DEFAULT_RAW_TIMEOUT_MS,
+  type WebProxyMethod,
+  resolveBackendUrl,
+  resolveCorrelationId,
+  withTimeout,
+  buildWebAuthHeaders,
+  tryRefreshWebSession,
+  filterProxyResponseHeaders,
+  isAbortLikeError,
+  buildMergedRetryHeaders,
+  shouldProactivelyRefreshAccessToken,
+  extractSetCookies,
+  mergeCookie,
+} from "./webAuthProxyCore";
+import { createLogger } from "./logger";
 
-const DEFAULT_TIMEOUT_MS = 30000;
-
-type WebProxyMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "HEAD"
-  | "OPTIONS";
-
-type ProxyRawOptions = {
+export type ProxyRawOptions = {
   url: string;
   method?: WebProxyMethod;
   body?: BodyInit | null;
   timeoutMs?: number;
   extraHeaders?: HeadersInit;
+  responseHeaders?: HeadersInit;
   logLabel?: string;
+  /** Disable proactive refresh for this request */
+  disableProactiveRefresh?: boolean;
+  /** Disable retry on 401 */
+  disableRetryOn401?: boolean;
+  /** Stream response instead of buffering (for large files) */
+  streamResponse?: boolean;
 };
 
- 
+export type ProxyRawResult = Promise<NextResponse>;
 
-function resolveCorrelationId(req: NextRequest) {
-  return req.headers.get("x-correlation-id") ?? crypto.randomUUID();
-}
+const MAX_BUFFER_SIZE_BYTES = 500 * 1024 * 1024; // 500MB
 
-function resolveUrl(url: string) {
-  if (/^https?:\/\//i.test(url)) return url;
-  return new URL(url.startsWith("/") ? url : `/${url}`, BACKEND_BASE).toString();
-}
-
-function withTimeout(timeoutMs: number) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-
-  return {
-    signal: controller.signal,
-    cleanup: () => clearTimeout(id),
-  };
-}
-
-function extractSetCookies(headers: Headers): string[] {
-  const h = headers as Headers & { getSetCookie?: () => string[] };
-
-  if (typeof h.getSetCookie === "function") {
-    try {
-      return h.getSetCookie();
-    } catch {}
-  }
-
-  const raw = headers.get("set-cookie");
-  return raw ? [raw] : [];
-}
-
-function mergeCookie(original: string | null, setCookies: string[]) {
-  const map = new Map<string, string>();
-
-  if (original) {
-    original.split(";").forEach((c) => {
-      const trimmed = c.trim();
-      if (!trimmed) return;
-
-      const idx = trimmed.indexOf("=");
-      if (idx <= 0) return;
-
-      const name = trimmed.slice(0, idx).trim();
-      const value = trimmed.slice(idx + 1).trim();
-      if (name) map.set(name, value);
-    });
-  }
-
-  for (const sc of setCookies) {
-    const first = sc.split(";")[0]?.trim();
-    if (!first) continue;
-
-    const idx = first.indexOf("=");
-    if (idx <= 0) continue;
-
-    const name = first.slice(0, idx).trim();
-    const value = first.slice(idx + 1).trim();
-    if (name) map.set(name, value);
-  }
-
-  return Array.from(map.entries())
-    .map(([k, v]) => `${k}=${v}`)
-    .join("; ");
-}
-
-function applyHeaders(target: Headers, source?: HeadersInit) {
-  if (!source) return;
-
-  if (source instanceof Headers) {
-    source.forEach((value, key) => target.set(key, value));
-    return;
-  }
-
-  if (Array.isArray(source)) {
-    for (const [key, value] of source) {
-      target.set(key, value);
-    }
-    return;
-  }
-
-  Object.entries(source).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      target.set(key, String(value));
-    }
-  });
-}
-
-function buildHeaders(req: NextRequest, extra?: HeadersInit) {
-  const headers = new Headers();
-
-  const accept = req.headers.get("accept");
-  if (accept) {
-    headers.set("accept", accept);
-  }
-
-  // Web auth standardı: cookie-first
-  const cookie = req.headers.get("cookie");
-  if (cookie) {
-    headers.set("cookie", cookie);
-  } else {
-    const auth = req.headers.get("authorization");
-    if (auth) headers.set("authorization", auth);
-  }
-
-  const lang = req.headers.get("accept-language");
-  if (lang) headers.set("accept-language", lang);
-
-  headers.set("x-tenant-key", resolveTenant(req));
-  headers.set("x-correlation-id", resolveCorrelationId(req));
-
-  applyHeaders(headers, extra);
-
-  return headers;
-}
-
-async function tryRefresh(req: NextRequest, timeoutMs: number) {
-  const { signal, cleanup } = withTimeout(timeoutMs);
-
-  try {
-    const res = await fetch(`${req.nextUrl.origin}/api/v1.0/account/refresh`, {
-      method: "POST",
-      headers: {
-        cookie: req.headers.get("cookie") || "",
-        "x-tenant-key": resolveTenant(req),
-        "x-correlation-id": resolveCorrelationId(req),
-        ...(req.headers.get("accept-language")
-          ? { "accept-language": req.headers.get("accept-language")! }
-          : {}),
-      },
-      cache: "no-store",
-      signal,
-    });
-
-    return {
-      ok: res.ok,
-      cookies: extractSetCookies(res.headers),
-      status: res.status,
-    };
-  } catch {
-    return {
-      ok: false,
-      cookies: [],
-      status: 0,
-    };
-  } finally {
-    cleanup();
-  }
-}
-
-function shouldSkipResponseHeader(key: string) {
-  const lower = key.toLowerCase();
-
-  return [
-    "content-length",
-    "connection",
-    "transfer-encoding",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailer",
-    "upgrade",
-    "set-cookie",
-  ].includes(lower);
-}
-
-function filterHeaders(upstream: Response, refreshCookies: string[]) {
-  const headers = new Headers();
-
-  upstream.headers.forEach((value, key) => {
-    if (shouldSkipResponseHeader(key)) return;
-    headers.set(key, value);
-  });
-
-  for (const cookie of extractSetCookies(upstream.headers)) {
-    headers.append("set-cookie", cookie);
-  }
-
-  for (const cookie of refreshCookies) {
-    headers.append("set-cookie", cookie);
-  }
-
-  return headers;
-}
-
-function shouldForwardContentType(body: BodyInit | null | undefined) {
+function shouldForwardContentType(body: BodyInit | null | undefined): boolean {
   if (body === undefined || body === null) return false;
   if (body instanceof FormData) return false;
+  if (body instanceof URLSearchParams) return false;
   return true;
+}
+
+function getBodySize(body: BodyInit | null | undefined): number | null {
+  if (!body) return null;
+  if (typeof body === "string") return Buffer.byteLength(body, "utf8");
+  if (body instanceof ArrayBuffer) return body.byteLength;
+  if (body instanceof Blob) return body.size;
+  if (body instanceof Buffer) return body.length;
+  if (body instanceof ReadableStream) return null; // Cannot determine
+  return null;
+}
+
+async function executeWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 2,
+  baseDelayMs: number = 100
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * Math.pow(2, attempt)));
+      }
+    }
+  }
+  throw lastError;
+}
+
+function shouldSkipBufferLimit(contentType: string): boolean {
+  const skipPatterns = ["video/", "audio/", "application/zip", "application/x-tar", "application/x-gzip"];
+  return skipPatterns.some((pattern) => contentType.includes(pattern));
+}
+
+async function readStreamToBuffer(stream: ReadableStream<Uint8Array>, contentType: string): Promise<ArrayBuffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+
+  try {
+    const shouldLimit = !shouldSkipBufferLimit(contentType);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      if (value) {
+        totalSize += value.length;
+        if (shouldLimit && totalSize > MAX_BUFFER_SIZE_BYTES) {
+          throw new Error(`Response exceeds buffer limit: ${totalSize} > ${MAX_BUFFER_SIZE_BYTES}`);
+        }
+        chunks.push(value);
+      }
+    }
+
+    const combined = new Uint8Array(totalSize);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return combined.buffer;
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export async function proxyRawWithWebAuth(
   req: NextRequest,
   options: ProxyRawOptions
-) {
+): ProxyRawResult {
   const method = options.method ?? "GET";
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_RAW_TIMEOUT_MS;
   const logLabel = options.logLabel ?? "ProxyRawWithWebAuth";
-  const targetUrl = resolveUrl(options.url);
+  const targetUrl = resolveBackendUrl(options.url);
   const correlationId = resolveCorrelationId(req);
+  const logger = createLogger(logLabel, correlationId);
 
-  if (process.env.NODE_ENV !== "production") {
-    console.info(`[BFF][${logLabel}][IN]`, {
-      correlationId,
-      method,
-      targetUrl,
-      tenantKey: resolveTenant(req),
-      hasCookie: !!req.headers.get("cookie"),
-      hasAuthorization: !!req.headers.get("authorization"),
-      hasBody: options.body !== undefined && options.body !== null,
-      bodyType:
-        options.body instanceof FormData
-          ? "FormData"
-          : options.body
-            ? typeof options.body
-            : "none",
-      timeoutMs,
-    });
-  }
+  const skipProactiveRefresh = options.disableProactiveRefresh ?? false;
+  const skipRetryOn401 = options.disableRetryOn401 ?? false;
+
+  const bodySize = getBodySize(options.body);
+  logger.debug("Request started", {
+    method,
+    targetUrl,
+    tenantKey: resolveTenant(req),
+    hasCookie: !!req.headers.get("cookie"),
+    hasBody: options.body !== undefined && options.body !== null,
+    bodySize: bodySize ? `${bodySize} bytes` : "unknown",
+    timeoutMs,
+    skipProactiveRefresh,
+    skipRetryOn401,
+    streamResponse: options.streamResponse,
+  });
 
   try {
-    let headers = buildHeaders(req, options.extraHeaders);
+    let headers = buildWebAuthHeaders(req, correlationId, {
+      extraHeaders: options.extraHeaders,
+      defaultAccept: "*/*", // Accept anything for raw endpoints
+      includeAuthorization: true,
+    });
 
+    // Forward content-type only for non-multipart bodies
     if (shouldForwardContentType(options.body) && req.headers.get("content-type")) {
       headers.set("content-type", req.headers.get("content-type")!);
     }
 
-    const { signal, cleanup } = withTimeout(timeoutMs);
-
     let upstream: Response;
-    try {
-      upstream = await fetch(targetUrl, {
-        method,
-        headers,
-        body: options.body ?? undefined,
-        cache: "no-store",
-        signal,
-      });
-    } finally {
-      cleanup();
-    }
-
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`[BFF][${logLabel}][UPSTREAM_FIRST]`, {
-        correlationId,
-        status: upstream.status,
-      });
-    }
-
+    let retryUsed = false;
     let refreshCookies: string[] = [];
 
-    if (upstream.status === 401) {
-      const refresh = await tryRefresh(req, timeoutMs);
+    // Proactive refresh for long-running raw operations (uploads/downloads)
+    if (!skipProactiveRefresh && shouldProactivelyRefreshAccessToken(req)) {
+      const refresh = await executeWithRetry(() =>
+        tryRefreshWebSession(req, timeoutMs, correlationId, `${logLabel}.PROACTIVE`)
+      );
 
-      if (refresh.ok) {
+      if (refresh.ok && refresh.cookies.length > 0) {
         refreshCookies = refresh.cookies;
-
-        const mergedCookie = mergeCookie(
-          req.headers.get("cookie"),
-          refreshCookies
-        );
-
-        headers = buildHeaders(req, options.extraHeaders);
-
-        if (mergedCookie) {
-          headers.set("cookie", mergedCookie);
-        }
+        headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
+          extraHeaders: options.extraHeaders,
+          defaultAccept: "*/*",
+        });
 
         if (shouldForwardContentType(options.body) && req.headers.get("content-type")) {
           headers.set("content-type", req.headers.get("content-type")!);
         }
 
-        const retryTimeout = withTimeout(timeoutMs);
-        try {
-          upstream = await fetch(targetUrl, {
-            method,
-            headers,
-            body: options.body ?? undefined,
-            cache: "no-store",
-            signal: retryTimeout.signal,
-          });
-        } finally {
-          retryTimeout.cleanup();
-        }
-
-        if (process.env.NODE_ENV !== "production") {
-          console.info(`[BFF][${logLabel}][UPSTREAM_RETRY]`, {
-            correlationId,
-            status: upstream.status,
-            retryUsed: true,
-            refreshCookieCount: refreshCookies.length,
-          });
-        }
+        logger.debug("Proactive refresh applied", { refreshCookieCount: refreshCookies.length });
       }
     }
 
-    const responseHeaders = filterHeaders(upstream, refreshCookies);
+    // Initial request
+    {
+      const { signal, cleanup } = withTimeout(timeoutMs);
+      try {
+        upstream = await fetch(targetUrl, {
+          method,
+          headers,
+          body: options.body ?? undefined,
+          cache: "no-store",
+          signal,
+        });
+      } finally {
+        cleanup();
+      }
+    }
 
+    logger.debug("Upstream first response", { status: upstream.status });
+
+    const alreadyRefreshedProactively = refreshCookies.length > 0;
+
+    // 401 retry with refresh
+    if (!skipRetryOn401 && upstream.status === 401 && !alreadyRefreshedProactively) {
+      const refresh = await executeWithRetry(() =>
+        tryRefreshWebSession(req, timeoutMs, correlationId, logLabel)
+      );
+
+      if (!refresh.ok) {
+        logger.warn("Session expired - refresh failed", { upstreamStatus: upstream.status });
+        return NextResponse.json(
+          {
+            ok: false,
+            message: "auth.session_expired",
+            userMessage: "Oturum süreniz doldu. Lütfen tekrar giriş yapın.",
+            correlationId,
+            data: { reason: "SessionExpired", redirectTo: "/login" },
+          },
+          { status: 401, headers: filterProxyResponseHeaders(upstream, []) }
+        );
+      }
+
+      refreshCookies = refresh.cookies;
+      retryUsed = true;
+
+      headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
+        extraHeaders: options.extraHeaders,
+        defaultAccept: "*/*",
+      });
+
+      if (shouldForwardContentType(options.body) && req.headers.get("content-type")) {
+        headers.set("content-type", req.headers.get("content-type")!);
+      }
+
+      const retryTimeout = withTimeout(timeoutMs);
+      try {
+        upstream = await fetch(targetUrl, {
+          method,
+          headers,
+          body: options.body ?? undefined,
+          cache: "no-store",
+          signal: retryTimeout.signal,
+        });
+      } finally {
+        retryTimeout.cleanup();
+      }
+
+      logger.debug("Upstream retry response", { status: upstream.status, retryUsed: true });
+    }
+
+    const responseHeaders = filterProxyResponseHeaders(upstream, refreshCookies);
+    logger.debug("Final response", { retryUsed, refreshCookieCount: refreshCookies.length });
+
+    // No content responses
     if (upstream.status === 204 || upstream.status === 205) {
+      if (options.responseHeaders) {
+        const extra = new Headers(options.responseHeaders);
+        extra.forEach((value, key) => responseHeaders.set(key, value));
+      }
       return new NextResponse(null, {
         status: upstream.status,
         headers: responseHeaders,
       });
     }
 
-    const contentType = upstream.headers.get("content-type") ?? "";
-    const arrayBuffer = await upstream.arrayBuffer();
-
+    const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
     if (!responseHeaders.has("content-type") && contentType) {
       responseHeaders.set("content-type", contentType);
     }
 
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`[BFF][${logLabel}][OUT]`, {
-        correlationId,
-        finalStatus: upstream.status,
-        contentType,
-        byteLength: arrayBuffer.byteLength,
+    if (options.responseHeaders) {
+      const extra = new Headers(options.responseHeaders);
+      extra.forEach((value, key) => responseHeaders.set(key, value));
+    }
+
+    // Streaming response for large files
+    if (options.streamResponse && upstream.body) {
+      logger.debug("Streaming response", { contentType });
+      return new NextResponse(upstream.body, {
+        status: upstream.status,
+        headers: responseHeaders,
       });
     }
+
+    // Buffered response (default)
+    const arrayBuffer = await readStreamToBuffer(upstream.body!, contentType);
+
+    logger.debug("Response complete", {
+      status: upstream.status,
+      contentType,
+      byteLength: arrayBuffer.byteLength,
+    });
 
     return new NextResponse(arrayBuffer, {
       status: upstream.status,
       headers: responseHeaders,
     });
-  } catch (err: any) {
-    const isTimeout =
-      err?.name === "AbortError" || err?.message?.includes("abort");
+  } catch (err: unknown) {
+    const isTimeout = isAbortLikeError(err);
+    const isBufferOverflow = err instanceof Error && err.message.includes("exceeds buffer limit");
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
 
-    if (process.env.NODE_ENV !== "production") {
-      console.error(`[BFF][${logLabel}][EX]`, {
-        correlationId,
-        targetUrl,
-        method,
-        error: err instanceof Error ? err.message : "Unknown error",
-        timeoutMs,
-      });
-    }
+    logger.error("Proxy raw error", {
+      targetUrl,
+      method,
+      error: errorMessage,
+      isTimeout,
+      isBufferOverflow,
+      timeoutMs,
+    });
+
+    const status = isTimeout ? 504 : isBufferOverflow ? 413 : 500;
+    const message = isTimeout ? "bff.timeout" : isBufferOverflow ? "bff.response_too_large" : "bff.proxy_error";
+    const userMessage = isTimeout
+      ? "İstek zaman aşımına uğradı."
+      : isBufferOverflow
+        ? "Yanıt çok büyük."
+        : "Beklenmeyen bir hata oluştu.";
 
     return NextResponse.json(
       {
         ok: false,
-        message: isTimeout ? "Timeout" : "Proxy raw error",
-        userMessage: isTimeout
-          ? "İstek zaman aşımına uğradı."
-          : "Beklenmeyen bir hata oluştu.",
+        message,
+        userMessage,
         correlationId,
       },
-      { status: isTimeout ? 504 : 500 }
+      { status }
     );
   }
 }
