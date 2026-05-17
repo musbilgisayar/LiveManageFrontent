@@ -2,6 +2,7 @@ import {
   LocalizationCreateKeyRequest,
   LocalizationLanguageItem,
   LocalizationTranslationDto,
+  LocalizationValueLookupResult,
 } from "../types/LocalizationManager.types";
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -65,6 +66,7 @@ console.log(
 );
   return items.map((item: any) => ({
     ...item,
+    namespace: item.namespace ?? item.ns ?? item.Namespace ?? item.Ns ?? null,
     key: item.key ?? item.Key,
     value: item.value ?? item.Value ?? "",
     cultureCode:
@@ -96,4 +98,76 @@ export async function createLocalizationKeyBatch(
   });
 
   await readJson(res);
+}
+
+function normalizeLookupItem(
+  item: any,
+  index: number
+): LocalizationValueLookupResult {
+  const rawKey = String(item.key ?? item.Key ?? "");
+  const namespace = String(
+    item.namespace ??
+      item.ns ??
+      item.Namespace ??
+      item.Ns ??
+      (rawKey.includes(":") ? rawKey.split(":")[0] : "")
+  );
+  const key =
+    namespace && rawKey.startsWith(`${namespace}:`)
+      ? rawKey.slice(namespace.length + 1)
+      : rawKey;
+  const fullKey = namespace && key ? `${namespace}:${key}` : rawKey;
+  const cultureCode = String(
+    item.cultureCode ??
+      item.culture ??
+      item.CultureCode ??
+      item.Culture ??
+      ""
+  );
+  const value = String(item.value ?? item.Value ?? "");
+
+  return {
+    id: `${fullKey || "key"}:${cultureCode || "culture"}:${index}`,
+    namespace,
+    key,
+    fullKey,
+    cultureCode,
+    value,
+  };
+}
+
+export async function searchLocalizationKeysByValue(params: {
+  text: string;
+  cultures: string[];
+  namespace?: string;
+}): Promise<LocalizationValueLookupResult[]> {
+  const text = params.text.trim();
+  const namespace = params.namespace?.trim();
+  const searchParams = new URLSearchParams();
+
+  if (namespace) {
+    searchParams.set("namespace", namespace);
+  }
+
+  searchParams.set("contains", text);
+
+  for (const culture of params.cultures) {
+    searchParams.append("cultures", culture);
+  }
+
+  const res = await fetch(
+    `/api/v1.0/localization/manager/search?${searchParams.toString()}`,
+    {
+      method: "GET",
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    }
+  );
+
+  const payload = await readJson<any>(res);
+  const items = payload?.data?.data ?? payload?.data ?? payload ?? [];
+
+  return Array.isArray(items)
+    ? items.map((item, index) => normalizeLookupItem(item, index))
+    : [];
 }

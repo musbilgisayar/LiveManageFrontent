@@ -8,6 +8,7 @@ export interface LocalizationLanguageItem {
 }
 
 export interface LocalizationTranslationDto {
+  namespace?: string | null;
   key: string;
   cultureCode: string;
   value?: string | null;
@@ -26,6 +27,15 @@ export interface LocalizationCreateKeyRequest {
   key: string;
   values: Record<string, string>;
   reason?: string | null;
+}
+
+export interface LocalizationValueLookupResult {
+  id: string;
+  namespace: string;
+  key: string;
+  fullKey: string;
+  cultureCode: string;
+  value: string;
 }
 
 export interface LocalizationManagerToastState {

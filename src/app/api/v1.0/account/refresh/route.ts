@@ -14,17 +14,18 @@ import {
   withTimeout,
 } from "@/lib/bff/webAuthProxyCore";
 import { createLogger } from "@/lib/bff/logger";
+import {
+  ACCESS_TOKEN_COOKIE_NAMES,
+  REFRESH_TOKEN_COOKIE_NAMES,
+  appendExpiredAuthCookies,
+  createHttpOnlyCookie,
+  readFirstCookieValue,
+} from "@/lib/bff/authCookies";
 
 const REFRESH_TIMEOUT_MS = parseInt(
   process.env.BFF_REFRESH_TIMEOUT_MS || "10000",
   10
 );
-
-const ACCESS_TOKEN_COOKIE_NAME =
-  process.env.BFF_ACCESS_TOKEN_COOKIE_NAME || "accessToken";
-
-const REFRESH_TOKEN_COOKIE_NAME =
-  process.env.BFF_REFRESH_TOKEN_COOKIE_NAME || "RefreshToken";
 
 const DEVICE_ID_COOKIE_NAME = "lm.did";
 
@@ -61,35 +62,6 @@ interface SuccessResponse {
   correlationId: string;
 }
 
-function createHttpOnlyCookie(
-  name: string,
-  value: string,
-  expiresAt?: string | null,
-  options?: {
-    path?: string;
-    sameSite?: "Lax" | "Strict" | "None";
-    secure?: boolean;
-  }
-): string {
-  const parts = [
-    `${name}=${value}`,
-    `Path=${options?.path ?? "/"}`,
-    "HttpOnly",
-    options?.secure !== false ? "Secure" : "",
-    `SameSite=${options?.sameSite ?? "Lax"}`,
-  ].filter(Boolean);
-
-  if (expiresAt) {
-    const expires = new Date(expiresAt);
-
-    if (!Number.isNaN(expires.getTime())) {
-      parts.push(`Expires=${expires.toUTCString()}`);
-    }
-  }
-
-  return parts.join("; ");
-}
-
 function safeJsonParse<T>(text: string): T | null {
   if (!text) return null;
 
@@ -113,11 +85,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantResolution = resolveTenantDetailed(req);
   const upstreamUrl = resolveBackendUrl("/api/v1.0/account/refresh");
 
-  const currentAccessToken =
-    req.cookies.get(ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
+  const currentAccessToken = readFirstCookieValue(req, ACCESS_TOKEN_COOKIE_NAMES);
 
-  const currentRefreshToken =
-    req.cookies.get(REFRESH_TOKEN_COOKIE_NAME)?.value ?? null;
+  const currentRefreshToken = readFirstCookieValue(req, REFRESH_TOKEN_COOKIE_NAMES);
 
   const currentDeviceId = req.cookies.get(DEVICE_ID_COOKIE_NAME)?.value ?? null;
 
@@ -168,13 +138,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       signal,
     });
 
-    const responseHeaders = filterProxyResponseHeaders(upstream, []);
     const responseText = await upstream.text();
     const upstreamSetCookies = extractSetCookies(upstream.headers);
-
-    for (const cookie of upstreamSetCookies) {
-      responseHeaders.append("set-cookie", cookie);
-    }
+    const responseHeaders = filterProxyResponseHeaders(upstream, []);
 
     const parsedBody = safeJsonParse<RefreshApiResponse>(responseText);
     const body = validateRefreshResponse(parsedBody) ? parsedBody : null;
@@ -213,9 +179,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       responseHeaders.append(
         "set-cookie",
         createHttpOnlyCookie(
-          ACCESS_TOKEN_COOKIE_NAME,
+          ACCESS_TOKEN_COOKIE_NAMES[0],
           newAccessToken,
-          accessTokenExpiresAt
+          null
         )
       );
     }
@@ -224,7 +190,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       responseHeaders.append(
         "set-cookie",
         createHttpOnlyCookie(
-          REFRESH_TOKEN_COOKIE_NAME,
+          REFRESH_TOKEN_COOKIE_NAMES[0],
           newRefreshToken,
           refreshTokenExpiresAt
         )
@@ -238,12 +204,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       !!newRefreshToken;
 
     if (!isSuccess) {
+      const expiredCookieCount = appendExpiredAuthCookies(responseHeaders);
+
       logger.warn("Refresh failed", {
         upstreamStatus: upstream.status,
         bodyOk: body?.ok,
         hasAccessToken: !!newAccessToken,
         hasRefreshToken: !!newRefreshToken,
         hasDeviceId: !!currentDeviceId,
+        expiredCookieCount,
       });
 
       return NextResponse.json<ErrorResponse>(

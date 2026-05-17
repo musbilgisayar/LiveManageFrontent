@@ -96,13 +96,14 @@ export type AdminUserDetailDto = {
 
 export type UserDetailTabKey =
   | "overview"
-  | "account"
+  | "identity"
   | "contact"
-  | "verification"
-  | "security"
-  | "professional"
   | "preferences"
-  | "lifecycle";
+  | "organization"
+  | "security"
+  | "permissions"
+  | "audit"
+  | "system";
 
 export type UserDetailRole =
   | "superadmin"

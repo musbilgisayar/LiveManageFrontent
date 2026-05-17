@@ -99,63 +99,93 @@ export function normalizeUserDetailResponse(input: unknown): AdminUserDetailDto 
   const preferences = isObject(input.preferences) ? input.preferences : {};
   const audit = isObject(input.audit) ? input.audit : {};
   const roles = Array.isArray(input.roles) ? input.roles.filter(isObject) : [];
+  const nestedUser = isObject(input.user) ? input.user : {};
+  const firstName = str(identity.firstName || input.firstName);
+  const lastName = str(identity.lastName || input.lastName);
+  const fullName =
+    str(identity.fullName || input.fullName || input.displayName) ||
+    [firstName, lastName].filter(Boolean).join(" ").trim();
 
   return {
     identity: {
-  id: str(identity.id),
-  userName: str(identity.userName),
-  normalizedUserName: str(identity.normalizedUserName),
-  firstName: str(identity.firstName),
-  lastName: str(identity.lastName),
-  middleName: str(identity.middleName),
-  fullName: str(identity.fullName),
-  isVerified: bool(identity.isVerified),
-  isSuspended: bool(identity.isSuspended),
-  suspensionReason: str(identity.suspensionReason),
-},
+      id: str(
+        identity.id ||
+          input.appUserId ||
+          input.applicationUserId ||
+          input.userId ||
+          nestedUser.id ||
+          nestedUser.userId ||
+          nestedUser.appUserId ||
+          nestedUser.applicationUserId ||
+          input.id
+      ),
+      userName: str(identity.userName || input.userName),
+      normalizedUserName: str(
+        identity.normalizedUserName || input.normalizedUserName
+      ),
+      firstName,
+      lastName,
+      middleName: str(identity.middleName || input.middleName),
+      fullName,
+      isVerified: bool(identity.isVerified ?? input.isVerified),
+      isSuspended: bool(identity.isSuspended ?? input.isSuspended),
+      suspensionReason: str(identity.suspensionReason || input.suspensionReason),
+    },
 
     contact: {
-      email: str(contact.email),
-      phoneNumber: str(contact.phoneNumber),
-      phoneCountryCode: str(contact.phoneCountryCode),
+      email: str(contact.email || input.email || input.emailForNotifications),
+      phoneNumber: str(contact.phoneNumber || input.phoneNumber),
+      phoneCountryCode: str(contact.phoneCountryCode || input.phoneCountryCode),
+      secondaryPhoneNumber: str(contact.secondaryPhoneNumber || input.secondaryPhoneNumber),
+      emailForNotifications: str(contact.emailForNotifications || input.emailForNotifications),
+      profilePhotoUrl: str(contact.profilePhotoUrl || input.profilePhotoUrl),
+      coverPhotoUrl: str(contact.coverPhotoUrl || input.coverPhotoUrl),
     },
 
     verification: {
-      isEmailConfirmed: bool(verification.isEmailConfirmed),
-      isPhoneConfirmed: bool(verification.isPhoneConfirmed),
-      isVerified: bool(verification.isVerified),
-      emailConfirmedAt: str(verification.emailConfirmedAt),
+      isEmailConfirmed: bool(verification.isEmailConfirmed ?? input.isEmailConfirmed),
+      isPhoneConfirmed: bool(verification.isPhoneConfirmed ?? input.isPhoneConfirmed),
+      isVerified: bool(verification.isVerified ?? input.isVerified),
+      emailConfirmedAt: str(verification.emailConfirmedAt || input.emailConfirmedAt),
+      phoneConfirmedAt: str(verification.phoneConfirmedAt || input.phoneConfirmedAt),
     },
 
     security: {
-      twoFactorEnabled: bool(security.twoFactorEnabled),
-      lockoutEnabled: bool(security.lockoutEnabled),
+      twoFactorEnabled: bool(security.twoFactorEnabled ?? input.twoFactorEnabled),
+      lockoutEnabled: bool(security.lockoutEnabled ?? input.lockoutEnabled),
+      lockoutEnd: str(security.lockoutEnd || input.lockoutEnd),
       accessFailedCount: num(security.accessFailedCount),
       passwordAlgorithm: str(security.passwordAlgorithm),
       hasPassword: bool(security.hasPassword),
       hasSalt: bool(security.hasSalt),
       isAuthenticatorConfigured: bool(security.isAuthenticatorConfigured),
-      isSuspended: bool(security.isSuspended),
+      isSuspended: bool(security.isSuspended ?? input.isSuspended),
+      suspensionReason: str(security.suspensionReason || input.suspensionReason),
     },
 
     profile: {
-      gender: str(profile.gender),
-      tenantId: str(profile.tenantId),
+      dateOfBirth: str(profile.dateOfBirth || input.dateOfBirth),
+      gender: str(profile.gender || input.gender),
+      jobTitle: str(profile.jobTitle || input.jobTitle),
+      companyName: str(profile.companyName || input.companyName),
+      department: str(profile.department || input.department),
+      professionalSummary: str(profile.professionalSummary || input.professionalSummary),
+      tenantId: str(profile.tenantId || input.tenantId),
     },
 
     preferences: {
-      cultureCode: str(preferences.cultureCode),
-      timeZone: str(preferences.timeZone),
-      preferredCurrency: str(preferences.preferredCurrency),
-      dateFormat: str(preferences.dateFormat),
-      timeFormat: str(preferences.timeFormat),
-      isPublic: bool(preferences.isPublic),
-      visibilityLevel: str(preferences.visibilityLevel),
+      cultureCode: str(preferences.cultureCode || input.cultureCode),
+      timeZone: str(preferences.timeZone || input.timeZone),
+      preferredCurrency: str(preferences.preferredCurrency || input.preferredCurrency),
+      dateFormat: str(preferences.dateFormat || input.dateFormat),
+      timeFormat: str(preferences.timeFormat || input.timeFormat),
+      isPublic: bool(preferences.isPublic ?? input.isPublic),
+      visibilityLevel: str(preferences.visibilityLevel || input.visibilityLevel),
     },
 
     audit: {
       createdAt: str(audit.createdAt),
-      updatedAt: str(audit.updatedAt),
+      updatedAt: str(audit.updatedAt || input.lastUpdatedAt || input.updatedAt),
       isDeleted: bool(audit.isDeleted),
     },
 

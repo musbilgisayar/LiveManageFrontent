@@ -10,7 +10,9 @@ import {
   useTheme,
 } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
-import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconSend } from "@tabler/icons-react";
+
+import { useI18nNs } from "@/app/context/i18nContext";
 
 type WizardFooterProps = {
   activeStepIndex: number;
@@ -25,6 +27,8 @@ type WizardFooterProps = {
   onExistingApplicationOpen?: () => void;
 };
 
+const NS = "property:managementApplication.create.footer";
+
 export default function WizardFooter({
   activeStepIndex,
   totalSteps,
@@ -38,25 +42,66 @@ export default function WizardFooter({
   onExistingApplicationOpen,
 }: WizardFooterProps) {
   const theme = useTheme<Theme>();
+  const { t } = useI18nNs(["property"]);
+
   const isLastStep = activeStepIndex === totalSteps - 1;
   const canGoBack = activeStepIndex > 0;
 
+  const tr = (key: string, fallback: string) => {
+    const fullKey = `${NS}.${key}`;
+    const value = t(fullKey);
+    return value && value !== fullKey ? value : fallback;
+  };
+
+  const stepCounterText = tr(
+    "stepCounter",
+    "Adım {current}/{total}",
+  )
+    .replace("{current}", String(activeStepIndex + 1))
+    .replace("{total}", String(totalSteps));
+
   return (
-    <Box sx={{ px: { xs: 2, md: 4 }, py: { xs: 2.25, md: 3 } }}>
+    <Box
+      sx={{
+        px: { xs: 2, md: 4 },
+        py: { xs: 2.25, md: 3 },
+        bgcolor: alpha(theme.palette.background.default, 0.24),
+      }}
+    >
       <Stack spacing={1.5}>
         {submitMessage && (
           <Alert
             severity={existingApplicationId ? "warning" : "info"}
-            sx={{ borderRadius: 3 }}
+            sx={{
+              borderRadius: 3.5,
+              border: `1px solid ${alpha(
+                existingApplicationId
+                  ? theme.palette.warning.main
+                  : theme.palette.info.main,
+                0.18,
+              )}`,
+              boxShadow: `0 10px 28px ${alpha(
+                theme.palette.common.black,
+                0.04,
+              )}`,
+            }}
             action={
               existingApplicationId ? (
                 <Button
                   color="inherit"
                   size="small"
                   onClick={onExistingApplicationOpen}
-                  sx={{ fontWeight: 900, whiteSpace: "nowrap" }}
+                  sx={{
+                    fontWeight: 950,
+                    whiteSpace: "nowrap",
+                    borderRadius: 999,
+                    textTransform: "none",
+                  }}
                 >
-                  Mevcut başvuruyu görüntüle
+                  {tr(
+                    "viewExistingApplication",
+                    "Mevcut başvuruyu görüntüle",
+                  )}
                 </Button>
               ) : undefined
             }
@@ -81,11 +126,16 @@ export default function WizardFooter({
               minWidth: 140,
               borderRadius: 999,
               textTransform: "none",
-              fontWeight: 900,
-              borderColor: alpha(theme.palette.primary.main, 0.18),
+              fontWeight: 950,
+              borderColor: alpha(theme.palette.primary.main, 0.2),
+              bgcolor: alpha(theme.palette.background.paper, 0.72),
+              "&:hover": {
+                borderColor: alpha(theme.palette.primary.main, 0.38),
+                bgcolor: alpha(theme.palette.primary.main, 0.04),
+              },
             }}
           >
-            Geri
+            {tr("back", "Geri")}
           </Button>
 
           <Stack
@@ -96,31 +146,50 @@ export default function WizardFooter({
             <Typography
               variant="body2"
               color="text.secondary"
-              sx={{ textAlign: { xs: "center", sm: "left" } }}
+              sx={{
+                textAlign: { xs: "center", sm: "left" },
+                fontWeight: 800,
+              }}
             >
-              Adım {activeStepIndex + 1}/{totalSteps}
+              {stepCounterText}
             </Typography>
 
             <Button
               variant="contained"
-              endIcon={!isLastStep ? <IconArrowRight size={18} /> : undefined}
+              endIcon={
+                isLastStep ? (
+                  <IconSend size={18} />
+                ) : (
+                  <IconArrowRight size={18} />
+                )
+              }
               disabled={(isLastStep && !canSubmit) || isSubmitting}
               onClick={isLastStep ? onSubmit : onNext}
               sx={{
                 height: 52,
-                minWidth: { xs: "100%", sm: 220 },
+                minWidth: { xs: "100%", sm: 230 },
                 borderRadius: 999,
                 textTransform: "none",
                 fontWeight: 950,
                 fontSize: 15,
-                boxShadow: "0 10px 24px rgba(37, 99, 235, 0.22)",
+                boxShadow: `0 14px 30px ${alpha(
+                  theme.palette.primary.main,
+                  0.24,
+                )}`,
+                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                "&:hover": {
+                  boxShadow: `0 18px 38px ${alpha(
+                    theme.palette.primary.main,
+                    0.3,
+                  )}`,
+                },
               }}
             >
               {isLastStep
                 ? isSubmitting
-                  ? "Gönderiliyor..."
-                  : "Başvuruyu Gönder"
-                : "Devam Et"}
+                  ? tr("submitting", "Gönderiliyor...")
+                  : tr("submit", "Başvuruyu Gönder")
+                : tr("next", "Devam Et")}
             </Button>
           </Stack>
         </Stack>

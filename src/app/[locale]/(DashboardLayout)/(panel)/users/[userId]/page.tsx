@@ -1,4 +1,4 @@
-//src/app/[locale]/(DashboardLayout)/(panel)/superadmin/users/[userId]/page.tsx
+//src/app/[locale]/(DashboardLayout)/(panel)/users/[userId]/page.tsx
 import UserDetailView from "@/modules/users/pages/UserDetailView";
 
 type Props = {
@@ -11,5 +11,5 @@ type Props = {
 export default async function Page({ params }: Props) {
   const { locale, userId } = await params;
 
-  return <UserDetailView locale={locale} userId={userId} />;
+return <UserDetailView locale={locale} mode="admin" userId={userId} />;
 }

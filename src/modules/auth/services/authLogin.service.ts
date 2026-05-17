@@ -2,6 +2,8 @@
 
 import { postWebFetcher } from "@/utils/fetchers.web.client";
 import type {
+  GoogleLoginRequestDto,
+  GoogleLoginResponseDto,
   LoginRequestDto,
   LoginResponseDto,
 } from "../types/AuthLogin.types";
@@ -19,6 +21,7 @@ export async function loginWeb(
       ok: false,
       error: result.error,
       message: result.message,
+      userMessage: result.userMessage,
       title: result.title,
     };
   }
@@ -26,6 +29,32 @@ export async function loginWeb(
   return {
     ok: true,
     message: result.message,
+    userMessage: result.userMessage,
+    data: result.data,
+  };
+}
+
+export async function loginWithGoogleWeb(
+  payload: GoogleLoginRequestDto
+): Promise<GoogleLoginResponseDto> {
+  const raw = await postWebFetcher("/api/v1.0/account/external/google", payload);
+
+  const result = unwrapApiResponse<GoogleLoginResponseDto["data"]>(raw);
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error,
+      message: result.message,
+      userMessage: result.userMessage,
+      title: result.title,
+    };
+  }
+
+  return {
+    ok: true,
+    message: result.message,
+    userMessage: result.userMessage,
     data: result.data,
   };
 }

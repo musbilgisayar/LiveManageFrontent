@@ -4,16 +4,25 @@
 
 import "server-only";
 
+import {
+  DEFAULT_TENANT_KEY,
+  coerceTenantKey,
+  isAllowedTenantKey,
+  normalizeTenantKey,
+} from "@/lib/tenantKeys";
+
+export { normalizeTenantKey };
+
 const DEFAULT_TENANT =
   process.env.LM_DEFAULT_TENANT ??
   process.env.NEXT_PUBLIC_DEFAULT_TENANT ??
-  "default";
+  DEFAULT_TENANT_KEY;
 
 type RequestLike = {
   headers: Headers;
 };
 
-export type TenantResolutionSource = "header" | "cookie" | "fallback(default)";
+export type TenantResolutionSource = "header" | "cookie" | "fallback(livemanage)";
 
 export type TenantResolution = {
   tenantKey: string;
@@ -21,10 +30,6 @@ export type TenantResolution = {
   fromHeader: string | null;
   fromCookie: string | null;
 };
-
-export function normalizeTenantKey(value?: string | null): string {
-  return (value ?? "").trim().toLowerCase();
-}
 
 function parseCookieValue(cookieHeader: string, name: string): string | null {
   const parts = cookieHeader.split(";").map((x) => x.trim());
@@ -42,18 +47,20 @@ function parseCookieValue(cookieHeader: string, name: string): string | null {
 }
 
 function readTenantFromCookieHeader(cookieHeader: string): string | null {
-  const lmTenant = normalizeTenantKey(parseCookieValue(cookieHeader, "lm.tenant"));
-  if (lmTenant) return lmTenant;
+  const candidates = [
+    normalizeTenantKey(parseCookieValue(cookieHeader, "lm.tenant")),
+    normalizeTenantKey(parseCookieValue(cookieHeader, "tenantKey")),
+  ].filter(Boolean);
 
-  const tenantKey = normalizeTenantKey(parseCookieValue(cookieHeader, "tenantKey"));
-  if (tenantKey) return tenantKey;
-
-  return null;
+  return candidates.find(isAllowedTenantKey) ?? candidates[0] ?? null;
 }
 
 export function resolveTenantDetailed(req: RequestLike): TenantResolution {
-  const fromHeader = normalizeTenantKey(req.headers.get("x-tenant-key"));
-  if (fromHeader) {
+  const rawHeader = normalizeTenantKey(
+    req.headers.get("x-tenant-key") || req.headers.get("x-tenant-id")
+  );
+  const fromHeader = coerceTenantKey(rawHeader, DEFAULT_TENANT);
+  if (rawHeader) {
     return {
       tenantKey: fromHeader,
       source: "header",
@@ -63,9 +70,10 @@ export function resolveTenantDetailed(req: RequestLike): TenantResolution {
   }
 
   const cookieHeader = req.headers.get("cookie") || "";
-  const fromCookie = readTenantFromCookieHeader(cookieHeader);
+  const rawCookie = readTenantFromCookieHeader(cookieHeader);
+  const fromCookie = coerceTenantKey(rawCookie, DEFAULT_TENANT);
 
-  if (fromCookie) {
+  if (rawCookie) {
     return {
       tenantKey: fromCookie,
       source: "cookie",
@@ -75,8 +83,8 @@ export function resolveTenantDetailed(req: RequestLike): TenantResolution {
   }
 
   return {
-    tenantKey: normalizeTenantKey(DEFAULT_TENANT) || "default",
-    source: "fallback(default)",
+    tenantKey: coerceTenantKey(DEFAULT_TENANT),
+    source: "fallback(livemanage)",
     fromHeader: null,
     fromCookie: null,
   };

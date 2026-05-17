@@ -1,4 +1,4 @@
-import { UserDetailRole } from "../types/userDetail.types";
+import { UserDetailRole } from "../types/UserDetail.types";
 
 export function canSeeSecurityDetails(role: UserDetailRole) {
   return role === "superadmin" || role === "auditor";

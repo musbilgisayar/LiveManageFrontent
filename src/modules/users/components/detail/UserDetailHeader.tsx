@@ -3,31 +3,39 @@
 
 import { Avatar, Chip, Paper, Stack, Typography } from "@mui/material";
 import { AdminUserDetailDto } from "../../types/UserDetail.types";
+import type { UserDetailMode } from "../../config/userDetailTabs.config";
 
 type Props = {
   user: AdminUserDetailDto;
   locale: string;
   t: (key: string, vars?: Record<string, string | number>) => string;
+  mode: UserDetailMode;
 };
 
-export default function UserDetailHeader({ user, locale, t }: Props) {
+export default function UserDetailHeader({ user, locale, t, mode }: Props) {
   const tr = (key: string, fallback: string) => {
     const value = t(key);
     return value === `[${key}]` ? fallback : value;
   };
 
+  const identity = user.identity ?? ({} as AdminUserDetailDto["identity"]);
+  const contact = user.contact ?? ({} as AdminUserDetailDto["contact"]);
+  const verification = user.verification ?? ({} as AdminUserDetailDto["verification"]);
+  const security = user.security ?? ({} as AdminUserDetailDto["security"]);
+  const audit = user.audit ?? ({} as AdminUserDetailDto["audit"]);
+
   const displayName =
-    user.identity.fullName ||
-    [user.identity.firstName, user.identity.lastName].filter(Boolean).join(" ").trim() ||
-    user.identity.userName ||
+    identity.fullName ||
+    [identity.firstName, identity.lastName].filter(Boolean).join(" ").trim() ||
+    identity.userName ||
     "—";
 
-  const userName = user.identity.userName || "—";
-  const email = user.contact?.email || "—";
+  const userName = identity.userName || "—";
+  const email = contact.email || "—";
 
-  const isActive = !user.identity.isSuspended && !user.audit?.isDeleted;
-  const isVerified = !!user.verification?.isEmailConfirmed;
-  const isSuspended = !!user.identity.isSuspended || !!user.security?.isSuspended;
+  const isActive = !identity.isSuspended && !audit.isDeleted;
+  const isVerified = !!verification.isEmailConfirmed;
+  const isSuspended = !!identity.isSuspended || !!security.isSuspended;
 
   const formatDateTime = (value?: string | null) => {
     if (!value) return "—";
@@ -102,13 +110,14 @@ export default function UserDetailHeader({ user, locale, t }: Props) {
         </Stack>
       </Stack>
 
+      {mode === "admin" && (
       <Stack direction={{ xs: "column", md: "row" }} spacing={3} sx={{ mt: 3 }}>
         <Stack spacing={0.5}>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
             {tr("users:detail.header.emailConfirmedAt", "E-posta Doğrulama")}
           </Typography>
           <Typography variant="body2">
-            {formatDateTime(user.verification?.emailConfirmedAt)}
+              {formatDateTime(verification.emailConfirmedAt)}
           </Typography>
         </Stack>
 
@@ -117,7 +126,7 @@ export default function UserDetailHeader({ user, locale, t }: Props) {
             {tr("users:detail.header.createdAt", "Oluşturulma")}
           </Typography>
           <Typography variant="body2">
-            {formatDateTime(user.audit?.createdAt)}
+              {formatDateTime(audit.createdAt)}
           </Typography>
         </Stack>
 
@@ -126,10 +135,11 @@ export default function UserDetailHeader({ user, locale, t }: Props) {
             {tr("users:detail.header.updatedAt", "Güncellenme")}
           </Typography>
           <Typography variant="body2">
-            {formatDateTime(user.audit?.updatedAt)}
+              {formatDateTime(audit.updatedAt)}
           </Typography>
         </Stack>
       </Stack>
+      )}
     </Paper>
   );
 }

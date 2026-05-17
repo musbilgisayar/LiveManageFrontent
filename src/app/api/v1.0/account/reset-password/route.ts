@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
         accept: "application/json",
         "content-type": "application/json",
         "accept-language": req.headers.get("accept-language") ?? "tr-TR",
-        "x-tenant-key": req.headers.get("x-tenant-key") ?? "default",
+        "x-tenant-key": req.headers.get("x-tenant-key") ?? "livemanage",
         "x-correlation-id": corrId,
       },
       body: JSON.stringify({

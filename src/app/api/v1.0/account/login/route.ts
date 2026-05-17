@@ -11,6 +11,7 @@ import {
   appendSetCookies,
   readUpstreamBody,
 } from "@/app/api/_shared/bff";
+import { appendAuthCookiesFromPayload } from "@/lib/bff/authCookies";
 
 export async function POST(req: NextRequest) {
   const correlationId = newCorrelationId(req.headers);
@@ -55,7 +56,9 @@ export async function POST(req: NextRequest) {
       "x-correlation-id": correlationId,
     });
 
-    appendSetCookies(upstream.headers, responseHeaders);
+    const upstreamCookieCount = appendSetCookies(upstream.headers, responseHeaders).length;
+    const generatedCookieCount =
+      upstreamCookieCount === 0 ? appendAuthCookiesFromPayload(data, responseHeaders) : 0;
 
     console.log("⬅️ Login upstream response hazır", {
       correlationId,
@@ -64,6 +67,8 @@ export async function POST(req: NextRequest) {
       status: upstream.status,
       ok: upstream.ok,
       contentType,
+      upstreamCookieCount,
+      generatedCookieCount,
     });
 
     console.groupEnd();

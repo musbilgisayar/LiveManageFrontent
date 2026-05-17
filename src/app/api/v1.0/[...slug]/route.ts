@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { DEFAULT_TENANT_KEY, coerceTenantKey } from "@/lib/tenantKeys";
 
 const BACKEND = process.env.LM_BACKEND_BASE ?? "https://localhost:5002";
 const DEFAULT_TENANT =
   process.env.LM_DEFAULT_TENANT ??
   process.env.NEXT_PUBLIC_DEFAULT_TENANT ??
-  "default";
+  DEFAULT_TENANT_KEY;
 
 function makeCid() {
   // @ts-ignore
@@ -17,7 +18,10 @@ type Params = { slug?: string[] };
 function resolveTenantKey(req: NextRequest) {
   const fromHeader = req.headers.get("x-tenant-key")?.trim();
   if (fromHeader) {
-    return { tenantKey: fromHeader, source: "header" };
+    return {
+      tenantKey: coerceTenantKey(fromHeader, DEFAULT_TENANT),
+      source: "header",
+    };
   }
 
   const fromCookie =
@@ -25,10 +29,13 @@ function resolveTenantKey(req: NextRequest) {
     req.cookies.get("tenantKey")?.value?.trim();
 
   if (fromCookie) {
-    return { tenantKey: fromCookie, source: "cookie" };
+    return {
+      tenantKey: coerceTenantKey(fromCookie, DEFAULT_TENANT),
+      source: "cookie",
+    };
   }
 
-  return { tenantKey: DEFAULT_TENANT, source: "fallback(bff)" };
+  return { tenantKey: coerceTenantKey(DEFAULT_TENANT), source: "fallback(bff)" };
 }
 
 function appendSetCookies(source: Headers, target: Headers) {
@@ -146,7 +153,23 @@ async function handler(
   }
 
   const { data, contentType } = await readUpstreamBody(upstream);
+if (upstream.status === 204 || upstream.status === 205) {
+  const response = new NextResponse(null, {
+    status: upstream.status,
+  });
 
+  response.headers.set("x-correlation-id", correlationId);
+  appendSetCookies(upstream.headers, response.headers);
+
+  console.info("✅ [BFF CATCH-ALL] Boş response başarıyla tamamlandı", {
+    correlationId,
+    tenantKey,
+    status: upstream.status,
+  });
+
+  console.groupEnd();
+  return response;
+}
   if (!upstream.ok) {
     console.warn("⚠️ [BFF CATCH-ALL] Upstream başarısız döndü", {
       correlationId,

@@ -3,7 +3,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
+import { proxyReadOnlyLookupWithServiceFallback } from "@/lib/bff/proxyReadOnlyLookupWithServiceFallback";
 
 const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || "1.0";
 
@@ -51,9 +51,8 @@ function createErrorResponse(payload: unknown) {
 }
 
 export async function GET(req: NextRequest) {
-  return proxyJsonWithWebAuth(req, {
+  return proxyReadOnlyLookupWithServiceFallback(req, {
     url: `/api/v${API_VERSION}/profile/address-hierarchy/countries`,
-    method: "GET",
     timeoutMs: 10_000,
     logLabel: "AddressHierarchyCountries",
     transformResponse: (payload, context) => {

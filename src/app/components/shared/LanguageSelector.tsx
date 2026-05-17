@@ -8,7 +8,6 @@ import { Stack } from "@mui/system";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useCustomizer } from "@/app/context/customizerContext";
-import { API_BASE as CONFIG_API_BASE } from "@/lib/config";
 import { normalizeCultures } from "@/lib/i18n/normalizeCultures";
 
 interface LanguageItem {
@@ -18,10 +17,18 @@ interface LanguageItem {
   flagEmoji?: string;
 }
 
-const API_VERSION = "1.0";
-const API_BASE = CONFIG_API_BASE || "";
+const LANGUAGE_ENDPOINT = "/api/v1.0/localization/languages";
 
 const LOCALE_PREFIX_RE = /^\/[a-z]{2}(?:-[A-Za-z]{2})?(?=\/|$)/i;
+
+const FALLBACK_LANGUAGES: LanguageItem[] = [
+  { cultureCode: "tr-TR", name: "Türkçe", isDefault: true },
+  { cultureCode: "en-US", name: "English", isDefault: false },
+  { cultureCode: "de-DE", name: "Deutsch", isDefault: false },
+  { cultureCode: "fr-FR", name: "Français", isDefault: false },
+  { cultureCode: "it-IT", name: "Italiano", isDefault: false },
+  { cultureCode: "ar-SA", name: "العربية", isDefault: false },
+];
 
 const toPrefix = (c: string) => (c || "tr").split("-")[0].toLowerCase();
 
@@ -61,7 +68,7 @@ export default function LanguageSelector() {
   const { isLanguage, setIsLanguage } = useCustomizer();
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [languages, setLanguages] = useState<LanguageItem[]>([]);
+  const [languages, setLanguages] = useState<LanguageItem[]>(FALLBACK_LANGUAGES);
 
   const open = Boolean(anchorEl);
   const urlPrefix = useMemo(() => getUrlPrefix(pathname), [pathname]);
@@ -115,20 +122,20 @@ export default function LanguageSelector() {
 
   (async () => {
     try {
-      const url = `${API_BASE}/api/v${API_VERSION}/culture/list`;
       const acceptCulture = toCulture(urlPrefix);
 
-      const res = await fetch(url, {
+      const res = await fetch(LANGUAGE_ENDPOINT, {
         headers: {
           accept: "application/json",
           "accept-language": acceptCulture,
         },
+        credentials: "include",
         cache: "no-store",
         signal: ac.signal,
       });
 
       if (!res.ok) {
-        console.warn("[LanguageSelector] culture/list HTTP not ok:", res.status);
+        console.warn("[LanguageSelector] languages HTTP not ok:", res.status);
         return;
       }
 
@@ -136,7 +143,7 @@ export default function LanguageSelector() {
       const normalized = normalizeCultures(json);
 
       if (!normalized.length) {
-        console.warn("[LanguageSelector] culture/list empty:", json);
+        console.warn("[LanguageSelector] languages empty:", json);
         return;
       }
 
@@ -161,7 +168,7 @@ export default function LanguageSelector() {
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return;
-      console.error("[LanguageSelector] fetch failed:", err);
+      console.warn("[LanguageSelector] languages fetch failed:", err);
     }
   })();
 

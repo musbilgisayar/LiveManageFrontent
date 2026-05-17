@@ -4,6 +4,12 @@
 
 "use client";
 
+import {
+  DEFAULT_TENANT_KEY,
+  coerceTenantKey,
+  isAllowedTenantKey,
+} from "@/lib/tenantKeys";
+
 const TENANT_STORAGE_KEY = "tenantKey";
 const TENANT_COOKIE_KEYS = ["tenantKey", "lm.tenant"] as const;
 const TENANT_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
@@ -26,10 +32,6 @@ const TENANT_LOG_ON = (): boolean => {
   const a = envFlag("NEXT_PUBLIC_LM_FETCH_LOG");
   const b = envFlag("LM_FETCH_LOG");
   return a === "1" || b === "1";
-};
-
-const normalizeTenantKey = (tenantKey?: string | null): string => {
-  return (tenantKey ?? "").trim().toLowerCase();
 };
 
 const buildCookieAttributes = (maxAgeSeconds: number): string => {
@@ -66,14 +68,26 @@ const clearTenantCookies = (): void => {
 const readCookieTenant = (): string => {
   if (!isBrowser()) return "";
 
-  const match = document.cookie
-    .split("; ")
-    .find((x) => x.startsWith("tenantKey=") || x.startsWith("lm.tenant="));
+  const cookieMap = new Map<string, string>();
 
-  if (!match) return "";
+  for (const part of document.cookie.split("; ")) {
+    const index = part.indexOf("=");
+    if (index <= 0) continue;
 
-  const [, rawValue] = match.split("=");
-  return normalizeTenantKey(decodeURIComponent(rawValue || ""));
+    const key = part.slice(0, index);
+    const value = part.slice(index + 1);
+
+    if (TENANT_COOKIE_KEYS.includes(key as (typeof TENANT_COOKIE_KEYS)[number])) {
+      cookieMap.set(key, decodeURIComponent(value || ""));
+    }
+  }
+
+  const candidates = TENANT_COOKIE_KEYS
+    .map((key) => cookieMap.get(key))
+    .filter(Boolean) as string[];
+
+  const rawTenant = candidates.find(isAllowedTenantKey) ?? candidates[0] ?? "";
+  return rawTenant ? coerceTenantKey(rawTenant) : "";
 };
 
 export const getTenantKey = (): string => {
@@ -90,8 +104,9 @@ export const getTenantKey = (): string => {
     return fromCookie;
   }
 
-  const stored = normalizeTenantKey(localStorage.getItem(TENANT_STORAGE_KEY));
-  if (stored) {
+  const rawStored = localStorage.getItem(TENANT_STORAGE_KEY);
+  if (rawStored) {
+    const stored = coerceTenantKey(rawStored);
     if (TENANT_LOG_ON()) {
       console.info("🏷️ [TENANT][GET] Tenant key çözümlendi", {
         source: "localStorage",
@@ -101,7 +116,7 @@ export const getTenantKey = (): string => {
     return stored;
   }
 
-  const envDefault = normalizeTenantKey(envFlag("NEXT_PUBLIC_DEFAULT_TENANT"));
+  const envDefault = coerceTenantKey(envFlag("NEXT_PUBLIC_DEFAULT_TENANT"));
   if (envDefault) {
     if (TENANT_LOG_ON()) {
       console.info("🏷️ [TENANT][GET] Tenant key çözümlendi", {
@@ -119,13 +134,13 @@ export const getTenantKey = (): string => {
     });
   }
 
-  return "";
+  return DEFAULT_TENANT_KEY;
 };
 
 export const setTenantKey = (tenantKey: string): void => {
   if (!isBrowser()) return;
 
-  const normalized = normalizeTenantKey(tenantKey);
+  const normalized = coerceTenantKey(tenantKey);
   if (!normalized) return;
 
   localStorage.setItem(TENANT_STORAGE_KEY, normalized);

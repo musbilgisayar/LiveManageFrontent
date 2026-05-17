@@ -48,6 +48,24 @@ function canAccessItem(
   return true;
 }
 
+function hasVisibleItemInGroup(index: number, items: NavGroup[]) {
+  for (
+    let currentIndex = index + 1;
+    currentIndex < items.length;
+    currentIndex += 1
+  ) {
+    const nextItem = items[currentIndex];
+
+    if (nextItem.navlabel) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
 export function filterMenuByPermissions(
   items: NavGroup[],
   permissions: string[]
@@ -84,14 +102,6 @@ export function filterMenuByPermissions(
       return true;
     }
 
-    const nextItems = array.slice(index + 1);
-
-    return nextItems.some((nextItem) => {
-      if (nextItem.navlabel) {
-        return false;
-      }
-
-      return true;
-    });
+    return hasVisibleItemInGroup(index, array);
   });
 }

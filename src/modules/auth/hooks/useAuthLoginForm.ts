@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getTenantKey, setTenantKey } from "@/utils/tenant.client";
+import { DEFAULT_TENANT_KEY } from "@/lib/tenantKeys";
 import type {
   LoginFormErrors,
   LoginFormState,
@@ -22,7 +23,7 @@ const initialState: LoginFormState = {
   identifier: "",
   password: "",
   rememberMe: false,
-  tenantKey: "default",
+  tenantKey: DEFAULT_TENANT_KEY,
 };
 
 function toPrefix(cultureCode?: string | null) {
@@ -91,6 +92,17 @@ export function useAuthLoginForm({
     setShowPassword((prev) => !prev);
   };
 
+  const setGeneralError = (message: string) => {
+    setErrors((prev) => ({
+      ...prev,
+      general: message,
+    }));
+  };
+
+  const clearGeneralError = () => {
+    clearFieldError("general");
+  };
+
   const submit = async () => {
     if (loading) return;
 
@@ -117,6 +129,7 @@ export function useAuthLoginForm({
       if (!result.ok) {
         setErrors({
           general:
+            result.userMessage ||
             result.message ||
             result.error ||
             result.title ||
@@ -155,6 +168,8 @@ export function useAuthLoginForm({
     setPassword,
     setRememberMe,
     setTenant,
+    setGeneralError,
+    clearGeneralError,
     togglePassword,
     submit,
   };

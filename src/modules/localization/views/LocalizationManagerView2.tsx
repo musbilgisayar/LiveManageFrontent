@@ -9,6 +9,7 @@ import LocalizationToolbar from "../components/manager/LocalizationToolbar";
 import LocalizationGrid from "../components/manager/LocalizationGrid";
 import LocalizationToast from "../components/manager/LocalizationToast";
 import LocalizationCreateDialog from "../components/manager/LocalizationCreateDialog";
+import LocalizationValueLookupPanel from "../components/manager/LocalizationValueLookupPanel";
 import   StatsCards   from "../components/manager/StatsCards2";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -123,6 +124,20 @@ export default function LocalizationManagerView({ locale }: Props) {
           loading={manager.loading}
           onRefresh={() => void manager.refresh()}
           onCreateOpen={() => setCreateOpen(true)}
+          tr={tr}
+        />
+
+        <LocalizationValueLookupPanel
+          locale={lang}
+          query={manager.valueLookupQuery}
+          onQueryChange={manager.setValueLookupQuery}
+          results={manager.valueLookupResults}
+          loading={manager.valueLookupLoading}
+          selectedLangs={manager.selectedLangs}
+          namespaceQuery={manager.namespaceQuery}
+          languages={manager.languages}
+          onSearch={() => void manager.searchByValue()}
+          onClear={manager.clearValueLookup}
           tr={tr}
         />
 

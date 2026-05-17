@@ -36,7 +36,8 @@ import {
 } from "@tabler/icons-react";
 
 import { useI18n } from "@/app/context/i18nContext";
-import { useRolePermissionMatrix } from "../hooks/useRolePermissionMatrix";
+import TenantOptionSelect from "@/modules/tenants/components/TenantOptionSelect";
+import useRolePermissionMatrix from "../hooks/useRolePermissionMatrix";
 
 export default function RolePermissionMatrixView() {
   const theme = useTheme();
@@ -48,6 +49,9 @@ export default function RolePermissionMatrixView() {
     selectedRoleId,
     setSelectedRoleId,
     selectedRole,
+
+    selectedTenantId,
+    setSelectedTenantId,
 
     filters,
     updateFilter,
@@ -64,10 +68,14 @@ export default function RolePermissionMatrixView() {
     bulkUnassignVisible,
     resetChanges,
     saveChanges,
-
     isLoading,
     isSaving,
+    isSyncingTenant,
+    syncMessage,
     error,
+
+    syncTenantPermissions,
+
   } = useRolePermissionMatrix();
 
   const tr = (key: string, fallback: string) => {
@@ -145,7 +153,7 @@ export default function RolePermissionMatrixView() {
             <Button
               variant="contained"
               startIcon={<IconDeviceFloppy size={18} />}
-              disabled={!hasChanges || isSaving}
+              disabled={!selectedTenantId || !selectedRoleId || !hasChanges || isSaving}
               onClick={saveChanges}
             >
               {isSaving
@@ -170,13 +178,25 @@ export default function RolePermissionMatrixView() {
         </Alert>
       ) : null}
 
+      {!selectedTenantId ? (
+        <Alert severity="warning" sx={{ mb: 3, borderRadius: 3 }}>
+          {tr(
+            "permissions:roleMatrix.tenantRequired",
+            "Permission ataması için önce tenant seçmelisiniz."
+          )}
+        </Alert>
+      ) : null}
+
       {isLoading ? (
         <Alert
           icon={<IconRefresh size={18} />}
           severity="info"
           sx={{ mb: 3, borderRadius: 3 }}
         >
-          {tr("permissions:roleMatrix.loading", "Rol permission matrisi yükleniyor.")}
+          {tr(
+            "permissions:roleMatrix.loading",
+            "Rol permission matrisi yükleniyor."
+          )}
         </Alert>
       ) : null}
 
@@ -192,10 +212,42 @@ export default function RolePermissionMatrixView() {
                 <Typography variant="body2" color="text.secondary">
                   {tr(
                     "permissions:roleMatrix.roleSelector.description",
-                    "Permission atamalarını yönetmek istediğiniz rolü seçin."
+                    "Önce tenant, sonra permission atamalarını yönetmek istediğiniz rolü seçin."
                   )}
                 </Typography>
               </Stack>
+
+              <TenantOptionSelect
+                value={selectedTenantId}
+                onChange={(tenantId) => {
+                  setSelectedTenantId(tenantId);
+                  setSelectedRoleId("");
+                }}
+                disabled={isLoading || isSaving || isSyncingTenant}
+              />
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<IconRefresh size={18} />}
+                disabled={!selectedTenantId || isLoading || isSaving || isSyncingTenant}
+                onClick={syncTenantPermissions}
+              >
+                {isSyncingTenant
+                  ? tr(
+                    "permissions:roleMatrix.actions.syncing",
+                    "Tenant permissionları senkronize ediliyor..."
+                  )
+                  : tr(
+                    "permissions:roleMatrix.actions.syncTenant",
+                    "Tenant Permissionlarını Senkronize Et"
+                  )}
+              </Button>
+
+              {syncMessage ? (
+                <Alert severity="success" sx={{ borderRadius: 3 }}>
+                  {tr(syncMessage, "Tenant permissionları senkronize edildi.")}
+                </Alert>
+              ) : null}
 
               <TextField
                 select
@@ -203,10 +255,9 @@ export default function RolePermissionMatrixView() {
                 size="small"
                 label={tr("permissions:roleMatrix.roleSelector.label", "Rol")}
                 value={selectedRoleId}
-                disabled={isLoading || isSaving}
+                disabled={!selectedTenantId || isLoading || isSaving}
                 onChange={(event) => setSelectedRoleId(event.target.value)}
               >
-
                 {roles.map((role) => (
                   <MenuItem key={role.id} value={role.id}>
                     {role.displayName || role.name || role.id}
@@ -219,8 +270,9 @@ export default function RolePermissionMatrixView() {
                   <CardContent>
                     <Stack spacing={1.25}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-
-                        {selectedRole.displayName || selectedRole.name || selectedRole.id}
+                        {selectedRole.displayName ||
+                          selectedRole.name ||
+                          selectedRole.id}
                       </Typography>
 
                       <Typography variant="body2" color="text.secondary">
@@ -276,7 +328,7 @@ export default function RolePermissionMatrixView() {
                     fullWidth
                     size="small"
                     value={filters.search}
-                    disabled={isLoading}
+                    disabled={!selectedTenantId || isLoading}
                     onChange={(event) =>
                       updateFilter("search", event.target.value)
                     }
@@ -299,11 +351,14 @@ export default function RolePermissionMatrixView() {
                     select
                     fullWidth
                     size="small"
-                    disabled={isLoading}
+                    disabled={!selectedTenantId || isLoading}
                     label={tr("permissions:catalog.filters.scope", "Kapsam")}
                     value={filters.scope}
                     onChange={(event) =>
-                      updateFilter("scope", event.target.value as typeof filters.scope)
+                      updateFilter(
+                        "scope",
+                        event.target.value as typeof filters.scope
+                      )
                     }
                   >
                     <MenuItem value="all">
@@ -320,11 +375,14 @@ export default function RolePermissionMatrixView() {
                     select
                     fullWidth
                     size="small"
-                    disabled={isLoading}
+                    disabled={!selectedTenantId || isLoading}
                     label={tr("permissions:catalog.filters.level", "Seviye")}
                     value={filters.level}
                     onChange={(event) =>
-                      updateFilter("level", event.target.value as typeof filters.level)
+                      updateFilter(
+                        "level",
+                        event.target.value as typeof filters.level
+                      )
                     }
                   >
                     <MenuItem value="all">
@@ -342,7 +400,7 @@ export default function RolePermissionMatrixView() {
                     select
                     fullWidth
                     size="small"
-                    disabled={isLoading}
+                    disabled={!selectedTenantId || isLoading}
                     label={tr("permissions:catalog.filters.sensitive", "Hassasiyet")}
                     value={filters.sensitive}
                     onChange={(event) =>
@@ -356,7 +414,10 @@ export default function RolePermissionMatrixView() {
                       {tr("permissions:shared.all", "Tümü")}
                     </MenuItem>
                     <MenuItem value="sensitive">
-                      {tr("permissions:catalog.filters.onlySensitive", "Sadece Hassas")}
+                      {tr(
+                        "permissions:catalog.filters.onlySensitive",
+                        "Sadece Hassas"
+                      )}
                     </MenuItem>
                     <MenuItem value="normal">
                       {tr("permissions:catalog.filters.onlyNormal", "Normal")}
@@ -369,7 +430,7 @@ export default function RolePermissionMatrixView() {
                     select
                     fullWidth
                     size="small"
-                    disabled={isLoading}
+                    disabled={!selectedTenantId || isLoading}
                     label={tr("permissions:roleMatrix.filters.assignment", "Atama")}
                     value={filters.assigned}
                     onChange={(event) =>
@@ -412,17 +473,30 @@ export default function RolePermissionMatrixView() {
                   <Button
                     size="small"
                     variant="outlined"
-                    disabled={isLoading || isSaving || permissions.length === 0}
+                    disabled={
+                      !selectedTenantId ||
+                      isLoading ||
+                      isSaving ||
+                      permissions.length === 0
+                    }
                     onClick={bulkAssignVisible}
                   >
-                    {tr("permissions:roleMatrix.actions.assignVisible", "Görünenleri Ata")}
+                    {tr(
+                      "permissions:roleMatrix.actions.assignVisible",
+                      "Görünenleri Ata"
+                    )}
                   </Button>
 
                   <Button
                     size="small"
                     variant="outlined"
                     color="warning"
-                    disabled={isLoading || isSaving || permissions.length === 0}
+                    disabled={
+                      !selectedTenantId ||
+                      isLoading ||
+                      isSaving ||
+                      permissions.length === 0
+                    }
                     onClick={bulkUnassignVisible}
                   >
                     {tr(
@@ -436,7 +510,7 @@ export default function RolePermissionMatrixView() {
                     variant="text"
                     startIcon={<IconX size={16} />}
                     onClick={resetFilters}
-                    disabled={isLoading}
+                    disabled={!selectedTenantId || isLoading}
                   >
                     {tr("permissions:shared.clearFilters", "Filtreleri Temizle")}
                   </Button>
@@ -494,7 +568,9 @@ export default function RolePermissionMatrixView() {
                         </Stack>
 
                         <Typography variant="body2" color="text.secondary">
-                          {permission.description || permission.fallbackDescription || "—"}
+                          {permission.description ||
+                            permission.fallbackDescription ||
+                            "—"}
                         </Typography>
 
                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -522,7 +598,12 @@ export default function RolePermissionMatrixView() {
 
                         <Switch
                           checked={item.assigned}
-                          disabled={item.locked || isLoading || isSaving}
+                          disabled={
+                            !selectedTenantId ||
+                            item.locked ||
+                            isLoading ||
+                            isSaving
+                          }
                           onChange={() => togglePermission(permission.code)}
                         />
                       </Stack>

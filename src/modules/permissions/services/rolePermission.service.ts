@@ -1,241 +1,225 @@
 // src/modules/permissions/services/rolePermission.service.ts
 
 import type {
-  PermissionRoleDto,
-  RolePermissionMatrixDto,
-} from "../types/Permission.types";
+  PermissionRoleItem,
+  RolePermissionMatrixResponse,
+  RolePermissionSyncRequest,
+} from "../types/RolePermission.types";
+
+const roleCache = new Map<string, PermissionRoleItem[]>();
+const matrixCache = new Map<string, RolePermissionMatrixResponse>();
 
 function getClientAcceptLanguage(): string {
-  if (typeof window === "undefined") return "tr-TR";
+  if (typeof document === "undefined") return "tr-TR";
 
-  const locale = window.location.pathname.split("/").filter(Boolean)[0];
+  const cookieValue = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("lm.lang="))
+    ?.split("=")[1];
 
-  const map: Record<string, string> = {
-    tr: "tr-TR",
-    de: "de-DE",
-    en: "en-US",
-    fr: "fr-FR",
-    it: "it-IT",
-    ar: "ar-SA",
-  };
-
-  return map[locale] ?? "tr-TR";
+  return cookieValue ? decodeURIComponent(cookieValue) : "tr-TR";
 }
-type ApiEnvelope<T> = {
-  ok?: boolean;
-  data?: T;
-  userMessage?: string;
-  message?: string;
-  error?: string;
-  success?: boolean;
-};
 
-export type AssignRolePermissionRequest = {
-  roleId: string;
-  permissionId: string;
-  additionalInfo?: string;
-};
-
-export type RevokeRolePermissionRequest = {
-  roleId: string;
-  permissionId: string;
-  reason?: string;
-};
-
-export type SyncRolePermissionsRequest = {
-  roleId: string;
-  permissionIds: string[];
-  reason?: string;
-};
-
-function unwrapApiData<T>(json: ApiEnvelope<T> | T): T {
-  if (json && typeof json === "object" && "data" in json) {
-    return (json as ApiEnvelope<T>).data as T;
+function assertTenantId(tenantId: string) {
+  if (!tenantId?.trim()) {
+    throw new Error("permissions:tenant.required");
   }
-
-  return json as T;
 }
 
-async function ensureOk(response: Response, fallbackMessageKey: string) {
-  const json = await response.json().catch(() => null);
-
-  if (!response.ok || json?.ok === false) {
-    throw new Error(
-      json?.userMessage ||
-        json?.message ||
-        json?.error ||
-        fallbackMessageKey
-    );
+function assertRoleId(roleId: string) {
+  if (!roleId?.trim()) {
+    throw new Error("permissions:role.required");
   }
-
-  return json;
 }
 
-function mapRole(raw: any): PermissionRoleDto {
+/**
+ * SuperAdmin ekranlarında selectedTenantId artık x-tenant-id olarak gönderilmez.
+ * Auth tenant cookie/JWT/BFF context üzerinden korunur.
+ * Target tenant yalnızca URL path param olarak taşınır.
+ */
+function buildAuthHeaders(): HeadersInit {
   return {
-    id: raw.id,
-    name: raw.name,
-    displayName: raw.name,
-    description: raw.description ?? "",
-    isSystemRole: raw.isSystem ?? false,
-    assignedPermissionCount: raw.permissions?.length ?? 0,
+    Accept: "application/json",
+    "Accept-Language": getClientAcceptLanguage(),
   };
 }
 
-let permissionRolesPromise: Promise<PermissionRoleDto[]> | null = null;
-let permissionRolesCache: PermissionRoleDto[] | null = null;
-
-export async function getPermissionRoles(): Promise<PermissionRoleDto[]> {
-  if (permissionRolesCache) {
-    return permissionRolesCache;
-  }
-
-  if (permissionRolesPromise) {
-    return permissionRolesPromise;
-  }
-
-  permissionRolesPromise = (async () => {
-    const response = await fetch("/api/v1.0/roles", {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-     headers: {
-  Accept: "application/json",
-  "Accept-Language": getClientAcceptLanguage(),
-},
-    });
-
-    const json = await ensureOk(response, "permissions:role.list.loadError");
-
-    const raw = unwrapApiData<any[]>(json);
-    const mapped = (raw ?? []).map(mapRole);
-
-    permissionRolesCache = mapped;
-
-    return mapped;
-  })().finally(() => {
-    permissionRolesPromise = null;
-  });
-
-  return permissionRolesPromise;
+function buildJsonHeaders(): HeadersInit {
+  return {
+    ...buildAuthHeaders(),
+    "Content-Type": "application/json",
+  };
 }
 
-export async function getRolePermissionMatrix(
-  roleId: string
-): Promise<RolePermissionMatrixDto> {
+async function readJsonSafe(response: Response): Promise<any> {
+  const text = await response.text();
+
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+async function ensureOk(response: Response, fallbackMessage: string): Promise<any> {
+  const payload = await readJsonSafe(response);
+
+  if (!response.ok) {
+    const message =
+      payload?.userMessage ||
+      payload?.message ||
+      payload?.error ||
+      fallbackMessage;
+
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+function unwrapData<T>(payload: any): T {
+  if (payload?.data?.data !== undefined) return payload.data.data as T;
+  if (payload?.data !== undefined) return payload.data as T;
+
+  return payload as T;
+}
+
+function normalizeTenantId(tenantId: string): string {
+  return tenantId.trim();
+}
+
+function roleCacheKey(tenantId: string): string {
+  return normalizeTenantId(tenantId);
+}
+
+function matrixCacheKey(roleId: string, tenantId: string): string {
+  return `${normalizeTenantId(tenantId)}:${roleId.trim()}`;
+}
+
+export function clearPermissionRoleCache(tenantId?: string) {
+  if (!tenantId) {
+    roleCache.clear();
+    matrixCache.clear();
+    return;
+  }
+
+  const normalizedTenantId = normalizeTenantId(tenantId);
+
+  roleCache.delete(normalizedTenantId);
+
+  for (const key of matrixCache.keys()) {
+    if (key.startsWith(`${normalizedTenantId}:`)) {
+      matrixCache.delete(key);
+    }
+  }
+}
+
+export async function getPermissionRoles(
+  targetTenantId: string
+): Promise<PermissionRoleItem[]> {
+  assertTenantId(targetTenantId);
+
+  const cacheKey = roleCacheKey(targetTenantId);
+  const cached = roleCache.get(cacheKey);
+
+  if (cached) return cached;
+
   const response = await fetch(
-    `/api/v1.0/role-permissions/${roleId}/matrix`,
+    `/api/v1.0/admin/permissions/tenants/${cacheKey}/roles`,
     {
       method: "GET",
       credentials: "include",
       cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "Accept-Language": getClientAcceptLanguage(),
-      },
+      headers: buildAuthHeaders(),
     }
   );
 
-  const json = await ensureOk(response, "permissions:role.matrix.loadError");
+  const payload = await ensureOk(response, "permissions:roles.load.error");
+  const roles = unwrapData<PermissionRoleItem[]>(payload) ?? [];
 
-  const raw = unwrapApiData<any>(json);
+  roleCache.set(cacheKey, roles);
 
-  return {
-    role: {
-      id: raw.roleId,
-      name: raw.roleName,
-      displayName: raw.roleName,
-      description: "",
-      isSystemRole: raw.isSystemRole,
-      assignedPermissionCount:
-        raw.permissions?.filter((x: any) => x.assigned).length ?? 0,
-    },
-    permissions: (raw.permissions ?? []).map((item: any) => ({
-      permission: {
-        id: item.permissionId,
-        code: item.permissionCode,
-        module: item.module,
-        action: item.action,
-        scope: item.scope,
-        group: item.group,
-        level: item.level,
-        descriptionKey: item.descriptionKey,
-        description: item.description,
-        fallbackDescription: item.description,
-        isSensitive: item.isSensitive,
-        riskLevel:
-          item.level === "4"
-            ? "critical"
-            : item.level === "3"
-              ? "high"
-              : "medium",
-        isActive: true,
-      },
-      assigned: item.assigned,
-      inherited: item.inherited,
-      locked: item.locked,
-    })),
-  };
+  return roles;
 }
 
-export async function assignRolePermission(
-  request: AssignRolePermissionRequest
-): Promise<void> {
-  const response = await fetch("/api/v1.0/role-permissions/assign", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      roleId: request.roleId,
-      permissionId: request.permissionId,
-      additionalInfo: request.additionalInfo ?? null,
-    }),
-  });
+export async function getRolePermissionMatrix(
+  roleId: string,
+  targetTenantId: string
+): Promise<RolePermissionMatrixResponse> {
+  assertRoleId(roleId);
+  assertTenantId(targetTenantId);
 
-  await ensureOk(response, "permissions:role.assign.error");
-}
+  const normalizedTenantId = normalizeTenantId(targetTenantId);
+  const cacheKey = matrixCacheKey(roleId, normalizedTenantId);
+  const cached = matrixCache.get(cacheKey);
 
-export async function revokeRolePermission(
-  request: RevokeRolePermissionRequest
-): Promise<void> {
-  const response = await fetch("/api/v1.0/role-permissions/revoke", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      roleId: request.roleId,
-      permissionId: request.permissionId,
-      reason: request.reason ?? null,
-    }),
-  });
+  if (cached) return cached;
 
-  await ensureOk(response, "permissions:role.revoke.error");
-}
-
-export async function syncRolePermissions(
-  request: SyncRolePermissionsRequest
-): Promise<void> {
   const response = await fetch(
-    `/api/v1.0/roles/${request.roleId}/permissions/sync`,
+    `/api/v1.0/admin/permissions/tenants/${normalizedTenantId}/roles/${roleId}/matrix`,
+    {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: buildAuthHeaders(),
+    }
+  );
+
+  const payload = await ensureOk(response, "permissions:matrix.load.error");
+  const matrix = unwrapData<RolePermissionMatrixResponse>(payload);
+
+  matrixCache.set(cacheKey, matrix);
+
+  return matrix;
+}
+
+export async function syncTenantPermissionCatalog(
+  targetTenantId: string
+): Promise<void> {
+  assertTenantId(targetTenantId);
+
+  const normalizedTenantId = normalizeTenantId(targetTenantId);
+
+  const response = await fetch(
+    `/api/v1.0/admin/permissions/tenants/${normalizedTenantId}/sync`,
     {
       method: "POST",
       credentials: "include",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
+      cache: "no-store",
+      headers: buildJsonHeaders(),
+    }
+  );
+
+  await ensureOk(response, "permissions:tenant.sync.error");
+
+  clearPermissionRoleCache(normalizedTenantId);
+}
+
+export async function syncRolePermissions(
+  request: RolePermissionSyncRequest
+): Promise<void> {
+  assertRoleId(request.roleId);
+  assertTenantId(request.tenantId);
+
+  const normalizedTenantId = normalizeTenantId(request.tenantId);
+
+  const response = await fetch(
+    `/api/v1.0/admin/permissions/tenants/${normalizedTenantId}/roles/${request.roleId}/permissions/sync`,
+    {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: buildJsonHeaders(),
       body: JSON.stringify({
         permissionIds: request.permissionIds,
-        reason: request.reason ?? "permissions:role.sync.reason.default",
+        reason: request.reason ?? null,
       }),
     }
   );
 
   await ensureOk(response, "permissions:role.sync.error");
+
+  clearPermissionRoleCache(normalizedTenantId);
 }

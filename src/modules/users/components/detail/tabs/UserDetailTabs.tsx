@@ -4,7 +4,8 @@ import * as React from "react";
 import { Box, Tab, Tabs } from "@mui/material";
 
 // 🔥 Artık type'lar tek kaynaktan geliyor
-import {
+
+import type {
   UserDetailTabDefinition,
   UserDetailTabKey,
 } from "@/modules/users/types/UserDetail.types";

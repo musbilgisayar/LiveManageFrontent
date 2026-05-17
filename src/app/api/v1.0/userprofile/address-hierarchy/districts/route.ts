@@ -1,7 +1,7 @@
 // src/app/api/v1.0/userprofile/address-hierarchy/districts/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
+import { proxyReadOnlyLookupWithServiceFallback } from "@/lib/bff/proxyReadOnlyLookupWithServiceFallback";
 
 export const runtime = "nodejs";
 
@@ -72,9 +72,8 @@ export async function GET(req: NextRequest) {
 
   const query = new URLSearchParams({ provinceId }).toString();
 
-  return proxyJsonWithWebAuth(req, {
+  return proxyReadOnlyLookupWithServiceFallback(req, {
     url: `/api/v${API_VERSION}/profile/address-hierarchy/districts?${query}`,
-    method: "GET",
     timeoutMs: 10_000,
     logLabel: "AddressHierarchyDistricts",
     transformResponse: (payload, context) => {

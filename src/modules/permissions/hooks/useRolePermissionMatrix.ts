@@ -2,14 +2,16 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+ 
 
 
 import {
   getPermissionRoles,
   getRolePermissionMatrix,
   syncRolePermissions,
+  syncTenantPermissionCatalog,
 } from "../services/rolePermission.service";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   PermissionRoleDto,
   RolePermissionMatrixFilterState,
@@ -25,18 +27,6 @@ const INITIAL_FILTERS: RolePermissionMatrixFilterState = {
   assigned: "all",
 };
 
-let rolesRequestPromise: Promise<PermissionRoleDto[]> | null = null;
-
-const getPermissionRolesOnce = async () => {
-  if (!rolesRequestPromise) {
-    rolesRequestPromise = getPermissionRoles().finally(() => {
-      rolesRequestPromise = null;
-    });
-  }
-
-  return rolesRequestPromise;
-};
-
 const cloneMatrix = (
   items: RolePermissionMatrixItemDto[]
 ): RolePermissionMatrixItemDto[] =>
@@ -45,69 +35,88 @@ const cloneMatrix = (
     permission: { ...item.permission },
   }));
 
-export function useRolePermissionMatrix() {
+export default function useRolePermissionMatrix() {
   const [roles, setRoles] = useState<PermissionRoleDto[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string>("");
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const [isSyncingTenant, setIsSyncingTenant] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const [filters, setFilters] =
     useState<RolePermissionMatrixFilterState>(INITIAL_FILTERS);
 
-  const [matrixItems, setMatrixItems] = useState<
-    RolePermissionMatrixItemDto[]
-  >([]);
+  const [matrixItems, setMatrixItems] = useState<RolePermissionMatrixItemDto[]>(
+    []
+  );
 
   const [initialMatrixItems, setInitialMatrixItems] = useState<
     RolePermissionMatrixItemDto[]
   >([]);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedRole = useMemo<PermissionRoleDto | undefined>(
+  const selectedRole = useMemo(
     () => roles.find((role) => role.id === selectedRoleId),
     [roles, selectedRoleId]
   );
 
+
+  const loadRoles = useCallback(
+  async (tenantId: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await getPermissionRoles(tenantId);
+
+      setRoles(result);
+
+      setSelectedRoleId((current) => {
+        const exists = result.some((role) => role.id === current);
+        return exists ? current : result[0]?.id ?? "";
+      });
+    } catch (err) {
+      setRoles([]);
+      setSelectedRoleId("");
+      setMatrixItems([]);
+      setInitialMatrixItems([]);
+
+      setError(
+        err instanceof Error ? err.message : "permissions:role.list.loadError"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  },
+  []
+);
   useEffect(() => {
+    if (!selectedTenantId) {
+      setRoles([]);
+      setSelectedRoleId("");
+      setMatrixItems([]);
+      setInitialMatrixItems([]);
+      return;
+    }
+
     let alive = true;
 
-    const loadRoles = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const result = await getPermissionRolesOnce();
-
-        if (!alive) return;
-
-        setRoles(result);
-
-        if (result.length > 0) {
-          setSelectedRoleId((current) => current || result[0].id);
-        }
-      } catch (err) {
-        if (!alive) return;
-
-        setError(
-          err instanceof Error ? err.message : "Roles could not be loaded."
-        );
-      } finally {
-        if (alive) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadRoles();
+   void loadRoles(selectedTenantId);
+     
 
     return () => {
       alive = false;
     };
-  }, []);
+  }, [selectedTenantId, loadRoles]);
 
   useEffect(() => {
-    if (!selectedRoleId) return;
+    if (!selectedTenantId || !selectedRoleId) {
+      setMatrixItems([]);
+      setInitialMatrixItems([]);
+      return;
+    }
 
     let alive = true;
 
@@ -116,7 +125,10 @@ export function useRolePermissionMatrix() {
       setError(null);
 
       try {
-        const result = await getRolePermissionMatrix(selectedRoleId);
+        const result = await getRolePermissionMatrix(
+          selectedRoleId,
+          selectedTenantId
+        );
 
         if (!alive) return;
 
@@ -127,10 +139,13 @@ export function useRolePermissionMatrix() {
       } catch (err) {
         if (!alive) return;
 
+        setMatrixItems([]);
+        setInitialMatrixItems([]);
+
         setError(
           err instanceof Error
             ? err.message
-            : "Role permission matrix could not be loaded."
+            : "permissions:role.matrix.loadError"
         );
       } finally {
         if (alive) {
@@ -139,12 +154,12 @@ export function useRolePermissionMatrix() {
       }
     };
 
-    loadMatrix();
+    void loadMatrix();
 
     return () => {
       alive = false;
     };
-  }, [selectedRoleId]);
+  }, [selectedRoleId, selectedTenantId]);
 
   const filteredPermissions = useMemo(() => {
     const search = filters.search.trim().toLowerCase();
@@ -198,6 +213,28 @@ export function useRolePermissionMatrix() {
     });
   }, [initialMatrixItems, matrixItems]);
 
+  const syncTenantPermissions = async () => {
+    if (!selectedTenantId) return;
+
+    setIsSyncingTenant(true);
+    setError(null);
+    setSyncMessage(null);
+
+    try {
+      await syncTenantPermissionCatalog(selectedTenantId);
+
+      await loadRoles(selectedTenantId);
+
+      setSyncMessage("permissions:tenant.sync.success");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "permissions:tenant.sync.error"
+      );
+    } finally {
+      setIsSyncingTenant(false);
+    }
+  };
+
   const assignedCount = useMemo(
     () => matrixItems.filter((item) => item.assigned).length,
     [matrixItems]
@@ -234,6 +271,7 @@ export function useRolePermissionMatrix() {
   const resetChanges = () => {
     setMatrixItems(cloneMatrix(initialMatrixItems));
   };
+
   const bulkAssignVisible = () => {
     const visibleCodes = new Set(
       filteredPermissions
@@ -267,7 +305,9 @@ export function useRolePermissionMatrix() {
   };
 
   const saveChanges = async () => {
-    if (!selectedRoleId || changedItems.length === 0) return;
+    if (!selectedTenantId || !selectedRoleId || changedItems.length === 0) {
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -279,33 +319,53 @@ export function useRolePermissionMatrix() {
         .filter(Boolean);
 
       await syncRolePermissions({
+        tenantId: selectedTenantId,
         roleId: selectedRoleId,
         permissionIds: assignedPermissionIds,
-        reason: "Role permission matrix üzerinden senkronize edildi.",
+        reason: "permissions:role.sync.reason.default",
       });
 
-      const refreshed = await getRolePermissionMatrix(selectedRoleId);
+      const refreshed = await getRolePermissionMatrix(
+        selectedRoleId,
+        selectedTenantId
+      );
+
       const cloned = cloneMatrix(refreshed.permissions);
+      const refreshedAssignedCount = refreshed.permissions.filter(
+        (item) => item.assigned
+      ).length;
 
       setMatrixItems(cloned);
       setInitialMatrixItems(cloneMatrix(refreshed.permissions));
+      setRoles((current) =>
+        current.map((role) =>
+          role.id === selectedRoleId
+            ? {
+              ...role,
+              assignedPermissionCount: refreshedAssignedCount,
+            }
+            : role
+        )
+      );
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Role permissions could not be synchronized."
+        err instanceof Error ? err.message : "permissions:role.sync.error"
       );
     } finally {
       setIsSaving(false);
     }
   };
 
-
   return {
     roles,
     selectedRole,
     selectedRoleId,
     setSelectedRoleId,
+    syncTenantPermissions,
+    isSyncingTenant,
+    syncMessage,
+    selectedTenantId,
+    setSelectedTenantId,
 
     filters,
     updateFilter,
@@ -325,11 +385,8 @@ export function useRolePermissionMatrix() {
     bulkAssignVisible,
     bulkUnassignVisible,
 
-
     isLoading,
     isSaving,
     error,
   };
 }
-
-export default useRolePermissionMatrix;

@@ -23,7 +23,7 @@ import LockIcon from "@mui/icons-material/Lock";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useParams, useRouter } from "next/navigation";
-
+import { setTenantKey } from "@/utils/tenant.client";
 import { textFieldStyle } from "@/app/components/shared/styles";
 import { useAuth } from "@/app/context/AuthContext";
 import { useI18nNs } from "@/app/context/i18nContext";
@@ -31,9 +31,9 @@ import { useAuthLoginForm } from "../hooks/useAuthLoginForm";
 import AuthSocialButtons from "./AuthSocialButtons";
 
 const LOGIN_TENANT_OPTIONS = [
-  { key: "default", label: "Default" },
+  { key: "livemanage", label: "LiveManage" },
   { key: "kulturtisch", label: "KulturTisch" },
-  { key: "admin", label: "Administration" },
+  { key: "system", label: "Administration" },
   { key: "demo", label: "Demo" },
 ];
 
@@ -53,6 +53,8 @@ export default function AuthLoginForm() {
     setPassword,
     setRememberMe,
     setTenant,
+    setGeneralError,
+    clearGeneralError,
     togglePassword,
     submit,
   } = useAuthLoginForm({
@@ -222,7 +224,27 @@ export default function AuthLoginForm() {
         </Typography>
       </Stack>
 
-      <AuthSocialButtons />
+      <AuthSocialButtons
+        locale={locale}
+        rememberMe={form.rememberMe}
+        tenantKey={form.tenantKey}
+        disabled={loading}
+        onStart={clearGeneralError}
+        onError={setGeneralError}
+
+        
+         onSuccess={async (redirectTo, resolvedTenantKey) => {
+  if (resolvedTenantKey) {
+    setTenantKey(resolvedTenantKey);
+  }
+
+  await refreshUser();
+  router.replace(redirectTo);
+  router.refresh();
+}}
+
+
+      />
     </Box>
   );
 }

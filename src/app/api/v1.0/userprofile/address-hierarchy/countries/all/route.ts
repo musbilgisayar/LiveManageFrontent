@@ -1,7 +1,7 @@
 // src/app/api/v1.0/userprofile/address-hierarchy/countries/all/route.ts
 
 import { NextRequest } from "next/server";
-import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
+import { proxyReadOnlyLookupWithServiceFallback } from "@/lib/bff/proxyReadOnlyLookupWithServiceFallback";
 
 const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || "1.0";
 
@@ -60,9 +60,8 @@ function createErrorResponse(payload: unknown) {
 }
 
 export async function GET(req: NextRequest) {
-  return proxyJsonWithWebAuth(req, {
+  return proxyReadOnlyLookupWithServiceFallback(req, {
     url: `/api/v${API_VERSION}/profile/address-hierarchy/countries/all`,
-    method: "GET",
     logLabel: "AddressHierarchyCountriesAll.GET",
     extraHeaders: {
       "x-client-version": "lm-frontend/locmgr-1.0.2",

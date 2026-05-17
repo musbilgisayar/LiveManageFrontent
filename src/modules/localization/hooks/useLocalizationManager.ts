@@ -5,11 +5,13 @@ import {
   LocalizationLanguageItem,
   LocalizationManagerToastState,
   LocalizationTranslationRow,
+  LocalizationValueLookupResult,
 } from "../types/LocalizationManager.types";
 import {
   createLocalizationKeyBatch,
   getLocalizationLanguages,
   getTranslationsByNamespaceForCultures,
+  searchLocalizationKeysByValue,
 } from "../services/localizationManager.service";
 import { groupTranslationsByKey } from "../utils/localizationManager.mapper";
 
@@ -39,6 +41,11 @@ export function useLocalizationManager(tr: TranslateFn) {
   const [namespaceOptions, setNamespaceOptions] = useState<string[]>(
     DEFAULT_NAMESPACE_OPTIONS
   );
+  const [valueLookupQuery, setValueLookupQuery] = useState("");
+  const [valueLookupResults, setValueLookupResults] = useState<
+    LocalizationValueLookupResult[]
+  >([]);
+  const [valueLookupLoading, setValueLookupLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -220,6 +227,88 @@ export function useLocalizationManager(tr: TranslateFn) {
     [refresh, selectedLangs, tr]
   );
 
+  const searchByValue = useCallback(
+    async (textArg?: string) => {
+      const text = (textArg ?? valueLookupQuery).trim();
+
+      if (!text) {
+        setValueLookupResults([]);
+        setToast({
+          open: true,
+          sev: "warning",
+          msg: tr(
+            "localization:valueLookup.messages.queryRequired",
+            "Lütfen aranacak açıklama metnini girin."
+          ),
+        });
+        return;
+      }
+
+      if (selectedLangs.length === 0) {
+        setValueLookupResults([]);
+        setToast({
+          open: true,
+          sev: "warning",
+          msg: tr(
+            "localization:messages.cultureRequired",
+            "Lütfen en az bir dil seçin."
+          ),
+        });
+        return;
+      }
+
+      setValueLookupLoading(true);
+
+      try {
+        const result = await searchLocalizationKeysByValue({
+          text,
+          cultures: selectedLangs,
+          namespace: namespaceQuery,
+        });
+
+        if (!mountedRef.current) return;
+
+        setValueLookupResults(result);
+
+        if (result.length === 0) {
+          setToast({
+            open: true,
+            sev: "info",
+            msg: tr(
+              "localization:valueLookup.messages.noResults",
+              "Bu açıklamaya uygun localization key bulunamadı."
+            ),
+          });
+        }
+      } catch (error) {
+        if (!mountedRef.current) return;
+
+        setValueLookupResults([]);
+        setToast({
+          open: true,
+          sev: "error",
+          msg:
+            error instanceof Error
+              ? error.message
+              : tr(
+                  "localization:valueLookup.messages.searchFailed",
+                  "Açıklamaya göre key araması tamamlanamadı."
+                ),
+        });
+      } finally {
+        if (mountedRef.current) {
+          setValueLookupLoading(false);
+        }
+      }
+    },
+    [namespaceQuery, selectedLangs, tr, valueLookupQuery]
+  );
+
+  const clearValueLookup = useCallback(() => {
+    setValueLookupQuery("");
+    setValueLookupResults([]);
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     void loadLanguages();
@@ -237,6 +326,10 @@ export function useLocalizationManager(tr: TranslateFn) {
     namespaceQuery,
     setNamespaceQuery,
     namespaceOptions,
+    valueLookupQuery,
+    setValueLookupQuery,
+    valueLookupResults,
+    valueLookupLoading,
     cultureOptions,
     loading,
     saving,
@@ -244,5 +337,7 @@ export function useLocalizationManager(tr: TranslateFn) {
     closeToast,
     refresh,
     createKey,
+    searchByValue,
+    clearValueLookup,
   };
 }

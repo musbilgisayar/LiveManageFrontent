@@ -1,6 +1,6 @@
 "use client";
 
-import { Grid, Stack } from "@mui/material";
+import { Alert, Grid, Stack } from "@mui/material";
 
 import { useI18nNs } from "@/app/context/i18nContext";
 import type { AdminUserDetailDto } from "../../../types/UserDetail.types";
@@ -11,10 +11,12 @@ import PhoneManagerCard_ultimate from "@/modules/users/components/detail/tabs/ph
 
 type Props = {
   user: AdminUserDetailDto;
+  userId?: string;
 };
 
-export default function ContactTab({ user }: Props) {
+export default function ContactTab({ user, userId }: Props) {
   const { t } = useI18nNs(["users", "common"]);
+  const effectiveUserId = userId?.trim() || user.identity?.id?.trim() || "";
 
   const tr = (key: string, fallback: string) => {
     const value = t(key);
@@ -23,9 +25,20 @@ export default function ContactTab({ user }: Props) {
 
   return (
     <Stack spacing={3}>
+      {!effectiveUserId ? (
+        <Alert severity="warning">
+          {tr(
+            "users:detail.errors.userIdRequired",
+            "Kullanici bilgileri yuklenemedigi icin iletisim yoneticileri acilamiyor."
+          )}
+        </Alert>
+      ) : null}
+
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <PhoneManagerCard_ultimate userId={user.identity.id} />
+          {effectiveUserId ? (
+            <PhoneManagerCard_ultimate userId={effectiveUserId} />
+          ) : null}
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -33,19 +46,23 @@ export default function ContactTab({ user }: Props) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6 }}>
-          <AddressManagerCard userId={user.identity.id} />
+          {effectiveUserId ? (
+            <AddressManagerCard userId={effectiveUserId} />
+          ) : null}
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6 }}>
-          <SocialMediaManagerCard
-            ownerType="User"
-            ownerId={user.identity.id}
-            title={tr(
-              "users:detail.cards.socialMediaAccounts",
-              "Sosyal medya hesapları"
-            )}
-            canEdit
-          />
+          {effectiveUserId ? (
+            <SocialMediaManagerCard
+              ownerType="User"
+              ownerId={effectiveUserId}
+              title={tr(
+                "users:detail.cards.socialMediaAccounts",
+                "Sosyal medya hesaplari"
+              )}
+              canEdit
+            />
+          ) : null}
         </Grid>
       </Grid>
     </Stack>

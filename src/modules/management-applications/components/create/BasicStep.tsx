@@ -1,6 +1,5 @@
 "use client";
 
- 
 import { Box, Card, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import {
   IconBuildingCommunity,
@@ -9,21 +8,25 @@ import {
   IconUserShield,
 } from "@tabler/icons-react";
 
+import { useI18nNs } from "@/app/context/i18nContext";
+
 import SectionCard from "./shared/SectionCard";
 import SelectionCard from "./shared/SelectionCard";
 import VerificationBadge from "./shared/VerificationBadge";
+
 import {
   premiumFieldSx,
   representationOptions,
   structureOptions,
 } from "./constants";
+
 import type {
   ManagementApplicationFormErrors as FormErrors,
   ManagementApplicationFormState as FormState,
   RepresentationType,
 } from "../../types/managementApplication.types";
 
- type BasicStepProps = {
+type BasicStepProps = {
   form: FormState;
   errors: FormErrors;
   applicantFullName: string;
@@ -31,6 +34,13 @@ import type {
   isPhoneVerified: boolean;
   onPatch: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 };
+
+const NS = "property:managementApplication.create.basic";
+
+function isMissingTranslation(value: string | undefined | null, key: string) {
+  return !value || value === key || value === `[${key}]`;
+}
+
 export default function BasicStep({
   form,
   errors,
@@ -39,28 +49,54 @@ export default function BasicStep({
   isPhoneVerified,
   onPatch,
 }: BasicStepProps) {
+  const { t } = useI18nNs(["property"]);
+
+  const tr = (key: string, fallback: string) => {
+    const fullKey = `${NS}.${key}`;
+    const value = t(fullKey);
+    return isMissingTranslation(value, fullKey) ? fallback : value;
+  };
+
+  const trDirect = (key: string, fallback: string) => {
+    const value = t(key);
+    return isMissingTranslation(value, key) ? fallback : value;
+  };
+
+  const selectedRepresentation = representationOptions.find(
+    (item) => item.value === form.representationType,
+  );
+
   return (
     <Stack spacing={3}>
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
         <VerificationBadge
           ok={isEmailVerified}
           icon={<IconMailCheck size={17} />}
-          label="E-posta doğrulandı"
-          hint={form.contactEmail || "Hesabınızdaki doğrulanmış e-posta kullanılacak"}
+          label={tr("emailVerified", "E-posta doğrulandı")}
+          hint={
+            form.contactEmail ||
+            tr("verifiedEmailHint", "Hesabınızdaki doğrulanmış e-posta kullanılacak")
+          }
         />
 
         <VerificationBadge
           ok={isPhoneVerified}
           icon={<IconPhoneCheck size={17} />}
-          label="Telefon doğrulandı"
-          hint={form.contactPhone || "Hesabınızdaki doğrulanmış telefon kullanılacak"}
+          label={tr("phoneVerified", "Telefon doğrulandı")}
+          hint={
+            form.contactPhone ||
+            tr("verifiedPhoneHint", "Hesabınızdaki doğrulanmış telefon kullanılacak")
+          }
         />
       </Stack>
 
       <SectionCard
         icon={<IconBuildingCommunity size={19} />}
-        title="Yapı türü"
-        description="Başvurunun hangi yapı türü için yapılacağını seçin."
+        title={tr("structure.title", "Yapı türü")}
+        description={tr(
+          "structure.description",
+          "Başvurunun hangi yapı türü için yapılacağını seçin.",
+        )}
       >
         <Box
           sx={{
@@ -73,8 +109,8 @@ export default function BasicStep({
             <SelectionCard
               key={item.value}
               selected={form.structureType === item.value}
-              title={item.label}
-              description={item.description}
+              title={trDirect(item.labelKey, item.fallbackLabel)}
+              description={trDirect(item.descriptionKey, item.fallbackDescription)}
               icon={item.icon}
               onClick={() => onPatch("structureType", item.value)}
             />
@@ -84,8 +120,11 @@ export default function BasicStep({
 
       <SectionCard
         icon={<IconUserShield size={19} />}
-        title="Başvuru ve temsil bilgileri"
-        description="Resmi muhatap, temsil şekli ve yetki süresini girin."
+        title={tr("application.title", "Başvuru ve temsil bilgileri")}
+        description={tr(
+          "application.description",
+          "Resmi muhatap, temsil şekli ve yetki süresini girin.",
+        )}
       >
         <Box
           sx={{
@@ -95,74 +134,76 @@ export default function BasicStep({
           }}
         >
           <TextField
-            label="Yapı adı"
+            label={tr("fields.propertyName", "Yapı adı")}
             value={form.propertyName}
             onChange={(event) => onPatch("propertyName", event.target.value)}
             error={!!errors.propertyName}
-            helperText={errors.propertyName ?? "Örn: Green Park Sitesi"}
+            helperText={
+              errors.propertyName ?? tr("fields.propertyNameHint", "Örn: Green Park Sitesi")
+            }
             fullWidth
             sx={premiumFieldSx}
           />
 
           <TextField
             select
-            label="Temsil şekli"
+            label={tr("fields.representationType", "Temsil şekli")}
             value={form.representationType}
             onChange={(event) =>
               onPatch("representationType", event.target.value as RepresentationType)
             }
             helperText={
-              representationOptions.find(
-                (item) => item.value === form.representationType,
-              )?.description ?? " "
+              selectedRepresentation
+                ? trDirect(
+                    selectedRepresentation.descriptionKey,
+                    selectedRepresentation.fallbackDescription,
+                  )
+                : " "
             }
             fullWidth
             sx={premiumFieldSx}
           >
             {representationOptions.map((item) => (
               <MenuItem key={item.value} value={item.value}>
-                {item.label}
+                {trDirect(item.labelKey, item.fallbackLabel)}
               </MenuItem>
             ))}
           </TextField>
 
-<Card
-  variant="outlined"
-  sx={{
-    borderRadius: 3,
-    p: 2,
-    bgcolor: "background.paper",
-  }}
->
-  <Stack spacing={0.5}>
-    <Typography variant="caption" color="text.secondary" fontWeight={800}>
-      Başvuran
-    </Typography>
+          <Card variant="outlined" sx={{ borderRadius: 3, p: 2, bgcolor: "background.paper" }}>
+            <Stack spacing={0.5}>
+              <Typography variant="caption" color="text.secondary" fontWeight={800}>
+                {tr("applicant.title", "Başvuran")}
+              </Typography>
 
-    <Typography fontWeight={900} fontSize={15}>
-      {applicantFullName || "Hesap bilgisi yükleniyor..."}
-    </Typography>
+              <Typography fontWeight={900} fontSize={15}>
+                {applicantFullName || tr("applicant.loading", "Hesap bilgisi yükleniyor...")}
+              </Typography>
 
-    <Typography variant="body2" color="text.secondary">
-      Başvuru, oturum açmış kullanıcı hesabınız üzerinden oluşturulacaktır.
-    </Typography>
-  </Stack>
-</Card>
+              <Typography variant="body2" color="text.secondary">
+                {tr(
+                  "applicant.description",
+                  "Başvuru, oturum açmış kullanıcı hesabınız üzerinden oluşturulacaktır.",
+                )}
+              </Typography>
+            </Stack>
+          </Card>
 
           <TextField
-            label="Kimlik / Vergi / Kayıt Numarası"
+            label={tr("fields.identityNumber", "Kimlik / Vergi / Kayıt Numarası")}
             value={form.taxOrIdentityNumber}
             onChange={(event) => onPatch("taxOrIdentityNumber", event.target.value)}
             error={!!errors.taxOrIdentityNumber}
             helperText={
-              errors.taxOrIdentityNumber ?? "Gerçek kişi, şirket veya kurum numarası"
+              errors.taxOrIdentityNumber ??
+              tr("fields.identityNumberHint", "Gerçek kişi, şirket veya kurum numarası")
             }
             fullWidth
             sx={premiumFieldSx}
           />
 
           <TextField
-            label="Yetki başlangıç tarihi"
+            label={tr("fields.authorityStartDate", "Yetki başlangıç tarihi")}
             type="date"
             value={form.authorityStartDate}
             onChange={(event) => onPatch("authorityStartDate", event.target.value)}
@@ -174,13 +215,16 @@ export default function BasicStep({
           />
 
           <TextField
-            label="Yetki bitiş tarihi"
+            label={tr("fields.authorityEndDate", "Yetki bitiş tarihi")}
             type="date"
             value={form.authorityEndDate}
             onChange={(event) => onPatch("authorityEndDate", event.target.value)}
             InputLabelProps={{ shrink: true }}
             error={!!errors.authorityEndDate}
-            helperText={errors.authorityEndDate ?? "Süresiz ise boş bırakabilirsiniz"}
+            helperText={
+              errors.authorityEndDate ??
+              tr("fields.authorityEndDateHint", "Süresiz ise boş bırakabilirsiniz")
+            }
             fullWidth
             sx={premiumFieldSx}
           />

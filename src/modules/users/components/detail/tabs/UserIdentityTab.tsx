@@ -16,6 +16,7 @@ import {
   setAdminUsername,
   updateSuperAdminUser,
 } from "../../../services/superAdminUsers.service";
+import type { UserDetailMode } from "../../../config/userDetailTabs.config";
 import UserInfoCard from "../cards/UserInfoCard";
 import EditableUserInfoCard, {
   EditableUserInfoField,
@@ -24,6 +25,7 @@ import UsernameChangeCard from "../cards/UsernameChangeCard";
 
 type Props = {
   user: AdminUserDetailDto;
+  mode: UserDetailMode;
   onUpdated?: () => Promise<void> | void;
 };
 
@@ -31,8 +33,9 @@ function fallbackText(value?: string | null) {
   return value?.trim() ? value : "—";
 }
 
-export default function UserIdentityTab({ user, onUpdated }: Props) {
+export default function UserIdentityTab({ user, mode, onUpdated }: Props) {
   const { t } = useI18nNs(["users", "common"]);
+  const isAdminMode = mode === "admin";
 
   const tr = React.useCallback(
     (key: string, fallback: string) => {
@@ -124,21 +127,21 @@ export default function UserIdentityTab({ user, onUpdated }: Props) {
       key: "firstName",
       label: t("users:detail.overview.fields.firstName"),
       value: fallbackText(user.identity.firstName),
-      editable: true,
+      editable: isAdminMode,
       icon: <PersonOutlineOutlinedIcon fontSize="small" />,
     },
     {
       key: "lastName",
       label: t("users:detail.overview.fields.lastName"),
       value: fallbackText(user.identity.lastName),
-      editable: true,
+      editable: isAdminMode,
       icon: <PersonOutlineOutlinedIcon fontSize="small" />,
     },
     {
       key: "middleName",
       label: t("users:detail.overview.fields.middleName"),
       value: fallbackText(user.identity.middleName),
-      editable: true,
+      editable: isAdminMode,
       icon: <PersonOutlineOutlinedIcon fontSize="small" />,
     },
     {
@@ -147,7 +150,7 @@ export default function UserIdentityTab({ user, onUpdated }: Props) {
       value: fallbackText(user.identity.userName),
       editable: false,
       icon: <AlternateEmailOutlinedIcon fontSize="small" />,
-      action: !isEditing ? (
+      action: isAdminMode && !isEditing ? (
         <Button
           variant="outlined"
           size="small"
@@ -260,7 +263,11 @@ export default function UserIdentityTab({ user, onUpdated }: Props) {
               editLabel={t("common:edit")}
               cancelLabel={t("common:cancel")}
               saveLabel={t("common:save")}
-              onEdit={() => setIsEditing(true)}
+              onEdit={() => {
+                if (isAdminMode) {
+                  setIsEditing(true);
+                }
+              }}
               onCancel={() => {
                 setIsEditing(false);
                 setError(null);
@@ -268,6 +275,7 @@ export default function UserIdentityTab({ user, onUpdated }: Props) {
               onSave={handleSave}
             />
 
+            {isAdminMode && (
             <Collapse in={isUserNameOpen} timeout="auto" unmountOnExit>
               <UsernameChangeCard
                 userId={user.identity.id}
@@ -280,6 +288,7 @@ export default function UserIdentityTab({ user, onUpdated }: Props) {
                 }}
               />
             </Collapse>
+            )}
           </Stack>
         </Grid>
 

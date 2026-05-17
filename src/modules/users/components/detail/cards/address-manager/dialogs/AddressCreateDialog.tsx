@@ -125,7 +125,7 @@ export default function AddressCreateDialog({
     isLoading: isCountriesLoading,
     errorMessage: countriesErrorMessage,
   } = useAddressCountries({
-    includeAll: true,
+    includeAll: false,
     autoLoad: open,
   });
 

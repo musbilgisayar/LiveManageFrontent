@@ -1,11 +1,20 @@
 "use client";
 
-import { alpha, Box, Button, Stack, Typography, useTheme } from "@mui/material";
+import {
+  alpha,
+  Box,
+  Button,
+  Stack,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import { IconFileText, IconX } from "@tabler/icons-react";
 
+import { useI18nNs } from "@/app/context/i18nContext";
+
 import SectionCard from "./shared/SectionCard";
-import { getDocumentTitle } from "./constants";
+import { documentCatalog } from "./constants";
 import type { UploadedFileItem } from "../../types/managementApplication.types";
 
 type UploadedDocumentListProps = {
@@ -13,17 +22,42 @@ type UploadedDocumentListProps = {
   onRemove: (id: string) => void;
 };
 
+const NS = "property:managementApplication.create.uploadedDocuments";
+
 export default function UploadedDocumentList({
   files,
   onRemove,
 }: UploadedDocumentListProps) {
   const theme = useTheme<Theme>();
+  const { t } = useI18nNs(["property"]);
+
+  const tr = (key: string, fallback: string) => {
+    const fullKey = `${NS}.${key}`;
+    const value = t(fullKey);
+    return value && value !== fullKey ? value : fallback;
+  };
+
+  const trDirect = (key: string, fallback: string) => {
+    const value = t(key);
+    return value && value !== key ? value : fallback;
+  };
+
+  const getDocumentTitle = (kind: UploadedFileItem["kind"]) => {
+    const catalog = documentCatalog[kind];
+
+    return catalog
+      ? trDirect(catalog.titleKey, catalog.fallbackTitle)
+      : tr("fallbackDocument", "Belge");
+  };
 
   return (
     <SectionCard
       icon={<IconFileText size={19} />}
-      title="Eklenen belgeler"
-      description="Başvuruya eklenen dosyaları buradan kontrol edebilirsiniz."
+      title={tr("title", "Eklenen belgeler")}
+      description={tr(
+        "description",
+        "Başvuruya eklenen dosyaları buradan kontrol edebilirsiniz.",
+      )}
     >
       {files.length === 0 ? (
         <Box
@@ -34,9 +68,15 @@ export default function UploadedDocumentList({
             bgcolor: alpha(theme.palette.background.default, 0.35),
           }}
         >
-          <Typography fontWeight={900}>Henüz belge eklenmedi</Typography>
+          <Typography fontWeight={900}>
+            {tr("emptyTitle", "Henüz belge eklenmedi")}
+          </Typography>
+
           <Typography variant="body2" color="text.secondary" mt={0.4}>
-            Dosya seçip “Belgeyi Ekle” dediğinizde burada listelenecek.
+            {tr(
+              "emptyDescription",
+              "Dosya seçip “Belgeyi Ekle” dediğinizde burada listelenecek.",
+            )}
           </Typography>
         </Box>
       ) : (
@@ -55,7 +95,12 @@ export default function UploadedDocumentList({
                 bgcolor: alpha(theme.palette.background.default, 0.3),
               }}
             >
-              <Stack direction="row" spacing={1.2} alignItems="center" sx={{ minWidth: 0 }}>
+              <Stack
+                direction="row"
+                spacing={1.2}
+                alignItems="center"
+                sx={{ minWidth: 0 }}
+              >
                 <Box
                   sx={{
                     width: 38,
@@ -99,7 +144,7 @@ export default function UploadedDocumentList({
                   fontWeight: 900,
                 }}
               >
-                Kaldır
+                {tr("remove", "Kaldır")}
               </Button>
             </Stack>
           ))}

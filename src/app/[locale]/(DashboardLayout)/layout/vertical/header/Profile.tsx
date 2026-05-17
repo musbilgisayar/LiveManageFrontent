@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Box,
@@ -9,25 +9,99 @@ import {
   Typography,
   Divider,
   Button,
-  IconButton,
+  ButtonBase,
+  Chip,
 } from "@mui/material";
 import * as dropdownData from "./data";
-import { IconMail } from "@tabler/icons-react";
+import {
+  IconBuildingCommunity,
+  IconMail,
+  IconShieldCheck,
+} from "@tabler/icons-react";
 import { Stack } from "@mui/system";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useI18nNs } from "@/app/context/i18nContext";
+import { useAuth } from "@/app/context/AuthContext";
 import { postWebFetcher } from "@/utils/fetchers.web.client";
-import { clearTenantKey } from "@/utils/tenant.client";
+import { clearTenantKey, getTenantKey } from "@/utils/tenant.client";
+
+function joinName(firstName?: string, lastName?: string) {
+  return [firstName, lastName].filter(Boolean).join(" ").trim();
+}
+
+function formatRole(role?: string) {
+  if (!role) return "";
+
+  return role
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 const Profile = () => {
   const { t } = useI18nNs(["header"]);
+  const { user } = useAuth();
   const router = useRouter();
   const params = useParams() as { locale?: string };
 
   const activeLocale = params?.locale || "tr";
 
   const [anchorEl2, setAnchorEl2] = useState<HTMLElement | null>(null);
+
+  const tr = (key: string, fallback: string) => {
+    const value = t(key);
+    return value === `[${key}]` ? fallback : value;
+  };
+
+  const profileIdentity = useMemo(() => {
+    const extendedUser = user as
+      | (NonNullable<typeof user> & {
+          role?: string;
+          primaryRole?: string;
+          tenantId?: string;
+          tenantName?: string;
+        })
+      | null;
+
+    const displayName =
+      user?.fullName ||
+      user?.user?.fullName ||
+      joinName(user?.firstName, user?.lastName) ||
+      joinName(user?.user?.firstName, user?.user?.lastName) ||
+      user?.userName ||
+      user?.user?.userName ||
+      user?.email ||
+      user?.user?.email ||
+      tr("header:profile.unknownUser", "Kullanici");
+
+    const role =
+      extendedUser?.primaryRole ||
+      extendedUser?.role ||
+      user?.roles?.[0] ||
+      tr("header:profile.roleFallback", "Yetki profili atanmadi");
+
+    const email =
+      user?.email ||
+      user?.user?.email ||
+      tr("header:profile.emailFallback", "E-posta bulunamadi");
+
+    const tenant =
+      extendedUser?.tenantName ||
+      user?.tenant ||
+      extendedUser?.tenantId ||
+      user?.user?.tenantId ||
+      getTenantKey() ||
+      tr("header:profile.tenantFallback", "Tenant secilmedi");
+
+    return {
+      displayName,
+      role: formatRole(role),
+      email,
+      tenant,
+    };
+  }, [t, user]);
 
   const handleClick2 = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl2(event.currentTarget);
@@ -65,14 +139,23 @@ const Profile = () => {
 
   return (
     <Box>
-      <IconButton
+      <ButtonBase
         aria-label="show profile menu"
-        color="inherit"
         aria-controls="msgs-menu"
         aria-haspopup="true"
         sx={{
+          borderRadius: 2,
+          px: { xs: 0.5, md: 1 },
+          py: 0.5,
+          gap: 1,
+          color: "text.secondary",
+          textAlign: "left",
+          "&:hover": {
+            bgcolor: "action.hover",
+          },
           ...(typeof anchorEl2 === "object" && {
             color: "primary.main",
+            bgcolor: "primary.light",
           }),
         }}
         onClick={handleClick2}
@@ -82,7 +165,51 @@ const Profile = () => {
           alt="ProfileImg"
           sx={{ width: 35, height: 35 }}
         />
-      </IconButton>
+        <Box
+          sx={{
+            display: { xs: "none", md: "block" },
+            minWidth: 0,
+            maxWidth: { md: 220, xl: 280 },
+          }}
+        >
+          <Typography
+            variant="subtitle2"
+            color="textPrimary"
+            fontWeight={600}
+            noWrap
+          >
+            {profileIdentity.displayName}
+          </Typography>
+          <Stack direction="row" spacing={0.75} alignItems="center" minWidth={0}>
+            <Typography
+              variant="caption"
+              color="textSecondary"
+              display="flex"
+              alignItems="center"
+              gap={0.5}
+              noWrap
+              sx={{ minWidth: 0, maxWidth: 145 }}
+              title={profileIdentity.email}
+            >
+              <IconMail width={13} height={13} />
+              {profileIdentity.email}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="textSecondary"
+              display="flex"
+              alignItems="center"
+              gap={0.5}
+              noWrap
+              sx={{ minWidth: 0, maxWidth: 105 }}
+              title={profileIdentity.tenant}
+            >
+              <IconBuildingCommunity width={13} height={13} />
+              {profileIdentity.tenant}
+            </Typography>
+          </Stack>
+        </Box>
+      </ButtonBase>
 
       <Menu
         id="msgs-menu"
@@ -109,22 +236,59 @@ const Profile = () => {
             alt="ProfileImg"
             sx={{ width: 95, height: 95 }}
           />
-          <Box>
+          <Box minWidth={0}>
             <Typography variant="subtitle2" color="textPrimary" fontWeight={600}>
-              Mathew Anderson
+              {profileIdentity.displayName}
             </Typography>
-            <Typography variant="subtitle2" color="textSecondary">
-              Designer
-            </Typography>
+            <Stack direction="row" spacing={1} mt={0.75} flexWrap="wrap" useFlexGap>
+              <Chip
+                size="small"
+                icon={<IconShieldCheck width={15} height={15} />}
+                label={profileIdentity.role}
+                sx={{
+                  maxWidth: 190,
+                  bgcolor: "primary.light",
+                  color: "primary.main",
+                  fontWeight: 600,
+                  "& .MuiChip-label": {
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  },
+                }}
+              />
+              <Chip
+                size="small"
+                icon={<IconBuildingCommunity width={15} height={15} />}
+                label={profileIdentity.tenant}
+                sx={{
+                  maxWidth: 190,
+                  bgcolor: "secondary.light",
+                  color: "secondary.main",
+                  fontWeight: 600,
+                  "& .MuiChip-label": {
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  },
+                }}
+              />
+            </Stack>
             <Typography
               variant="subtitle2"
               color="textSecondary"
               display="flex"
               alignItems="center"
               gap={1}
+              mt={1}
+              sx={{
+                maxWidth: 210,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={profileIdentity.email}
             >
               <IconMail width={15} height={15} />
-              info@modernize.com
+              {profileIdentity.email}
             </Typography>
           </Box>
         </Stack>

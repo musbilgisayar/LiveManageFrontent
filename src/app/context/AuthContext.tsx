@@ -16,6 +16,9 @@ import { useParams, useRouter } from "next/navigation";
 export interface AuthUser {
   id?: string;
   sub?: string;
+  userId?: string;
+  appUserId?: string;
+  applicationUserId?: string;
 
   email?: string;
   userName?: string;
@@ -35,6 +38,9 @@ export interface AuthUser {
 
   user?: {
     id?: string;
+    userId?: string;
+    appUserId?: string;
+    applicationUserId?: string;
     email?: string;
     userName?: string;
 
@@ -95,6 +101,8 @@ const AuthContext = createContext<AuthContextType>({
   hasAllPermissions: () => false,
 });
 
+const AUTHENTICATED_SELF_PERMISSIONS = ["account.me.view.self"];
+
 function resolveLocaleFromParams(
   params: Record<string, string | string[] | undefined> | null
 ): string {
@@ -107,13 +115,74 @@ function resolveLocaleFromParams(
   return (raw ?? "tr").toLowerCase();
 }
 
-function normalizePermissions(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+function resolvePermissionCode(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
 
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+
+  const record = value as Record<string, unknown>;
+  const code =
+    record.code ??
+    record.permissionCode ??
+    record.name ??
+    record.value ??
+    record.permission;
+
+  return typeof code === "string" ? code : "";
+}
+
+function normalizePermissions(value: unknown): string[] {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const directCode = resolvePermissionCode(item).trim();
+
+      if (directCode) {
+        return [directCode];
+      }
+
+      return normalizePermissions(item);
+    });
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const directCode = resolvePermissionCode(record).trim();
+
+    if (directCode) {
+      return [directCode];
+    }
+
+    return [
+      ...normalizePermissions(record.effectivePermissions),
+      ...normalizePermissions(record.permissions),
+      ...normalizePermissions(record.permissionCodes),
+      ...normalizePermissions(record.rolePermissions),
+      ...normalizePermissions(record.userPermissions),
+    ];
+  }
+
+  return [];
+}
+
+function uniquePermissions(permissions: string[]): string[] {
+  const seen = new Set<string>();
+
+  return permissions.filter((permission) => {
+    const normalized = permission.toLowerCase();
+
+    if (seen.has(normalized)) {
+      return false;
+    }
+
+    seen.add(normalized);
+    return true;
+  });
 }
 
 function normalizeAuthUser(json: any): AuthUser | null {
@@ -123,13 +192,19 @@ function normalizeAuthUser(json: any): AuthUser | null {
     return null;
   }
 
-  const effectivePermissions = normalizePermissions(
-    root?.effectivePermissions ??
-      root?.permissions ??
-      root?.user?.effectivePermissions ??
-      root?.user?.permissions ??
-      []
-  );
+  const effectivePermissions = uniquePermissions([
+    ...AUTHENTICATED_SELF_PERMISSIONS,
+    ...normalizePermissions(root?.effectivePermissions),
+    ...normalizePermissions(root?.permissions),
+    ...normalizePermissions(root?.permissionCodes),
+    ...normalizePermissions(root?.rolePermissions),
+    ...normalizePermissions(root?.userPermissions),
+    ...normalizePermissions(root?.user?.effectivePermissions),
+    ...normalizePermissions(root?.user?.permissions),
+    ...normalizePermissions(root?.user?.permissionCodes),
+    ...normalizePermissions(root?.user?.rolePermissions),
+    ...normalizePermissions(root?.user?.userPermissions),
+  ]);
 
   return {
     ...root,

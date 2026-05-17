@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  IconBuildingCommunity,
-  IconHome,
-} from "@tabler/icons-react";
+import { IconBuildingCommunity, IconHome } from "@tabler/icons-react";
 import type {
   ManagementStructureType,
   RepresentationType,
@@ -32,91 +29,153 @@ export const premiumFieldSx = {
 
 export const structureOptions: Array<{
   value: ManagementStructureType;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
+  fallbackLabel: string;
+  fallbackDescription: string;
   icon: React.ReactNode;
 }> = [
   {
     value: "site",
-    label: "Site Yönetimi",
-    description: "Birden fazla blok veya toplu yaşam alanı için başvuru",
+    labelKey: "property:managementApplication.create.options.structure.site.label",
+    descriptionKey:
+      "property:managementApplication.create.options.structure.site.description",
+    fallbackLabel: "Site Yönetimi",
+    fallbackDescription: "Birden fazla blok veya toplu yaşam alanı için başvuru",
     icon: <IconBuildingCommunity size={28} stroke={1.9} />,
   },
   {
     value: "apartment",
-    label: "Apartman Yönetimi",
-    description: "Tek yapı veya sınırlı bağımsız bölüm için başvuru",
+    labelKey:
+      "property:managementApplication.create.options.structure.apartment.label",
+    descriptionKey:
+      "property:managementApplication.create.options.structure.apartment.description",
+    fallbackLabel: "Apartman Yönetimi",
+    fallbackDescription: "Tek yapı veya sınırlı bağımsız bölüm için başvuru",
     icon: <IconHome size={28} stroke={1.9} />,
   },
 ];
 
 export const representationOptions: Array<{
   value: RepresentationType;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
+  fallbackLabel: string;
+  fallbackDescription: string;
 }> = [
   {
     value: "owner",
-    label: "Malik / Kat Maliki",
-    description: "Doğrudan malik sıfatıyla başvuru",
+    labelKey:
+      "property:managementApplication.create.options.representation.owner.label",
+    descriptionKey:
+      "property:managementApplication.create.options.representation.owner.description",
+    fallbackLabel: "Malik / Kat Maliki",
+    fallbackDescription: "Doğrudan malik sıfatıyla başvuru",
   },
   {
     value: "proxy",
-    label: "Vekil",
-    description: "Vekaletname ile temsil",
+    labelKey:
+      "property:managementApplication.create.options.representation.proxy.label",
+    descriptionKey:
+      "property:managementApplication.create.options.representation.proxy.description",
+    fallbackLabel: "Vekil",
+    fallbackDescription: "Vekaletname ile temsil",
   },
   {
     value: "board_member",
-    label: "Yönetim Kurulu / Temsilci",
-    description: "Karar veya görevlendirme ile temsil",
+    labelKey:
+      "property:managementApplication.create.options.representation.boardMember.label",
+    descriptionKey:
+      "property:managementApplication.create.options.representation.boardMember.description",
+    fallbackLabel: "Yönetim Kurulu / Temsilci",
+    fallbackDescription: "Karar veya görevlendirme ile temsil",
   },
   {
     value: "professional_manager",
-    label: "Profesyonel Yönetici",
-    description: "Sözleşme veya hizmet anlaşması ile temsil",
+    labelKey:
+      "property:managementApplication.create.options.representation.professionalManager.label",
+    descriptionKey:
+      "property:managementApplication.create.options.representation.professionalManager.description",
+    fallbackLabel: "Profesyonel Yönetici",
+    fallbackDescription: "Sözleşme veya hizmet anlaşması ile temsil",
   },
 ];
 
 export const documentCatalog: Record<
   RequiredDocumentKind,
-  { title: string; description: string }
+  {
+    titleKey: string;
+    descriptionKey: string;
+    fallbackTitle: string;
+    fallbackDescription: string;
+  }
 > = {
   signed_contract: {
-    title: "İmzalı Hizmet Sözleşmesi",
-    description: "Sistemden indirilen sözleşmenin imzalanmış hali.",
+    titleKey:
+      "property:managementApplication.create.documents.signedContract.title",
+    descriptionKey:
+      "property:managementApplication.create.documents.signedContract.description",
+    fallbackTitle: "İmzalı Hizmet Sözleşmesi",
+    fallbackDescription: "Sistemden indirilen sözleşmenin imzalanmış hali.",
   },
   authority_decision: {
-    title: "Yönetim Kararı / Karar Defteri",
-    description: "Yönetim veya kurul kararı ile verilen yetki belgesi.",
+    titleKey:
+      "property:managementApplication.create.documents.authorityDecision.title",
+    descriptionKey:
+      "property:managementApplication.create.documents.authorityDecision.description",
+    fallbackTitle: "Yönetim Kararı / Karar Defteri",
+    fallbackDescription: "Yönetim veya kurul kararı ile verilen yetki belgesi.",
   },
   power_of_attorney: {
-    title: "Vekaletname",
-    description: "Temsil yetkisini gösteren resmi vekalet belgesi.",
+    titleKey:
+      "property:managementApplication.create.documents.powerOfAttorney.title",
+    descriptionKey:
+      "property:managementApplication.create.documents.powerOfAttorney.description",
+    fallbackTitle: "Vekaletname",
+    fallbackDescription: "Temsil yetkisini gösteren resmi vekalet belgesi.",
   },
   assignment_letter: {
-    title: "Görevlendirme Yazısı",
-    description: "Kurul, yönetim veya malikçe verilmiş görevlendirme belgesi.",
+    titleKey:
+      "property:managementApplication.create.documents.assignmentLetter.title",
+    descriptionKey:
+      "property:managementApplication.create.documents.assignmentLetter.description",
+    fallbackTitle: "Görevlendirme Yazısı",
+    fallbackDescription:
+      "Kurul, yönetim veya malikçe verilmiş görevlendirme belgesi.",
   },
   professional_service_agreement: {
-    title: "Profesyonel Yönetim Sözleşmesi",
-    description: "Profesyonel yönetici ile yapı arasında yapılan hizmet sözleşmesi.",
+    titleKey:
+      "property:managementApplication.create.documents.professionalServiceAgreement.title",
+    descriptionKey:
+      "property:managementApplication.create.documents.professionalServiceAgreement.description",
+    fallbackTitle: "Profesyonel Yönetim Sözleşmesi",
+    fallbackDescription:
+      "Profesyonel yönetici ile yapı arasında yapılan hizmet sözleşmesi.",
   },
   other: {
-    title: "Diğer Belge",
-    description: "Başvuruyu destekleyen ek belge.",
+    titleKey: "property:managementApplication.create.documents.other.title",
+    descriptionKey:
+      "property:managementApplication.create.documents.other.description",
+    fallbackTitle: "Diğer Belge",
+    fallbackDescription: "Başvuruyu destekleyen ek belge.",
   },
 };
 
-export function getStructureLabel(value: ManagementStructureType) {
-  return value === "site" ? "Site Yönetimi" : "Apartman Yönetimi";
+export function getStructureFallbackLabel(value: ManagementStructureType) {
+  return (
+    structureOptions.find((item) => item.value === value)?.fallbackLabel ?? "-"
+  );
 }
 
-export function getRepresentationLabel(value: RepresentationType) {
-  return representationOptions.find((item) => item.value === value)?.label ?? "-";
+export function getRepresentationFallbackLabel(value: RepresentationType) {
+  return (
+    representationOptions.find((item) => item.value === value)?.fallbackLabel ??
+    "-"
+  );
 }
 
-export function getDocumentTitle(kind: RequiredDocumentKind) {
-  return documentCatalog[kind]?.title ?? "Belge";
+export function getDocumentFallbackTitle(kind: RequiredDocumentKind) {
+  return documentCatalog[kind]?.fallbackTitle ?? "Belge";
 }
 
 export function formatFileSize(bytes: number) {

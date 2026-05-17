@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 import { Agent, setGlobalDispatcher } from "undici";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/bff/resolveTenant";
+import { DEFAULT_TENANT_KEY, coerceTenantKey } from "@/lib/tenantKeys";
 
 /* -------------------------------------------------------------------------- */
 /* ENV / RUNTIME                                                              */
@@ -148,7 +149,7 @@ export function resolveLangSegment(
 export const DEFAULT_TENANT =
   process.env.LM_DEFAULT_TENANT ||
   process.env.NEXT_PUBLIC_DEFAULT_TENANT ||
-  "default";
+  DEFAULT_TENANT_KEY;
 
 export function resolveTenantKey(
   req: NextRequest | Request
@@ -158,7 +159,10 @@ export function resolveTenantKey(
 } {
   const fromHeader = req.headers.get("x-tenant-key")?.trim();
   if (fromHeader) {
-    return { tenantKey: fromHeader, source: "header" };
+    return {
+      tenantKey: coerceTenantKey(fromHeader, DEFAULT_TENANT),
+      source: "header",
+    };
   }
 
   if ("cookies" in req) {
@@ -167,13 +171,16 @@ export function resolveTenantKey(
       req.cookies.get("tenantKey")?.value?.trim();
 
     if (fromCookie) {
-      return { tenantKey: fromCookie, source: "cookie" };
+      return {
+        tenantKey: coerceTenantKey(fromCookie, DEFAULT_TENANT),
+        source: "cookie",
+      };
     }
   }
 
   const resolved = resolveTenant(req as NextRequest);
   return {
-    tenantKey: resolved || DEFAULT_TENANT,
+    tenantKey: coerceTenantKey(resolved || DEFAULT_TENANT),
     source: "fallback(bff)",
   };
 }

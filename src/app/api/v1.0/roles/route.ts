@@ -2,6 +2,7 @@
 
 import { NextRequest } from "next/server";
 import { proxyJsonWithWebAuth } from "@/lib/bff/proxyJsonWithWebAuth";
+import { resolveTenant } from "@/lib/bff/resolveTenant";
 
 const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || "1.0";
 const ROLES_GET_CACHE_TTL_MS = 2_000;
@@ -11,12 +12,12 @@ type RolesCacheEntry = {
   response: Response;
 };
 
-let rolesGetPromise: Promise<Response> | null = null;
-let rolesGetCache: RolesCacheEntry | null = null;
+const rolesGetPromiseByTenant = new Map<string, Promise<Response>>();
+const rolesGetCacheByTenant = new Map<string, RolesCacheEntry>();
 
 function clearRolesGetCache() {
-  rolesGetCache = null;
-  rolesGetPromise = null;
+  rolesGetCacheByTenant.clear();
+  rolesGetPromiseByTenant.clear();
 }
 
 function normalizeRoleList(payload: unknown): unknown[] {
@@ -96,17 +97,20 @@ function transformRolesResponse(
 
 export async function GET(req: NextRequest) {
   const now = Date.now();
+  const tenantKey = resolveTenant(req);
+  const cached = rolesGetCacheByTenant.get(tenantKey);
 
-  if (rolesGetCache && rolesGetCache.expiresAt > now) {
-    return rolesGetCache.response.clone();
+  if (cached && cached.expiresAt > now) {
+    return cached.response.clone();
   }
 
-  if (rolesGetPromise) {
-    const response = await rolesGetPromise;
+  const existingPromise = rolesGetPromiseByTenant.get(tenantKey);
+  if (existingPromise) {
+    const response = await existingPromise;
     return response.clone();
   }
 
-  rolesGetPromise = proxyJsonWithWebAuth(req, {
+  const rolesGetPromise = proxyJsonWithWebAuth(req, {
     url: `/api/v${API_VERSION}/AppRole`,
     method: "GET",
     timeoutMs: 15_000,
@@ -120,17 +124,19 @@ export async function GET(req: NextRequest) {
   })
     .then((response) => {
       if (response.ok) {
-        rolesGetCache = {
+        rolesGetCacheByTenant.set(tenantKey, {
           expiresAt: Date.now() + ROLES_GET_CACHE_TTL_MS,
           response: response.clone(),
-        };
+        });
       }
 
       return response;
     })
     .finally(() => {
-      rolesGetPromise = null;
+      rolesGetPromiseByTenant.delete(tenantKey);
     });
+
+  rolesGetPromiseByTenant.set(tenantKey, rolesGetPromise);
 
   const response = await rolesGetPromise;
   return response.clone();

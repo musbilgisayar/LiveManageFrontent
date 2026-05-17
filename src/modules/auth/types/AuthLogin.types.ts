@@ -8,6 +8,15 @@ export type LoginRequestDto = {
 
 export type AuthenticatedUserDto = {
   id: string;
+
+  email?: string;
+  fullName?: string;
+
+  tenantId?: string;
+  tenantKey?: string;
+
+  cultureCode?: string;
+
   roles: string[];
   role?: string;
   primaryRole?: string;
@@ -16,12 +25,40 @@ export type AuthenticatedUserDto = {
 export type LoginResponseDto = {
   ok: boolean;
   message?: string;
+  userMessage?: string;
   error?: string;
   title?: string;
   data?: {
     redirectTo?: string;
     cultureCode?: string;
     user?: AuthenticatedUserDto;
+  };
+};
+
+export type GoogleLoginRequestDto = {
+  idToken: string;
+  clientType: "web";
+  deviceId?: string | null;
+  rememberMe: boolean;
+  cultureCode?: string;
+  timeZone?: string;
+};
+
+export type GoogleLoginResponseDto = LoginResponseDto & {
+  data?: {
+    isSuccess?: boolean;
+    provider?: "Google" | string;
+    userCreated?: boolean;
+    accountLinked?: boolean;
+    redirectTo?: string;
+    cultureCode?: string;
+    user?: AuthenticatedUserDto & {
+      userId?: string;
+      email?: string;
+      fullName?: string;
+      tenantId?: string;
+      cultureCode?: string;
+    };
   };
 };
 

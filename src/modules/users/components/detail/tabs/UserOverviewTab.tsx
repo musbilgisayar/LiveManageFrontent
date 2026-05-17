@@ -26,9 +26,11 @@ import type {
   AdminUserDetailDto,
   RoleSummaryDto,
 } from "@/modules/users/types/UserDetail.types";
+import type { UserDetailMode } from "../../../config/userDetailTabs.config";
 
 type Props = {
   user: AdminUserDetailDto;
+  mode: UserDetailMode;
 };
 
 function formatDate(value?: string | null) {
@@ -43,8 +45,9 @@ function boolText(v?: boolean | null) {
   return v ? "Evet" : "Hayır";
 }
 
-export default function UserOverviewTab({ user }: Props) {
+export default function UserOverviewTab({ user, mode }: Props) {
   const { t } = useI18nNs(["users", "common"]);
+  const isAdminMode = mode === "admin";
 
   const activeStatus = user.audit?.isDeleted
     ? t("users:detail.status.inactive")
@@ -233,6 +236,7 @@ export default function UserOverviewTab({ user }: Props) {
         />
       </Grid>
 
+      {isAdminMode && (
       <Grid size={{ xs: 12, sm: 6 }}>
         <UserInfoCard
           title={t("users:detail.tabs.audit")}
@@ -255,7 +259,9 @@ export default function UserOverviewTab({ user }: Props) {
           ]}
         />
       </Grid>
+      )}
 
+      {isAdminMode && (
       <Grid size={{ xs: 12, sm: 6 }}>
         <UserInfoCard
           title={t("users:list.columns.roles")}
@@ -275,6 +281,7 @@ export default function UserOverviewTab({ user }: Props) {
           ]}
         />
       </Grid>
+      )}
     </Grid>
   );
 }

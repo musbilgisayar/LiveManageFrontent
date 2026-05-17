@@ -5,6 +5,7 @@
 import { NextRequest } from "next/server";
 import { createHash } from "crypto";
 import { resolveTenant } from "@/lib/bff/resolveTenant";
+import { normalizeSetCookieForBrowser } from "@/lib/bff/authCookies";
 
 export const WEB_AUTH_BACKEND_BASE =
   process.env.BACKEND_BASE ??
@@ -443,12 +444,12 @@ export function filterProxyResponseHeaders(
 
   for (const cookie of extractSetCookies(upstream.headers)) {
     const name = cookie.split("=")[0]?.trim();
-    if (name) cookieMap.set(name, cookie);
+    if (name) cookieMap.set(name, normalizeSetCookieForBrowser(cookie));
   }
 
   for (const cookie of refreshCookies) {
     const name = cookie.split("=")[0]?.trim();
-    if (name) cookieMap.set(name, cookie);
+    if (name) cookieMap.set(name, normalizeSetCookieForBrowser(cookie));
   }
 
   for (const cookie of cookieMap.values()) {

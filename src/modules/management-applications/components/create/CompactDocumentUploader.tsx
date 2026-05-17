@@ -1,13 +1,33 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { alpha, Box, Button, MenuItem, Stack, TextField, Typography, useTheme } from "@mui/material";
+
+import {
+  alpha,
+  Box,
+  Button,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+  useTheme,
+} from "@mui/material";
+
 import type { Theme } from "@mui/material/styles";
+
 import { IconUpload } from "@tabler/icons-react";
+
+import { useI18nNs } from "@/app/context/i18nContext";
 
 import SectionCard from "./shared/SectionCard";
 import InlineNotice from "./shared/InlineNotice";
-import { documentCatalog, formatFileSize, premiumFieldSx } from "./constants";
+
+import {
+  documentCatalog,
+  formatFileSize,
+  premiumFieldSx,
+} from "./constants";
+
 import type {
   DocumentRequirement,
   RequiredDocumentKind,
@@ -25,6 +45,9 @@ type CompactDocumentUploaderProps = {
   inputRef: React.RefObject<HTMLInputElement | null>;
 };
 
+const NS =
+  "property:managementApplication.create.documentUploader";
+
 export default function CompactDocumentUploader({
   requirements,
   selectedKind,
@@ -37,60 +60,134 @@ export default function CompactDocumentUploader({
   inputRef,
 }: CompactDocumentUploaderProps) {
   const theme = useTheme<Theme>();
+  const { t } = useI18nNs(["property"]);
+
+  const tr = (key: string, fallback: string) => {
+    const fullKey = `${NS}.${key}`;
+    const value = t(fullKey);
+
+    return value && value !== fullKey
+      ? value
+      : fallback;
+  };
+
+  const trDirect = (
+    key: string,
+    fallback: string,
+  ) => {
+    const value = t(key);
+
+    return value && value !== key
+      ? value
+      : fallback;
+  };
 
   const allOptions = useMemo(() => {
-    const map = new Map<RequiredDocumentKind, DocumentRequirement>();
+    const map = new Map<
+      RequiredDocumentKind,
+      DocumentRequirement
+    >();
 
-    requirements.forEach((item) => map.set(item.kind, item));
+    requirements.forEach((item) =>
+      map.set(item.kind, item),
+    );
 
     map.set("other", {
       kind: "other",
-      title: documentCatalog.other.title,
-      description: documentCatalog.other.description,
+      title:
+        documentCatalog.other.fallbackTitle,
+      description:
+        documentCatalog.other.fallbackDescription,
       required: false,
     });
 
     return Array.from(map.values());
   }, [requirements]);
 
-  const selectedRequirement = allOptions.find((item) => item.kind === selectedKind);
-  const canAdd = !!selectedFile && !!selectedKind;
+  const selectedRequirement =
+    allOptions.find(
+      (item) => item.kind === selectedKind,
+    );
+
+  const canAdd =
+    !!selectedFile && !!selectedKind;
 
   return (
     <SectionCard
       icon={<IconUpload size={19} />}
-      title="Belge ekle"
-      description="Belge türünü seçin, dosyanızı ekleyin ve gerekiyorsa kısa bir açıklama yazın."
+      title={tr(
+        "title",
+        "Belge ekle",
+      )}
+      description={tr(
+        "description",
+        "Belge türünü seçin, dosyanızı ekleyin ve gerekiyorsa kısa bir açıklama yazın.",
+      )}
     >
       <Stack spacing={2}>
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1.1fr 1.1fr" },
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: "1.1fr 1.1fr",
+            },
             gap: 2,
           }}
         >
           <TextField
             select
-            label="Belge türü"
+            label={tr(
+              "documentType",
+              "Belge türü",
+            )}
             value={selectedKind}
             onChange={(event) =>
-              onKindChange(event.target.value as RequiredDocumentKind)
+              onKindChange(
+                event.target
+                  .value as RequiredDocumentKind,
+              )
             }
             helperText={
               selectedRequirement?.required
-                ? "Bu belge zorunlu belgeler arasında."
-                : "Bu belge isteğe bağlı olarak eklenebilir."
+                ? tr(
+                    "requiredHint",
+                    "Bu belge zorunlu belgeler arasında.",
+                  )
+                : tr(
+                    "optionalHint",
+                    "Bu belge isteğe bağlı olarak eklenebilir.",
+                  )
             }
             fullWidth
             sx={premiumFieldSx}
           >
-            {allOptions.map((item) => (
-              <MenuItem key={item.kind} value={item.kind}>
-                {item.title}
-                {item.required ? " · Zorunlu" : ""}
-              </MenuItem>
-            ))}
+            {allOptions.map((item) => {
+              const catalog =
+                documentCatalog[item.kind];
+
+              const title = catalog
+                ? trDirect(
+                    catalog.titleKey,
+                    catalog.fallbackTitle,
+                  )
+                : item.title;
+
+              return (
+                <MenuItem
+                  key={item.kind}
+                  value={item.kind}
+                >
+                  {title}
+                  {item.required
+                    ? ` · ${tr(
+                        "required",
+                        "Zorunlu",
+                      )}`
+                    : ""}
+                </MenuItem>
+              );
+            })}
           </TextField>
 
           <Box>
@@ -99,39 +196,76 @@ export default function CompactDocumentUploader({
               type="file"
               hidden
               accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
-              onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
+              onChange={(event) =>
+                onFileChange(
+                  event.target.files?.[0] ??
+                    null,
+                )
+              }
             />
 
             <Box
-              onClick={() => inputRef.current?.click()}
+              onClick={() =>
+                inputRef.current?.click()
+              }
               role="button"
               tabIndex={0}
               sx={{
-                minHeight: 56,
+                minHeight: 58,
                 px: 1.5,
                 py: 1,
                 borderRadius: 3.25,
-                border: `1px solid ${alpha(theme.palette.divider, 0.86)}`,
-                bgcolor: alpha(theme.palette.background.default, 0.35),
+
+                border: `1px solid ${alpha(
+                  theme.palette.divider,
+                  0.86,
+                )}`,
+
+                bgcolor: alpha(
+                  theme.palette.background
+                    .default,
+                  0.35,
+                ),
+
                 cursor: "pointer",
+
                 display: "flex",
                 alignItems: "center",
                 gap: 1.25,
-                transition: "all 160ms ease",
+
+                transition:
+                  "all 160ms ease",
+
                 "&:hover": {
-                  borderColor: alpha(theme.palette.primary.main, 0.35),
-                  bgcolor: alpha(theme.palette.primary.main, 0.035),
+                  borderColor: alpha(
+                    theme.palette.primary
+                      .main,
+                    0.35,
+                  ),
+
+                  bgcolor: alpha(
+                    theme.palette.primary
+                      .main,
+                    0.035,
+                  ),
                 },
               }}
             >
               <Box
                 sx={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 2.5,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 2.75,
+
                   display: "grid",
                   placeItems: "center",
-                  bgcolor: alpha(theme.palette.primary.main, 0.08),
+
+                  bgcolor: alpha(
+                    theme.palette.primary
+                      .main,
+                    0.08,
+                  ),
+
                   color: "primary.main",
                   flexShrink: 0,
                 }}
@@ -140,13 +274,36 @@ export default function CompactDocumentUploader({
               </Box>
 
               <Box sx={{ minWidth: 0 }}>
-                <Typography fontWeight={900} noWrap>
-                  {selectedFile ? selectedFile.name : "Dosya seçin"}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  fontWeight={900}
+                  noWrap
+                >
                   {selectedFile
-                    ? formatFileSize(selectedFile.size)
-                    : "PDF, JPG, PNG, TIF · En fazla 10 MB"}
+                    ? selectedFile.name
+                    : tr(
+                        "selectFile",
+                        "Dosya seçin",
+                      )}
+                </Typography>
+
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                >
+                  {selectedFile
+                    ? `${formatFileSize(
+                        selectedFile.size,
+                      )} · ${
+                        selectedFile.type ||
+                        tr(
+                          "unknownFileType",
+                          "Dosya",
+                        )
+                      }`
+                    : tr(
+                        "supportedFormats",
+                        "PDF, JPG, PNG, TIFF desteklenir",
+                      )}
                 </Typography>
               </Box>
             </Box>
@@ -154,48 +311,58 @@ export default function CompactDocumentUploader({
         </Box>
 
         <TextField
-          label="Açıklama"
+          label={tr(
+            "descriptionField",
+            "Açıklama",
+          )}
           value={description}
-          onChange={(event) => onDescriptionChange(event.target.value)}
-          placeholder="İsteğe bağlı kısa açıklama yazabilirsiniz."
-          helperText="Bu alan zorunlu değildir."
+          onChange={(event) =>
+            onDescriptionChange(
+              event.target.value,
+            )
+          }
+          multiline
+          minRows={3}
+          helperText={tr(
+            "descriptionHint",
+            "Belge hakkında kısa bir not ekleyebilirsiniz.",
+          )}
           fullWidth
           sx={premiumFieldSx}
         />
 
-        {selectedRequirement && (
-          <InlineNotice tone="info">{selectedRequirement.description}</InlineNotice>
-        )}
+        <InlineNotice tone="info">
+          {tr(
+            "securityNotice",
+            "Yüklenen belgeler güvenli şekilde saklanır ve yalnızca yetkili inceleme sürecinde görüntülenir.",
+          )}
+        </InlineNotice>
 
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          justifyContent="space-between"
-          alignItems={{ xs: "stretch", sm: "center" }}
-          spacing={1.5}
+        <Button
+          variant="contained"
+          disabled={!canAdd}
+          onClick={onAdd}
+          startIcon={<IconUpload size={18} />}
+          sx={{
+            height: 50,
+            width: "fit-content",
+            borderRadius: 999,
+
+            textTransform: "none",
+
+            fontWeight: 950,
+
+            px: 3,
+
+            boxShadow:
+              "0 10px 24px rgba(37, 99, 235, 0.22)",
+          }}
         >
-          <Typography variant="body2" color="text.secondary">
-            Eklenen belgeler aşağıdaki listede görünecektir.
-          </Typography>
-
-          <Button
-            variant="contained"
-            disabled={!canAdd}
-            onClick={onAdd}
-            startIcon={<IconUpload size={17} />}
-            sx={{
-              height: 46,
-              borderRadius: 999,
-              px: 2.75,
-              textTransform: "none",
-              fontWeight: 950,
-              boxShadow: canAdd
-                ? "0 10px 22px rgba(37, 99, 235, 0.2)"
-                : "none",
-            }}
-          >
-            Belgeyi Ekle
-          </Button>
-        </Stack>
+          {tr(
+            "addDocument",
+            "Belgeyi ekle",
+          )}
+        </Button>
       </Stack>
     </SectionCard>
   );

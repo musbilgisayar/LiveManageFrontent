@@ -8,6 +8,7 @@ import {
   cacheGet,
   cacheSet,
 } from "@/app/api/_shared/bff";
+import { coerceTenantKey } from "@/lib/tenantKeys";
 import crypto from "node:crypto";
 
 const BACKEND = process.env.BACKEND_BASE ?? "https://localhost:5002";
@@ -57,11 +58,11 @@ function resolveAcceptLanguage(req: NextRequest) {
 }
 
 function resolveTenantKey(req: NextRequest) {
-  return (
+  return coerceTenantKey(
     req.headers.get("x-tenant-key")?.trim() ||
     req.cookies.get("lm.tenant")?.value?.trim() ||
     req.cookies.get("tenantKey")?.value?.trim() ||
-    "default"
+    "livemanage"
   );
 }
 

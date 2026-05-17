@@ -16,7 +16,6 @@ import {
   IconLayoutGrid,
   IconMapPin,
   IconPoint,
-  IconSettings,
   IconShieldCheck,
   IconSpeakerphone,
   IconUserCircle,
@@ -100,16 +99,7 @@ const Menuitems: NavGroup[] = [
       "admin.property.applications.view_pending.tenant",
     ],
   },
-  {
-    id: uniqueId(),
-    title: "sidebar:menu.realEstate.addresses",
-    icon: IconMapPin,
-    href: "/property-management/addresses",
-    requiredAnyPermissions: [
-      "profile.addresses.view.self",
-      "address.hierarchy.view.global",
-    ],
-  },
+
 
   {
     navlabel: true,
@@ -153,13 +143,13 @@ const Menuitems: NavGroup[] = [
     subheader: "sidebar:group.users",
     requiredAnyPermissions: ["account.me.view.self", "users.view.tenant"],
   },
-  {
-    id: uniqueId(),
-    title: "sidebar:menu.users.profile",
-    icon: IconUserCircle,
-    href: "/apps/profile",
-    requiredAnyPermissions: ["account.me.view.self"],
-  },
+{
+  id: uniqueId(),
+  title: "sidebar:menu.users.myProfile",
+  icon: IconUserCircle,
+  href: "/my-profile",
+  requiredAnyPermissions: ["account.me.view.self"],
+},
   {
     id: uniqueId(),
     title: "sidebar:menu.users.admin",
@@ -322,12 +312,6 @@ const Menuitems: NavGroup[] = [
     requiredAnyPermissions: ["localization.view.global"],
   },
 
-  {
-    id: uniqueId(),
-    title: "sidebar:menu.auth.maintenance",
-    icon: IconSettings,
-    href: "/auth/maintenance",
-  },
 ];
 
 export default Menuitems;

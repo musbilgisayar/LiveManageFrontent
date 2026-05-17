@@ -266,6 +266,7 @@ const fetchJsonWithWebAuth = async (
 
   if (!res.ok) {
     const message =
+      json?.userMessage ||
       json?.message ||
       json?.error ||
       json?.title ||

@@ -68,7 +68,7 @@ function resolveTenantKey(req: NextRequest) {
     req.headers.get("x-tenant-key")?.trim() ||
     req.cookies.get("lm.tenant")?.value?.trim() ||
     req.cookies.get("tenantKey")?.value?.trim() ||
-    "default"
+    "livemanage"
   );
 }
 
