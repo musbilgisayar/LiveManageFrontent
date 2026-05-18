@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+
 import {
   alpha,
   Box,
@@ -17,6 +18,7 @@ import {
   useTheme,
 } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
+
 import {
   IconArrowRight,
   IconChecklist,
@@ -28,12 +30,23 @@ import {
   IconShieldCheck,
 } from "@tabler/icons-react";
 
-import   useManagementApplicationList   from "../hooks/useManagementApplicationList";
-import type { ManagedPropertyApplicationListItemDto, ManagedPropertyApplicationStatus,} from "../types/managementApplication.types";
+import { useI18nNs } from "@/app/context/i18nContext";
+
+import useManagementApplicationList from "../hooks/useManagementApplicationList";
+
+import type {
+  ManagedPropertyApplicationListItemDto,
+  ManagedPropertyApplicationStatus,
+} from "../types/managementApplication.types";
+
+const NS = "property:managementApplication.list";
+
+type TranslateFn = (key: string) => string;
 
 type ApplicationStatus =
   | "pending"
   | "underReview"
+  | "documentRequested"
   | "approved"
   | "rejected"
   | "cancelled";
@@ -55,6 +68,7 @@ type ManagementApplicationItem = {
 export default function ManagementApplicationListView() {
   const theme = useTheme<Theme>();
   const router = useRouter();
+  const { t } = useI18nNs(NS);
 
   const { items, isLoading, errorMessage, reload } =
     useManagementApplicationList();
@@ -63,19 +77,19 @@ export default function ManagementApplicationListView() {
   const [status, setStatus] = useState<ApplicationStatus | "all">("all");
 
   const applications = useMemo(() => {
-    return items.map(mapApplicationListItem);
-  }, [items]);
+    return items.map((item) => mapApplicationListItem(item, t));
+  }, [items, t]);
 
   const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase();
 
     return applications.filter((item) => {
       const matchesSearch =
-        !q ||
-        item.applicationNumber.toLowerCase().includes(q) ||
-        item.propertyName.toLowerCase().includes(q) ||
-        item.location.toLowerCase().includes(q) ||
-        item.requestedRole.toLowerCase().includes(q);
+        !query ||
+        item.applicationNumber.toLowerCase().includes(query) ||
+        item.propertyName.toLowerCase().includes(query) ||
+        item.location.toLowerCase().includes(query) ||
+        item.requestedRole.toLowerCase().includes(query);
 
       const matchesStatus = status === "all" || item.status === status;
 
@@ -85,10 +99,14 @@ export default function ManagementApplicationListView() {
 
   const totalCount = applications.length;
   const inReviewCount = applications.filter(
-    (x) => x.status === "pending" || x.status === "underReview",
+    (item) => item.status === "pending" || item.status === "underReview",
   ).length;
-  const revisionCount = 0;
-  const approvedCount = applications.filter((x) => x.status === "approved").length;
+  const documentRequestedCount = applications.filter(
+    (item) => item.status === "documentRequested",
+  ).length;
+  const approvedCount = applications.filter(
+    (item) => item.status === "approved",
+  ).length;
 
   return (
     <Box>
@@ -114,9 +132,15 @@ export default function ManagementApplicationListView() {
               spacing={2}
             >
               <Stack spacing={0.9}>
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  flexWrap="wrap"
+                  useFlexGap
+                >
                   <Chip
-                    label="Yönetim Başvuruları"
+                    label={t(`${NS}.hero.badge`)}
                     size="small"
                     sx={{
                       width: "fit-content",
@@ -127,7 +151,11 @@ export default function ManagementApplicationListView() {
                   />
 
                   <Chip
-                    label={isLoading ? "Yükleniyor..." : `${totalCount} kayıt`}
+                    label={
+                      isLoading
+                        ? t(`${NS}.loading`)
+                        : `${totalCount} ${t(`${NS}.recordCount`)}`
+                    }
                     size="small"
                     variant="outlined"
                     sx={{
@@ -145,13 +173,11 @@ export default function ManagementApplicationListView() {
                     lineHeight: 1.12,
                   }}
                 >
-                  Başvurularım
+                  {t(`${NS}.title`)}
                 </Typography>
 
                 <Typography color="text.secondary" sx={{ maxWidth: 820 }}>
-                  Oluşturduğunuz yöneticilik başvurularını buradan takip edebilirsiniz.
-                  Başvurular admin incelemesine alınır, gerekirse revizyon istenir ve uygun
-                  görülürse ilgili gayrimenkule yetki atanır.
+                  {t(`${NS}.description`)}
                 </Typography>
               </Stack>
 
@@ -169,7 +195,7 @@ export default function ManagementApplicationListView() {
                   boxShadow: "0 12px 26px rgba(37, 99, 235, 0.22)",
                 }}
               >
-                Yeni Başvuru
+                {t(`${NS}.actions.create`)}
               </Button>
             </Stack>
 
@@ -184,10 +210,29 @@ export default function ManagementApplicationListView() {
                 gap: 1.5,
               }}
             >
-              <MiniKpi icon={<IconFileDescription size={18} />} label="Toplam" value={totalCount} />
-              <MiniKpi icon={<IconClock size={18} />} label="İncelemede" value={inReviewCount} tone="warning" />
-              <MiniKpi icon={<IconChecklist size={18} />} label="Revizyon" value={revisionCount} tone="error" />
-              <MiniKpi icon={<IconShieldCheck size={18} />} label="Onaylandı" value={approvedCount} tone="success" />
+              <MiniKpi
+                icon={<IconFileDescription size={18} />}
+                label={t(`${NS}.kpi.total`)}
+                value={totalCount}
+              />
+              <MiniKpi
+                icon={<IconClock size={18} />}
+                label={t(`${NS}.kpi.inReview`)}
+                value={inReviewCount}
+                tone="warning"
+              />
+              <MiniKpi
+                icon={<IconChecklist size={18} />}
+                label={t(`${NS}.kpi.documentRequested`)}
+                value={documentRequestedCount}
+                tone="error"
+              />
+              <MiniKpi
+                icon={<IconShieldCheck size={18} />}
+                label={t(`${NS}.kpi.approved`)}
+                value={approvedCount}
+                tone="success"
+              />
             </Box>
           </Stack>
         </CardContent>
@@ -212,7 +257,7 @@ export default function ManagementApplicationListView() {
               size="small"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Başvuru no, yapı adı, konum veya rol ara..."
+              placeholder={t(`${NS}.search.placeholder`)}
               fullWidth
               disabled={isLoading}
               InputProps={{
@@ -233,10 +278,12 @@ export default function ManagementApplicationListView() {
             <TextField
               select
               size="small"
-              label="Durum"
+              label={t(`${NS}.filters.status`)}
               value={status}
               disabled={isLoading}
-              onChange={(event) => setStatus(event.target.value as ApplicationStatus | "all")}
+              onChange={(event) =>
+                setStatus(event.target.value as ApplicationStatus | "all")
+              }
               sx={{
                 minWidth: { xs: "100%", md: 220 },
                 "& .MuiOutlinedInput-root": {
@@ -245,12 +292,17 @@ export default function ManagementApplicationListView() {
                 },
               }}
             >
-              <MenuItem value="all">Tümü</MenuItem>
-              <MenuItem value="pending">Beklemede</MenuItem>
-              <MenuItem value="underReview">İncelemede</MenuItem>
-              <MenuItem value="approved">Onaylandı</MenuItem>
-              <MenuItem value="rejected">Reddedildi</MenuItem>
-              <MenuItem value="cancelled">İptal Edildi</MenuItem>
+              <MenuItem value="all">{t(`${NS}.status.all`)}</MenuItem>
+              <MenuItem value="pending">{t(`${NS}.status.pending`)}</MenuItem>
+              <MenuItem value="underReview">
+                {t(`${NS}.status.underReview`)}
+              </MenuItem>
+              <MenuItem value="documentRequested">
+                {t(`${NS}.status.documentRequested`)}
+              </MenuItem>
+              <MenuItem value="approved">{t(`${NS}.status.approved`)}</MenuItem>
+              <MenuItem value="rejected">{t(`${NS}.status.rejected`)}</MenuItem>
+              <MenuItem value="cancelled">{t(`${NS}.status.cancelled`)}</MenuItem>
             </TextField>
           </Stack>
         </CardContent>
@@ -259,7 +311,7 @@ export default function ManagementApplicationListView() {
       {isLoading && (
         <Card variant="outlined" sx={{ borderRadius: 4 }}>
           <CardContent>
-            <Typography fontWeight={900}>Başvurular yükleniyor...</Typography>
+            <Typography fontWeight={900}>{t(`${NS}.loadingApplications`)}</Typography>
           </CardContent>
         </Card>
       )}
@@ -283,7 +335,7 @@ export default function ManagementApplicationListView() {
                   fontWeight: 900,
                 }}
               >
-                Tekrar dene
+                {t(`${NS}.actions.retry`)}
               </Button>
             </Stack>
           </CardContent>
@@ -294,9 +346,9 @@ export default function ManagementApplicationListView() {
         <Card variant="outlined" sx={{ borderRadius: 4 }}>
           <CardContent>
             <Stack spacing={1}>
-              <Typography fontWeight={900}>Henüz başvuru bulunamadı</Typography>
+              <Typography fontWeight={900}>{t(`${NS}.empty.title`)}</Typography>
               <Typography color="text.secondary">
-                Yeni bir site/apartman yönetim başvurusu oluşturabilirsiniz.
+                {t(`${NS}.empty.description`)}
               </Typography>
             </Stack>
           </CardContent>
@@ -309,6 +361,7 @@ export default function ManagementApplicationListView() {
             <ApplicationCard
               key={item.id}
               item={item}
+              t={t}
               onOpen={() => router.push(`/management-applications/review/${item.id}`)}
             />
           ))}
@@ -372,9 +425,11 @@ function MiniKpi({
 
 function ApplicationCard({
   item,
+  t,
   onOpen,
 }: {
   item: ManagementApplicationItem;
+  t: TranslateFn;
   onOpen: () => void;
 }) {
   const theme = useTheme<Theme>();
@@ -389,7 +444,8 @@ function ApplicationCard({
         borderColor: alpha(color, 0.18),
         bgcolor: alpha(color, item.status === "approved" ? 0.035 : 0.025),
         cursor: "pointer",
-        transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+        transition:
+          "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
         "&:hover": {
           transform: "translateY(-2px)",
           boxShadow: theme.shadows[7],
@@ -419,7 +475,7 @@ function ApplicationCard({
               </Typography>
 
               <Chip
-                label={statusLabel(item.status)}
+                label={getStatusLabel(t, item.status)}
                 size="small"
                 sx={{
                   fontWeight: 850,
@@ -447,9 +503,9 @@ function ApplicationCard({
             <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
               <MetaChip label={item.applicationNumber} />
               <MetaChip label={item.requestedRole} />
-              <MetaChip label={`${item.documentCount} belge`} />
-              <MetaChip label={`Oluşturma: ${item.createdAt}`} />
-              <MetaChip label={`Güncelleme: ${item.updatedAt}`} />
+              <MetaChip label={`${item.documentCount} ${t(`${NS}.cards.document`)}`} />
+              <MetaChip label={`${t(`${NS}.cards.createdAt`)}: ${item.createdAt}`} />
+              <MetaChip label={`${t(`${NS}.cards.updatedAt`)}: ${item.updatedAt}`} />
             </Stack>
 
             <Typography color="text.secondary" sx={{ maxWidth: 880 }}>
@@ -474,7 +530,7 @@ function ApplicationCard({
               boxShadow: "0 10px 22px rgba(37, 99, 235, 0.2)",
             }}
           >
-            Detayı Gör
+            {t(`${NS}.actions.details`)}
           </Button>
         </Box>
       </CardContent>
@@ -502,6 +558,7 @@ function MetaChip({ label }: { label: string }) {
 
 function mapApplicationListItem(
   item: ManagedPropertyApplicationListItemDto,
+  t: TranslateFn,
 ): ManagementApplicationItem {
   const status = mapApplicationStatus(item.status);
 
@@ -509,18 +566,16 @@ function mapApplicationListItem(
     id: item.id,
     applicationNumber: `APP-${item.id.slice(0, 8).toUpperCase()}`,
     propertyName: item.propertyName,
-    location: item.addressId ? `Adres ID: ${item.addressId}` : "Adres bilgisi yok",
+    location: item.addressId
+      ? `${t(`${NS}.cards.addressId`)}: ${item.addressId}`
+      : t(`${NS}.cards.addressNotAvailable`),
     status,
-    applicationType: "Yönetim başvurusu",
-    requestedRole: "Yönetici",
+    applicationType: t(`${NS}.cards.applicationType`),
+    requestedRole: t(`${NS}.cards.requestedRole`),
     documentCount: 0,
     createdAt: formatDate(item.submittedAtUtc),
     updatedAt: formatDate(item.reviewedAtUtc || item.submittedAtUtc),
-    description:
-      item.description ||
-      `${item.residentialUnitCount} konut, ${item.commercialUnitCount} ticari birim, ${
-        item.blockCount ?? 0
-      } blok için oluşturulmuş yönetim başvurusu.`,
+    description: item.description || t(`${NS}.cards.defaultDescription`),
   };
 }
 
@@ -531,6 +586,7 @@ function mapApplicationStatus(
   if (status === 2) return "approved";
   if (status === 3) return "rejected";
   if (status === 4) return "cancelled";
+  if (status === 5) return "documentRequested";
 
   return "pending";
 }
@@ -539,7 +595,7 @@ function formatDate(value?: string | null) {
   if (!value) return "-";
 
   try {
-    return new Intl.DateTimeFormat("tr-TR", {
+    return new Intl.DateTimeFormat(undefined, {
       day: "2-digit",
       month: "long",
       year: "numeric",
@@ -549,25 +605,30 @@ function formatDate(value?: string | null) {
   }
 }
 
-function getToneColor(theme: Theme, tone: "default" | "success" | "warning" | "error") {
+function getToneColor(
+  theme: Theme,
+  tone: "default" | "success" | "warning" | "error",
+) {
   if (tone === "success") return theme.palette.success.main;
   if (tone === "warning") return theme.palette.warning.main;
   if (tone === "error") return theme.palette.error.main;
+
   return theme.palette.primary.main;
 }
 
 function getStatusColor(theme: Theme, status: ApplicationStatus) {
   if (status === "approved") return theme.palette.success.main;
-  if (status === "underReview" || status === "pending") return theme.palette.warning.main;
-  if (status === "rejected" || status === "cancelled") return theme.palette.error.main;
+  if (status === "underReview") return theme.palette.info.main;
+  if (status === "pending" || status === "documentRequested") {
+    return theme.palette.warning.main;
+  }
+  if (status === "rejected" || status === "cancelled") {
+    return theme.palette.error.main;
+  }
+
   return theme.palette.primary.main;
 }
 
-function statusLabel(status: ApplicationStatus) {
-  if (status === "pending") return "Beklemede";
-  if (status === "underReview") return "İncelemede";
-  if (status === "approved") return "Onaylandı";
-  if (status === "rejected") return "Reddedildi";
-  if (status === "cancelled") return "İptal Edildi";
-  return "Beklemede";
+function getStatusLabel(t: TranslateFn, status: ApplicationStatus) {
+  return t(`${NS}.status.${status}`);
 }

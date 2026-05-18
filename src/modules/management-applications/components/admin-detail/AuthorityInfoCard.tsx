@@ -11,6 +11,8 @@ import {
   IconUserShield,
 } from "@tabler/icons-react";
 
+import { useI18nNs } from "@/app/context/i18nContext";
+
 import SectionCard from "./shared/SectionCard";
 import InfoBox from "./shared/InfoBox";
 
@@ -25,9 +27,11 @@ type AuthorityInfoCardProps = {
 export default function AuthorityInfoCard({
   authority,
 }: AuthorityInfoCardProps) {
+  const { t } = useI18nNs("management-applications");
+
   return (
     <SectionCard
-      title="Yetki ve Temsil Bilgileri"
+      title={t("admin.detail.authority.title")}
       icon={<IconUserShield size={19} />}
     >
       <Box
@@ -41,23 +45,26 @@ export default function AuthorityInfoCard({
         }}
       >
         <InfoBox
-          label="Temsil şekli"
+          label={t("admin.detail.authority.representationType")}
           value={authority.representationType}
         />
 
         <InfoBox
-          label="Talep edilen rol"
+          label={t("admin.detail.authority.requestedRole")}
           value={authority.requestedRole}
         />
 
         <InfoBox
-          label="Yetki başlangıcı"
+          label={t("admin.detail.authority.authorityStartDate")}
           value={authority.authorityStartDate}
         />
 
         <InfoBox
-          label="Yetki bitişi"
-          value={authority.authorityEndDate ?? "-"}
+          label={t("admin.detail.authority.authorityEndDate")}
+          value={
+            authority.authorityEndDate ||
+            t("admin.detail.common.notProvided")
+          }
         />
       </Box>
 
@@ -67,14 +74,15 @@ export default function AuthorityInfoCard({
           color="text.secondary"
           fontWeight={800}
         >
-          Yetki kapsamı
+          {t("admin.detail.authority.authorityScope")}
         </Typography>
 
         <Typography
           fontWeight={750}
           sx={{ mt: 0.35 }}
         >
-          {authority.authorityScope}
+          {authority.authorityScope ||
+            t("admin.detail.common.notProvided")}
         </Typography>
       </Box>
     </SectionCard>

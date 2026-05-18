@@ -1,22 +1,18 @@
-// src/modules/management-applications/views/AdminManagementApplicationDetailView.tsx
-
 "use client";
 
-import React, { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+
 import {
-  alpha,
+  Alert,
   Box,
   Button,
-  Card,
-  CardContent,
-  Chip,
+  CircularProgress,
   Stack,
   Typography,
-  useTheme,
 } from "@mui/material";
-import type { Theme } from "@mui/material/styles";
 import { IconArrowLeft } from "@tabler/icons-react";
+
+import { useI18nNs } from "@/app/context/i18nContext";
 
 import AdminDecisionPanel from "../components/admin-detail/AdminDecisionPanel";
 import ApplicantInfoCard from "../components/admin-detail/ApplicantInfoCard";
@@ -27,272 +23,285 @@ import SystemChecksCard from "../components/admin-detail/SystemChecksCard";
 import TimelineCard from "../components/admin-detail/TimelineCard";
 import MetaChip from "../components/admin-detail/shared/MetaChip";
 
+import { getAdminManagementApplicationDetail } from "../services/managementApplication.service";
+
+import {
+  riskLabelKey,
+  statusLabelKey,
+} from "../utils/adminManagementApplication.utils";
+
 import type {
-  AdminApplicationRiskLevel,
-  AdminApplicationStatus,
   AdminManagementApplicationDetail,
 } from "../types/adminManagementApplication.types";
 
-import {
-  riskLabel,
-  statusLabel,
-} from "../utils/adminManagementApplication.utils";
-
-const mockDetail: AdminManagementApplicationDetail = {
-  applicationId: "1",
-  applicationNumber: "APP-2026-000123",
-  status: "pending",
-  riskLevel: "medium",
-  createdAt: "02 Mayıs 2026 10:42",
-  updatedAt: "02 Mayıs 2026 11:05",
-
-  applicant: {
-    userId: "user-1",
-    fullName: "Ahmet Yılmaz",
-    email: "ahmet@test.com",
-    phone: "+41 79 123 45 67",
-    emailVerified: true,
-    phoneVerified: true,
-    identityNumberMasked: "756.***.***.12",
-  },
-
-  property: {
-    propertyName: "Green Park Sitesi",
-    structureType: "Site Yönetimi",
-    blockCount: 3,
-    totalApartmentCount: 48,
-    addressSummary: "Zürich / Altstetten, Bahnhofstrasse 12, 8048",
-  },
-
-  authority: {
-    representationType: "Profesyonel Yönetici",
-    requestedRole: "Admin tarafından atanacak",
-    authorityStartDate: "02 Mayıs 2026",
-    authorityEndDate: "Süresiz / belirtilmedi",
-    authorityScope:
-      "Yönetim işlemleri, muhasebe takibi, duyuru yayınlama ve bakım taleplerini yönetme.",
-  },
-
-  documents: [
-    {
-      id: "1",
-      documentType: "Kimlik Belgesi",
-      fileName: "kimlik.pdf",
-      fileSize: "1.4 MB",
-      uploadedAt: "02 Mayıs 2026",
-      status: "valid",
-    },
-    {
-      id: "2",
-      documentType: "Yetki Belgesi",
-      fileName: "yetki.pdf",
-      fileSize: "820 KB",
-      uploadedAt: "02 Mayıs 2026",
-      status: "needs_revision",
-      adminNote: "Belgede imza alanı eksik görünüyor.",
-    },
-  ],
-
-  systemChecks: [
-    {
-      id: "1",
-      label: "E-posta doğrulaması",
-      description: "Başvuru sahibinin e-posta adresi doğrulanmış.",
-      status: "passed",
-    },
-    {
-      id: "2",
-      label: "Telefon doğrulaması",
-      description: "Başvuru sahibinin telefon numarası doğrulanmış.",
-      status: "passed",
-    },
-    {
-      id: "3",
-      label: "Yetki belgesi kontrolü",
-      description: "Yetki belgesinde revizyon gerekebilir.",
-      status: "warning",
-    },
-  ],
-
-  timeline: [
-    {
-      id: "1",
-      action: "Başvuru oluşturuldu",
-      actorName: "Ahmet Yılmaz",
-      occurredAt: "02 Mayıs 2026 10:42",
-    },
-    {
-      id: "2",
-      action: "Belgeler yüklendi",
-      actorName: "Ahmet Yılmaz",
-      occurredAt: "02 Mayıs 2026 10:48",
-      note: "2 belge eklendi.",
-    },
-    {
-      id: "3",
-      action: "Admin incelemesine alındı",
-      actorName: "Sistem",
-      occurredAt: "02 Mayıs 2026 11:05",
-    },
-  ],
+type AdminManagementApplicationDetailViewProps = {
+  applicationId: string;
+  onBack?: () => void;
 };
 
 export default function AdminManagementApplicationDetailView({
   applicationId,
-}: {
-  applicationId: string;
-}) {
-  const theme = useTheme<Theme>();
-  const router = useRouter();
+  onBack,
+}: AdminManagementApplicationDetailViewProps) {
+  const { t } = useI18nNs("management-applications");
 
-  const data = mockDetail;
+  const [data, setData] =
+    useState<AdminManagementApplicationDetail | null>(null);
 
-  const statusColor = getStatusColor(theme, data.status);
-  const riskColor = getRiskColor(theme, data.riskLevel);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const documentIssueCount = useMemo(
-    () => data.documents.filter((x) => x.status !== "valid").length,
-    [data.documents],
-  );
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
 
-  return (
-    <Box>
-      <Card
-        variant="outlined"
+  const load = useCallback(async () => {
+    if (!applicationId) {
+      setData(null);
+      setErrorMessage("admin.detail.load.missingApplicationId");
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const response =
+        await getAdminManagementApplicationDetail(applicationId);
+
+      if (!response.ok || !response.data) {
+        setData(null);
+
+        setErrorMessage(
+          response.userMessage ||
+            response.message ||
+            "admin.detail.load.error",
+        );
+
+        return;
+      }
+
+      setData(response.data);
+    } catch (error) {
+      console.error(
+        "[AdminManagementApplicationDetailView][load] failed",
+        error,
+      );
+
+      setData(null);
+
+      setErrorMessage(
+        "admin.detail.load.unexpectedError",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [applicationId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const documentIssueCount = useMemo(() => {
+    if (!data) return 0;
+
+    return data.documents.filter(
+      (doc) =>
+        doc.status === "missing" ||
+        doc.status === "needs_revision",
+    ).length;
+  }, [data]);
+
+  if (isLoading) {
+    return (
+      <Box
         sx={{
-          mb: 3,
-          borderRadius: 5,
-          borderColor: alpha(statusColor, 0.2),
-          background: `linear-gradient(135deg, ${alpha(
-            statusColor,
-            0.06,
-          )} 0%, ${alpha(theme.palette.background.paper, 0.96)} 100%)`,
+          py: 10,
+          display: "flex",
+          justifyContent: "center",
         }}
       >
-        <CardContent sx={{ p: { xs: 2.25, md: 3 } }}>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            justifyContent="space-between"
-            spacing={2}
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Stack spacing={2}>
+        {onBack && (
+          <Button
+            startIcon={<IconArrowLeft size={18} />}
+            onClick={onBack}
+            sx={{
+              alignSelf: "flex-start",
+              borderRadius: 999,
+              fontWeight: 800,
+              textTransform: "none",
+            }}
           >
-            <Stack spacing={1}>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip
-                  label={data.applicationNumber}
-                  size="small"
-                  sx={{
-                    fontWeight: 900,
-                    bgcolor: alpha(theme.palette.primary.main, 0.08),
-                    color: "primary.main",
-                  }}
-                />
+            {t("admin.detail.backToList")}
+          </Button>
+        )}
 
-                <Chip
-                  label={statusLabel(data.status)}
-                  size="small"
-                  sx={{
-                    fontWeight: 900,
-                    bgcolor: alpha(statusColor, 0.1),
-                    color: statusColor,
-                    border: `1px solid ${alpha(statusColor, 0.2)}`,
-                  }}
-                />
+        <Alert severity="error" sx={{ borderRadius: 3 }}>
+          {t(errorMessage || "admin.detail.load.error")}
+        </Alert>
+      </Stack>
+    );
+  }
 
-                <Chip
-                  label={`Risk: ${riskLabel(data.riskLevel)}`}
-                  size="small"
-                  sx={{
-                    fontWeight: 900,
-                    bgcolor: alpha(riskColor, 0.1),
-                    color: riskColor,
-                    border: `1px solid ${alpha(riskColor, 0.2)}`,
-                  }}
-                />
-              </Stack>
-
-              <Typography variant="h4" fontWeight={950} lineHeight={1.1}>
-                {data.property.propertyName}
-              </Typography>
-
-              <Typography color="text.secondary" sx={{ maxWidth: 820 }}>
-                Başvuru sahibi, yetki bilgileri, belgeler ve sistem kontrolleri
-                üzerinden başvuruyu inceleyip karar verin.
-              </Typography>
-
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <MetaChip label={`Oluşturma: ${data.createdAt}`} />
-                <MetaChip label={`Güncelleme: ${data.updatedAt}`} />
-                <MetaChip label={`${documentIssueCount} belge uyarısı`} />
-              </Stack>
-            </Stack>
-
+  return (
+    <Stack spacing={2.4}>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        justifyContent="space-between"
+        alignItems={{ xs: "flex-start", md: "center" }}
+        spacing={2}
+      >
+        <Stack spacing={1}>
+          {onBack && (
             <Button
               startIcon={<IconArrowLeft size={18} />}
-              onClick={() => router.push("/management-applications/review")}
+              onClick={onBack}
               sx={{
-                height: 44,
+                alignSelf: "flex-start",
                 borderRadius: 999,
-                fontWeight: 850,
+                fontWeight: 800,
                 textTransform: "none",
-                alignSelf: { xs: "flex-start", md: "flex-start" },
               }}
             >
-              Listeye Dön
+              {t("admin.detail.backToList")}
             </Button>
-          </Stack>
-        </CardContent>
-      </Card>
+          )}
+
+          <Box>
+            <Typography variant="h4" fontWeight={950}>
+              {data.applicationNumber}
+            </Typography>
+
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{
+                mt: 0.4,
+                maxWidth: 820,
+              }}
+            >
+              {t("admin.detail.description")}
+            </Typography>
+          </Box>
+        </Stack>
+
+        <Stack
+          direction="row"
+          spacing={1}
+          flexWrap="wrap"
+          justifyContent={{
+            xs: "flex-start",
+            md: "flex-end",
+          }}
+        >
+          <MetaChip
+            label={t(statusLabelKey(data.status))}
+          />
+
+          <MetaChip
+            label={`${t("admin.detail.risk.label")}: ${t(
+              riskLabelKey(data.riskLevel),
+            )}`}
+          />
+
+          <MetaChip
+            label={`${t("admin.detail.meta.createdAt")}: ${
+              data.createdAt
+            }`}
+          />
+
+          <MetaChip
+            label={`${t("admin.detail.meta.updatedAt")}: ${
+              data.updatedAt
+            }`}
+          />
+
+          <MetaChip
+            label={t(
+              "admin.detail.meta.documentIssues",
+              {
+                count: documentIssueCount,
+              },
+            )}
+          />
+        </Stack>
+      </Stack>
+
+      {errorMessage && (
+        <Alert
+          severity="warning"
+          sx={{ borderRadius: 3 }}
+        >
+          {t(errorMessage)}
+        </Alert>
+      )}
 
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", xl: "1.45fr 0.9fr" },
+          gridTemplateColumns: {
+            xs: "1fr",
+            lg: "minmax(0, 1.75fr) minmax(360px, 0.9fr)",
+          },
           gap: 2,
-          alignItems: "start",
+          alignItems: "flex-start",
         }}
       >
-        <Stack spacing={2}>
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
-              gap: 2,
+        <Stack
+          spacing={2}
+          sx={{ minWidth: 0 }}
+        >
+          <ApplicantInfoCard
+            applicant={data.applicant}
+          />
+
+          <PropertyInfoCard
+            property={data.property}
+          />
+
+          <AuthorityInfoCard
+            authority={data.authority}
+          />
+
+          <DocumentsCard
+            documents={data.documents}
+          />
+
+          <SystemChecksCard
+            checks={data.systemChecks}
+          />
+
+          <TimelineCard
+            timeline={data.timeline}
+          />
+        </Stack>
+
+        <Box
+          sx={{
+            minWidth: 0,
+            position: {
+              lg: "sticky",
+            },
+            top: {
+              lg: 88,
+            },
+          }}
+        >
+          <AdminDecisionPanel
+            applicationId={data.applicationId}
+            onCompleted={() => {
+              void load();
             }}
-          >
-            <ApplicantInfoCard applicant={data.applicant} />
-            <PropertyInfoCard property={data.property} />
-          </Box>
-
-          <AuthorityInfoCard authority={data.authority} />
-
-          <DocumentsCard documents={data.documents} />
-        </Stack>
-
-        <Stack spacing={2}>
-          <SystemChecksCard checks={data.systemChecks} />
-
-          <TimelineCard timeline={data.timeline} />
-
-          <AdminDecisionPanel applicationId={applicationId} />
-        </Stack>
+          />
+        </Box>
       </Box>
-    </Box>
+    </Stack>
   );
-}
-
-function getStatusColor(theme: Theme, status: AdminApplicationStatus) {
-  if (status === "approved") return theme.palette.success.main;
-  if (status === "rejected") return theme.palette.error.main;
-  if (status === "missing_information") return theme.palette.warning.main;
-  if (status === "in_review") return theme.palette.info.main;
-
-  return theme.palette.primary.main;
-}
-
-function getRiskColor(theme: Theme, risk: AdminApplicationRiskLevel) {
-  if (risk === "critical") return theme.palette.error.dark;
-  if (risk === "high") return theme.palette.error.main;
-  if (risk === "medium") return theme.palette.warning.main;
-
-  return theme.palette.success.main;
 }

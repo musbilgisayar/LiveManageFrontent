@@ -198,7 +198,10 @@ export default function AddressHierarchySection({
           value={safeCountryCode}
           onChange={(event) => void handleCountryChange(event.target.value)}
           disabled={isCountriesLoading}
-          helperText={isCountriesLoading ? loadingText : " "}
+          error={!!getError("countryCode")}
+          helperText={
+            getError("countryCode") ?? (isCountriesLoading ? loadingText : " ")
+          }
           fullWidth
           sx={premiumFieldSx}
         >
@@ -224,8 +227,7 @@ export default function AddressHierarchySection({
           label={tr("countryCode", "Ülke kodu")}
           value={value.countryCode}
           InputProps={{ readOnly: true }}
-          error={!!getError("countryCode")}
-          helperText={getError("countryCode") ?? " "}
+          helperText=" "
           fullWidth
           sx={premiumFieldSx}
         />

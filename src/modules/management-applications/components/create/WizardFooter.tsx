@@ -163,7 +163,7 @@ export default function WizardFooter({
                   <IconArrowRight size={18} />
                 )
               }
-              disabled={(isLastStep && !canSubmit) || isSubmitting}
+              disabled={isSubmitting}
               onClick={isLastStep ? onSubmit : onNext}
               sx={{
                 height: 52,
@@ -183,6 +183,15 @@ export default function WizardFooter({
                     0.3,
                   )}`,
                 },
+                ...(!canSubmit && isLastStep
+                  ? {
+                      bgcolor: alpha(theme.palette.primary.main, 0.9),
+                      background: `linear-gradient(135deg, ${alpha(
+                        theme.palette.primary.main,
+                        0.88,
+                      )}, ${alpha(theme.palette.primary.dark, 0.88)})`,
+                    }
+                  : {}),
               }}
             >
               {isLastStep

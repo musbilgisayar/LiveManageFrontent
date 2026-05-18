@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -54,7 +54,6 @@ import {
 
 import type {
   DocumentRequirement,
-  ManagementApplicationFormErrors,
   ManagementApplicationFormState,
   RequiredDocumentKind,
   UploadedFileItem,
@@ -77,7 +76,6 @@ export default function ManagementApplicationCreateView() {
     initialManagementApplicationForm,
   );
 
-  const [errors, setErrors] = useState<ManagementApplicationFormErrors>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
@@ -235,7 +233,7 @@ export default function ManagementApplicationCreateView() {
     [form, requiredDocumentsMissing, t],
   );
 
-  const visibleErrors = submitAttempted ? errors : {};
+  const visibleErrors = submitAttempted ? validationErrors : {};
 
   const summaryAddress = useMemo(() => {
     return [
@@ -305,6 +303,19 @@ export default function ManagementApplicationCreateView() {
     stepCompletion.documents &&
     stepCompletion.review;
 
+  useEffect(() => {
+    if (!applicantFullName.trim()) return;
+
+    setForm((prev) =>
+      prev.contactFullName.trim()
+        ? prev
+        : {
+            ...prev,
+            contactFullName: applicantFullName,
+          },
+    );
+  }, [applicantFullName]);
+
   const handlePatch = <K extends keyof ManagementApplicationFormState>(
     key: K,
     value: ManagementApplicationFormState[K],
@@ -360,8 +371,6 @@ export default function ManagementApplicationCreateView() {
       t,
     );
 
-    setErrors(nextErrors);
-
     const stepFields = getStepFields(currentStep.id);
     const hasStepError = stepFields.some((field) => !!nextErrors[field]);
 
@@ -406,8 +415,6 @@ export default function ManagementApplicationCreateView() {
       requiredDocumentsMissing,
       t,
     );
-
-    setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) return;
 

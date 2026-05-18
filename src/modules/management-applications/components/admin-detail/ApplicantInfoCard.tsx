@@ -3,12 +3,17 @@
 import React from "react";
 
 import {
+  Chip,
   Stack,
 } from "@mui/material";
 
 import {
+  IconMailCheck,
+  IconPhoneCheck,
   IconUser,
 } from "@tabler/icons-react";
+
+import { useI18nNs } from "@/app/context/i18nContext";
 
 import SectionCard from "./shared/SectionCard";
 import InfoRow from "./shared/InfoRow";
@@ -24,28 +29,30 @@ type ApplicantInfoCardProps = {
 export default function ApplicantInfoCard({
   applicant,
 }: ApplicantInfoCardProps) {
+  const { t } = useI18nNs("management-applications");
+
   return (
     <SectionCard
-      title="Başvuru Sahibi"
+      title={t("admin.detail.applicant.title")}
       icon={<IconUser size={19} />}
     >
       <InfoRow
-        label="Ad Soyad"
+        label={t("admin.detail.applicant.fullName")}
         value={applicant.fullName}
       />
 
       <InfoRow
-        label="E-posta"
+        label={t("admin.detail.applicant.email")}
         value={applicant.email}
       />
 
       <InfoRow
-        label="Telefon"
+        label={t("admin.detail.applicant.phone")}
         value={applicant.phone}
       />
 
       <InfoRow
-        label="Kimlik No"
+        label={t("admin.detail.applicant.identityNumber")}
         value={applicant.identityNumberMasked}
       />
 
@@ -55,7 +62,37 @@ export default function ApplicantInfoCard({
         flexWrap="wrap"
         useFlexGap
       >
-        {/* sonra CheckChip componenti bağlanacak */}
+        <Chip
+          size="small"
+          icon={<IconMailCheck size={15} />}
+          label={
+            applicant.emailVerified
+              ? t("admin.detail.applicant.emailVerified")
+              : t("admin.detail.applicant.emailNotVerified")
+          }
+          color={applicant.emailVerified ? "success" : "warning"}
+          variant="outlined"
+          sx={{
+            fontWeight: 800,
+            borderRadius: 999,
+          }}
+        />
+
+        <Chip
+          size="small"
+          icon={<IconPhoneCheck size={15} />}
+          label={
+            applicant.phoneVerified
+              ? t("admin.detail.applicant.phoneVerified")
+              : t("admin.detail.applicant.phoneNotVerified")
+          }
+          color={applicant.phoneVerified ? "success" : "warning"}
+          variant="outlined"
+          sx={{
+            fontWeight: 800,
+            borderRadius: 999,
+          }}
+        />
       </Stack>
     </SectionCard>
   );

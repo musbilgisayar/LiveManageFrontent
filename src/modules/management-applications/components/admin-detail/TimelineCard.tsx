@@ -12,6 +12,8 @@ import {
 import type { Theme } from "@mui/material/styles";
 import { IconClock } from "@tabler/icons-react";
 
+import { useI18nNs } from "@/app/context/i18nContext";
+
 import SectionCard from "./shared/SectionCard";
 
 import type {
@@ -22,20 +24,44 @@ type TimelineCardProps = {
   timeline: AdminApplicationTimelineItem[];
 };
 
-export default function TimelineCard({ timeline }: TimelineCardProps) {
+export default function TimelineCard({
+  timeline,
+}: TimelineCardProps) {
+  const { t } = useI18nNs("management-applications");
+
   return (
-    <SectionCard title="İşlem Geçmişi" icon={<IconClock size={19} />}>
+    <SectionCard
+      title={t("admin.detail.timeline.title")}
+      icon={<IconClock size={19} />}
+    >
       <Stack spacing={1.2}>
-        {timeline.map((item) => (
-          <TimelineRow key={item.id} item={item} />
-        ))}
+        {timeline.length === 0 ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+          >
+            {t("admin.detail.timeline.empty")}
+          </Typography>
+        ) : (
+          timeline.map((item) => (
+            <TimelineRow
+              key={item.id}
+              item={item}
+            />
+          ))
+        )}
       </Stack>
     </SectionCard>
   );
 }
 
-function TimelineRow({ item }: { item: AdminApplicationTimelineItem }) {
+function TimelineRow({
+  item,
+}: {
+  item: AdminApplicationTimelineItem;
+}) {
   const theme = useTheme<Theme>();
+  const { t } = useI18nNs("management-applications");
 
   return (
     <Stack direction="row" spacing={1.1}>
@@ -53,22 +79,62 @@ function TimelineRow({ item }: { item: AdminApplicationTimelineItem }) {
       <Box
         sx={{
           pb: 1,
-          borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
+          borderBottom: `1px solid ${alpha(
+            theme.palette.text.primary,
+            0.06,
+          )}`,
           flex: 1,
+          minWidth: 0,
         }}
       >
-        <Typography fontWeight={900}>{item.action}</Typography>
+        <Typography
+          fontWeight={900}
+          sx={{ overflowWrap: "anywhere" }}
+        >
+          {resolveTimelineActionLabel(t, item.action)}
+        </Typography>
 
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ overflowWrap: "anywhere" }}
+        >
           {item.actorName} · {item.occurredAt}
         </Typography>
 
         {item.note && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              mt: 0.35,
+              overflowWrap: "anywhere",
+            }}
+          >
             {item.note}
           </Typography>
         )}
       </Box>
     </Stack>
   );
+}
+
+function resolveTimelineActionLabel(
+  t: (key: string) => string,
+  action: string,
+) {
+  const normalized = String(action || "")
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[\s-]+/g, "_")
+    .toLowerCase();
+
+  if (!normalized) {
+    return t("admin.detail.timeline.action.unknown");
+  }
+
+  const key = `admin.detail.timeline.action.${normalized}`;
+  const value = t(key);
+
+  return value === key ? action : value;
 }

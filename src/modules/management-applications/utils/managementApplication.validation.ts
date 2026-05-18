@@ -28,7 +28,6 @@ export function validateManagementApplicationForm(
   const blockCount = Number.parseInt(form.blockCount || "0", 10) || 0;
   const totalApartmentCount =
     Number.parseInt(form.totalApartmentCount || "0", 10) || 0;
-
   if (!form.propertyName.trim()) {
     next.propertyName = tr(t, "propertyNameRequired", "Lütfen yapı adını girin.");
   }

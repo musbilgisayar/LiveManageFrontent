@@ -1,6 +1,14 @@
 "use client";
 
-import { Box, Checkbox, FormControlLabel, Stack } from "@mui/material";
+import {
+  alpha,
+  Box,
+  Checkbox,
+  FormControlLabel,
+  Stack,
+  useTheme,
+} from "@mui/material";
+import type { Theme } from "@mui/material/styles";
 import { IconShieldCheck } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
@@ -26,7 +34,9 @@ export default function LegalConsentBox({
   errors,
   onPatch,
 }: LegalConsentBoxProps) {
+  const theme = useTheme<Theme>();
   const { t } = useI18nNs(["property"]);
+  const hasError = !!errors.consents;
 
   const tr = (key: string, fallback: string) => {
     const fullKey = `${NS}.${key}`;
@@ -43,7 +53,20 @@ export default function LegalConsentBox({
         "Başvurunuzu göndermek için aşağıdaki onayları tamamlayın.",
       )}
     >
-      <Stack spacing={0.6}>
+      <Stack
+        spacing={0.6}
+        sx={{
+          p: hasError ? 1.25 : 0,
+          borderRadius: 2.5,
+          border: hasError
+            ? `1px solid ${alpha(theme.palette.error.main, 0.64)}`
+            : "1px solid transparent",
+          bgcolor: hasError
+            ? alpha(theme.palette.error.main, 0.035)
+            : "transparent",
+          transition: "all 160ms ease",
+        }}
+      >
         <FormControlLabel
           control={
             <Checkbox

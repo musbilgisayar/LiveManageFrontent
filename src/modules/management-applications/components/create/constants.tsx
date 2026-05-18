@@ -8,11 +8,37 @@ import type {
 
 export const premiumFieldSx = {
   "& .MuiOutlinedInput-root": {
-    borderRadius: 3,
-    bgcolor: "background.paper",
+    borderRadius: 2.5,
+    bgcolor: "rgba(255, 255, 255, 0.98)",
+    transition: "background-color 160ms ease, box-shadow 160ms ease",
+    "& fieldset": {
+      borderColor: "rgba(148, 163, 184, 0.36)",
+    },
+    "&:hover": {
+      bgcolor: "background.paper",
+    },
+    "&:hover fieldset": {
+      borderColor: "rgba(37, 99, 235, 0.32)",
+    },
+    "&.Mui-focused": {
+      bgcolor: "background.paper",
+      boxShadow: "0 0 0 3px rgba(37, 99, 235, 0.08)",
+    },
+    "&.Mui-focused fieldset": {
+      borderWidth: 1,
+    },
+    "&.Mui-error": {
+      boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.09)",
+    },
+    "&.Mui-error fieldset": {
+      borderColor: "rgba(239, 68, 68, 0.72)",
+    },
   },
   "& .MuiInputBase-input": {
     fontSize: 14,
+  },
+  "& .MuiInputLabel-root": {
+    fontWeight: 700,
   },
   "& .MuiSelect-select": {
     fontSize: 14,
@@ -23,7 +49,14 @@ export const premiumFieldSx = {
     ml: 0,
     mt: 0.6,
     minHeight: 20,
-    fontWeight: 600,
+    fontSize: 12.5,
+    fontWeight: 500,
+    color: "text.secondary",
+    lineHeight: 1.45,
+  },
+  "& .MuiFormHelperText-root.Mui-error": {
+    color: "error.main",
+    fontWeight: 700,
   },
 } as const;
 

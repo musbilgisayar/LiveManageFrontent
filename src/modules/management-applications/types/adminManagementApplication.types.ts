@@ -101,3 +101,31 @@ export type AdminApplicationDecisionFormState = {
   notifyApplicant: "yes" | "no";
   adminNote: string;
 };
+export type AdminManagementApplicationListItem = {
+  id: string;
+  applicationNumber?: string | null;
+  applicantName?: string | null;
+  applicantEmail?: string | null;
+  propertyName?: string | null;
+  propertyAddress?: string | null;
+  requestedRole?: string | null;
+  status: AdminApplicationStatus;
+  riskLevel?: AdminApplicationRiskLevel | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  missingDocumentCount?: number | null;
+};
+
+export type AdminManagementApplicationReviewFilter = {
+  search: string;
+  status: AdminApplicationStatus | "all";
+  risk: AdminApplicationRiskLevel | "all";
+};
+
+export type AdminManagementApplicationReviewSummary = {
+  total: number;
+  pending: number;
+  inReview: number;
+  missing: number;
+  critical: number;
+};
