@@ -12,6 +12,9 @@ import { resolveTenant } from "@/lib/bff/resolveTenant";
 
 const CACHE_TTL_SECONDS = 30;
 const VARY_HEADER = "Accept-Language, Authorization, X-Tenant-Key";
+const DEBUG_LOCALIZATION_BUNDLE =
+  process.env.NEXT_PUBLIC_DEBUG_LOCALIZATION_BUNDLE === "true" ||
+  process.env.DEBUG_LOCALIZATION_BUNDLE === "true";
 
 type ApiEnvelope<T> = {
   ok: boolean;
@@ -184,11 +187,13 @@ export async function GET(req: NextRequest) {
         headers.set("x-correlation-id", context.correlationId);
         headers.set("vary", VARY_HEADER);
 
-        console.log("[BFF][localization/bundle] upstream payload", {
-          correlationId: context.correlationId,
-          upstreamStatus: context.upstreamStatus,
-          payload,
-        });
+        if (DEBUG_LOCALIZATION_BUNDLE) {
+          console.log("[BFF][localization/bundle] upstream payload", {
+            correlationId: context.correlationId,
+            upstreamStatus: context.upstreamStatus,
+            payload,
+          });
+        }
 
         if (context.upstreamStatus >= 200 && context.upstreamStatus < 300) {
 

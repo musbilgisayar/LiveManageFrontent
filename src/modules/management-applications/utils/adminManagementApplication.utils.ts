@@ -7,17 +7,17 @@ import type {
 } from "../types/adminManagementApplication.types";
 
 export function statusLabelKey(status: AdminApplicationStatus) {
-  return `admin.detail.status.${status}`;
+  return `admin.detail.status.${normalizeAdminApplicationStatus(status)}`;
 }
 
 export function riskLabelKey(risk: AdminApplicationRiskLevel) {
-  return `admin.detail.risk.${risk}`;
+  return `admin.detail.risk.${normalizeAdminRiskLevel(risk)}`;
 }
 
 export function documentStatusLabelKey(
   status: AdminApplicationDocumentStatus,
 ) {
-  return `admin.detail.documents.status.${status}`;
+  return `admin.detail.documents.status.${normalizeAdminApplicationDocumentStatus(status)}`;
 }
 
 export function decisionButtonLabelKey(decision: AdminApplicationDecision) {
@@ -35,7 +35,7 @@ export function decisionNotePlaceholderKey(
 }
 
 export function checkStatusLabelKey(status: AdminApplicationCheckStatus) {
-  return `admin.detail.systemChecks.status.${status}`;
+  return `admin.detail.systemChecks.status.${normalizeAdminCheckStatus(status)}`;
 }
 
 export function checkStatusIconKind(status: AdminApplicationCheckStatus) {
@@ -45,9 +45,15 @@ export function checkStatusIconKind(status: AdminApplicationCheckStatus) {
 }
 
 export function normalizeAdminApplicationStatus(
-  value: string | null | undefined,
+  value: unknown,
 ): AdminApplicationStatus {
   const normalized = normalizeEnumValue(value);
+
+  if (normalized === "0") return "pending";
+  if (normalized === "1") return "in_review";
+  if (normalized === "2") return "missing_information";
+  if (normalized === "3") return "approved";
+  if (normalized === "4") return "rejected";
 
   if (normalized === "approved") return "approved";
   if (normalized === "rejected") return "rejected";
@@ -61,9 +67,13 @@ export function normalizeAdminApplicationStatus(
 }
 
 export function normalizeAdminApplicationDocumentStatus(
-  value: string | null | undefined,
+  value: unknown,
 ): AdminApplicationDocumentStatus {
   const normalized = normalizeEnumValue(value);
+
+  if (normalized === "0") return "missing";
+  if (normalized === "1") return "valid";
+  if (normalized === "2") return "needs_revision";
 
   if (normalized === "valid") return "valid";
   if (normalized === "approved") return "valid";
@@ -75,9 +85,14 @@ export function normalizeAdminApplicationDocumentStatus(
 }
 
 export function normalizeAdminRiskLevel(
-  value: string | null | undefined,
+  value: unknown,
 ): AdminApplicationRiskLevel {
   const normalized = normalizeEnumValue(value);
+
+  if (normalized === "0") return "low";
+  if (normalized === "1") return "medium";
+  if (normalized === "2") return "high";
+  if (normalized === "3") return "critical";
 
   if (normalized === "critical") return "critical";
   if (normalized === "high") return "high";
@@ -87,9 +102,13 @@ export function normalizeAdminRiskLevel(
 }
 
 export function normalizeAdminCheckStatus(
-  value: string | null | undefined,
+  value: unknown,
 ): AdminApplicationCheckStatus {
   const normalized = normalizeEnumValue(value);
+
+  if (normalized === "0") return "passed";
+  if (normalized === "1") return "warning";
+  if (normalized === "2") return "failed";
 
   if (normalized === "passed") return "passed";
   if (normalized === "failed") return "failed";
@@ -97,10 +116,17 @@ export function normalizeAdminCheckStatus(
   return "warning";
 }
 
-export function normalizeEnumValue(value: string | null | undefined) {
+export function normalizeEnumValue(value: unknown) {
   return String(value ?? "")
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .replace(/[\s-]+/g, "_")
     .toLowerCase();
+}
+
+export function documentStatusLabel(status: AdminApplicationDocumentStatus) {
+  const normalized = normalizeAdminApplicationDocumentStatus(status);
+  if (normalized === "valid") return "Valid";
+  if (normalized === "needs_revision") return "Needs revision";
+  return "Missing";
 }

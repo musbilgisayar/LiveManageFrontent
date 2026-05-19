@@ -5,20 +5,27 @@ import type {
   ApiResponse,
   CreateManagedPropertyApplicationRequestDto,
   CreateManagementApplicationResponseData,
+  ManagedPropertyApplicationDetailDto,
   ManagedPropertyApplicationListItemDto,
 } from "../types/managementApplication.types";
 
 import type {
   AdminManagementApplicationListItem,
 } from "../types/adminManagementApplication.types";
+import {
+  normalizeAdminApplicationDocumentStatus,
+  normalizeAdminApplicationStatus,
+  normalizeAdminCheckStatus,
+  normalizeAdminRiskLevel,
+} from "../utils/adminManagementApplication.utils";
 
 const CREATE_ERROR_KEY = "property:managementApplication.create.submit.error";
 const CREATE_UNEXPECTED_ERROR_KEY =
   "property:managementApplication.create.submit.unexpectedError";
 
-const LIST_ERROR_KEY = "property:managementApplication.list.load.error";
+const LIST_ERROR_KEY = "management-applications:myList.load.error";
 const LIST_UNEXPECTED_ERROR_KEY =
-  "property:managementApplication.list.load.unexpectedError";
+  "management-applications:myList.load.unexpectedError";
 
 const DOWNLOAD_ERROR_KEY =
   "property:managementApplication.admin.document.download.error";
@@ -62,6 +69,123 @@ function normalizeErrorResponse<T>(
     message: json?.message ?? fallbackCode,
     userMessage: json?.userMessage ?? null,
     data: json?.data ?? fallbackData,
+  };
+}
+
+function normalizeAdminListItem(
+  item: AdminManagementApplicationListItem,
+): AdminManagementApplicationListItem {
+  return {
+    ...item,
+    status: normalizeAdminApplicationStatus(item.status),
+    riskLevel:
+      item.riskLevel == null
+        ? item.riskLevel
+        : normalizeAdminRiskLevel(item.riskLevel),
+  };
+}
+
+function formatDateTime(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString();
+}
+
+function isManagedPropertyApplicationDetailDto(
+  data: unknown,
+): data is ManagedPropertyApplicationDetailDto {
+  if (!data || typeof data !== "object") return false;
+
+  const record = data as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.propertyName === "string" &&
+    "residentialUnitCount" in record &&
+    "status" in record
+  );
+}
+
+function mapManagedPropertyDetailToAdminDetail(
+  data: ManagedPropertyApplicationDetailDto,
+): AdminManagementApplicationDetail {
+  const createdAt = formatDateTime(data.createdAt || data.submittedAtUtc);
+  const updatedAt = formatDateTime(
+    data.updatedAt || data.reviewedAtUtc || data.createdAt || data.submittedAtUtc,
+  );
+
+  return {
+    applicationId: data.id,
+    applicationNumber: data.id,
+    status: normalizeAdminApplicationStatus(data.status),
+    riskLevel: "low",
+    createdAt,
+    updatedAt,
+    applicant: {
+      userId: data.applicantUserId,
+      fullName: data.applicantUserId,
+      email: "-",
+      phone: "-",
+      emailVerified: false,
+      phoneVerified: false,
+      identityNumberMasked: data.applicantUserId,
+    },
+    property: {
+      propertyName: data.propertyName || "-",
+      structureType: "-",
+      blockCount: Number(data.blockCount ?? 0),
+      totalApartmentCount: Number(data.residentialUnitCount ?? 0),
+      addressSummary: data.addressId || "-",
+    },
+    authority: {
+      representationType: "-",
+      requestedRole: "-",
+      authorityStartDate: formatDateTime(data.submittedAtUtc),
+      authorityEndDate: data.reviewedAtUtc ? formatDateTime(data.reviewedAtUtc) : undefined,
+      authorityScope: data.description || data.applicantNote || "-",
+    },
+    documents: [],
+    systemChecks: [],
+    timeline: [
+      {
+        id: `${data.id}:created`,
+        action: "created",
+        actorName: data.applicantUserId,
+        occurredAt: createdAt,
+        note: data.applicantNote || data.description || undefined,
+      },
+    ],
+  };
+}
+
+function normalizeAdminDetail(
+  data: AdminManagementApplicationDetail | ManagedPropertyApplicationDetailDto | null,
+): AdminManagementApplicationDetail | null {
+  if (!data) return null;
+
+  if (isManagedPropertyApplicationDetailDto(data)) {
+    return mapManagedPropertyDetailToAdminDetail(data);
+  }
+
+  return {
+    ...data,
+    status: normalizeAdminApplicationStatus(data.status),
+    riskLevel: normalizeAdminRiskLevel(data.riskLevel),
+    documents: Array.isArray(data.documents)
+      ? data.documents.map((document) => ({
+          ...document,
+          status: normalizeAdminApplicationDocumentStatus(document.status),
+        }))
+      : [],
+    systemChecks: Array.isArray(data.systemChecks)
+      ? data.systemChecks.map((check) => ({
+          ...check,
+          status: normalizeAdminCheckStatus(check.status),
+        }))
+      : [],
+    timeline: Array.isArray(data.timeline) ? data.timeline : [],
   };
 }
 
@@ -251,7 +375,9 @@ const ADMIN_REVISION_UNEXPECTED_ERROR_KEY =
 
 export type AdminApplicationDecisionRequest = {
   reviewNote?: string | null;
-  notifyApplicant?: boolean;
+  rejectReason?: string | null;
+  requestedDocumentNote?: string | null;
+  autoCreateUnitsAfterApproval?: boolean;
 };
 
 export async function approveAdminManagementApplication(
@@ -399,22 +525,24 @@ export async function getAdminManagementApplicationDetail(
       },
     );
 
-    const json =
-      await parseJsonSafe<AdminManagementApplicationDetail>(res);
+    const json = await parseJsonSafe<
+      AdminManagementApplicationDetail | ManagedPropertyApplicationDetailDto
+    >(res);
 
     if (!res.ok) {
-      return normalizeErrorResponse(
-        json,
-        ADMIN_DETAIL_ERROR_KEY,
-        null,
-      );
+      return {
+        ok: false,
+        message: json?.message ?? ADMIN_DETAIL_ERROR_KEY,
+        userMessage: json?.userMessage ?? null,
+        data: null,
+      };
     }
 
     return {
       ok: json?.ok ?? true,
       message: json?.message ?? null,
       userMessage: json?.userMessage ?? null,
-      data: json?.data ?? null,
+      data: normalizeAdminDetail(json?.data ?? null),
     };
   } catch (error) {
     console.error(
@@ -428,7 +556,156 @@ export async function getAdminManagementApplicationDetail(
     );
   }
 }
-export async function getPendingAdminManagementApplications(): Promise<
+
+export async function getGlobalAdminManagementApplicationDetail(
+  applicationId: string,
+): Promise<ApiResponse<AdminManagementApplicationDetail | null>> {
+  try {
+    const res = await fetch(
+      `/api/v1.0/superadmin/property-management/applications/${applicationId}`,
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+
+    const json = await parseJsonSafe<
+      AdminManagementApplicationDetail | ManagedPropertyApplicationDetailDto
+    >(res);
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: json?.message ?? ADMIN_DETAIL_ERROR_KEY,
+        userMessage: json?.userMessage ?? null,
+        data: null,
+      };
+    }
+
+    return {
+      ok: json?.ok ?? true,
+      message: json?.message ?? null,
+      userMessage: json?.userMessage ?? null,
+      data: normalizeAdminDetail(json?.data ?? null),
+    };
+  } catch (error) {
+    console.error(
+      "[managementApplication.service][getGlobalAdminDetail] failed",
+      error,
+    );
+
+    return buildErrorResult<AdminManagementApplicationDetail | null>(
+      ADMIN_DETAIL_UNEXPECTED_ERROR_KEY,
+      null,
+    );
+  }
+}
+
+export async function getMyManagementApplicationDetail(
+  applicationId: string,
+): Promise<ApiResponse<AdminManagementApplicationDetail | null>> {
+  try {
+    const res = await fetch(
+      `/api/v1.0/property-management/applications/${applicationId}`,
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+
+    const json = await parseJsonSafe<ManagedPropertyApplicationDetailDto>(res);
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: json?.message ?? LIST_ERROR_KEY,
+        userMessage: json?.userMessage ?? null,
+        data: null,
+      };
+    }
+
+    return {
+      ok: json?.ok ?? true,
+      message: json?.message ?? null,
+      userMessage: json?.userMessage ?? null,
+      data: normalizeAdminDetail(json?.data ?? null),
+    };
+  } catch (error) {
+    console.error(
+      "[managementApplication.service][getMyDetail] failed",
+      error,
+    );
+
+    return buildErrorResult<AdminManagementApplicationDetail | null>(
+      LIST_UNEXPECTED_ERROR_KEY,
+      null,
+    );
+  }
+}
+
+export async function getPendingAdminManagementApplications(options?: {
+  scope?: "tenant" | "global";
+}): Promise<
+  ApiResponse<AdminManagementApplicationListItem[]>
+> {
+  try {
+    const query =
+      options?.scope === "global"
+        ? "?scope=all"
+        : "";
+
+    const res = await fetch(
+      `/api/v1.0/admin/property-management/applications/pending${query}`,
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+
+    const json =
+      await parseJsonSafe<AdminManagementApplicationListItem[]>(res);
+
+    if (!res.ok) {
+      return normalizeErrorResponse(
+        json,
+        ADMIN_PENDING_LIST_ERROR_KEY,
+        [],
+      );
+    }
+
+    return {
+      ok: json?.ok ?? true,
+      message: json?.message ?? null,
+      userMessage: json?.userMessage ?? null,
+      data: Array.isArray(json?.data)
+        ? json.data.map(normalizeAdminListItem)
+        : [],
+    };
+  } catch (error) {
+    console.error(
+      "[managementApplication.service][getPendingAdmin] failed",
+      error,
+    );
+
+    return buildErrorResult<AdminManagementApplicationListItem[]>(
+      ADMIN_PENDING_LIST_UNEXPECTED_ERROR_KEY,
+      [],
+    );
+  }
+}
+export async function getAdminManagementApplications(): Promise<
   ApiResponse<AdminManagementApplicationListItem[]>
 > {
   try {
@@ -459,15 +736,118 @@ export async function getPendingAdminManagementApplications(): Promise<
       ok: json?.ok ?? true,
       message: json?.message ?? null,
       userMessage: json?.userMessage ?? null,
+      data: Array.isArray(json?.data)
+        ? json.data.map(normalizeAdminListItem)
+        : [],
+    };
+  } catch(error) {
+    console.error(
+      "[managementApplication.service][adminPending] failed",
+      error,
+    );
+
+    return buildErrorResult<
+      AdminManagementApplicationListItem[]
+    >(
+      ADMIN_PENDING_LIST_UNEXPECTED_ERROR_KEY,
+      [],
+    );
+  }
+}
+const GLOBAL_PENDING_LIST_ERROR_KEY =
+  "property:managementApplication.superadmin.pendingList.error";
+
+const GLOBAL_PENDING_LIST_UNEXPECTED_ERROR_KEY =
+  "property:managementApplication.superadmin.pendingList.unexpectedError";
+  export async function getAllManagementApplications(): Promise<
+  ApiResponse<AdminManagementApplicationListItem[]>
+> {
+  try {
+    const res = await fetch(
+      "/api/v1.0/superadmin/property-management/applications/pending",
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+
+    const json =
+      await parseJsonSafe<AdminManagementApplicationListItem[]>(res);
+
+    if (!res.ok) {
+      return normalizeErrorResponse(
+        json,
+        GLOBAL_PENDING_LIST_ERROR_KEY,
+        [],
+      );
+    }
+
+    return {
+      ok: json?.ok ?? true,
+      message: json?.message ?? null,
+      userMessage: json?.userMessage ?? null,
+      data: Array.isArray(json?.data)
+        ? json.data.map(normalizeAdminListItem)
+        : [],
+    };
+  } catch(error) {
+    console.error(
+      "[managementApplication.service][globalPending] failed",
+      error,
+    );
+
+    return buildErrorResult<
+      AdminManagementApplicationListItem[]
+    >(
+      GLOBAL_PENDING_LIST_UNEXPECTED_ERROR_KEY,
+      [],
+    );
+  }
+}
+export async function getGlobalManagementApplications(): Promise<
+  ApiResponse<ManagedPropertyApplicationListItemDto[]>
+> {
+  try {
+    const res = await fetch(
+      "/api/v1.0/superadmin/property-management/applications",
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+
+    const json =
+      await parseJsonSafe<ManagedPropertyApplicationListItemDto[]>(res);
+
+    if (!res.ok) {
+      return normalizeErrorResponse(
+        json,
+        ADMIN_PENDING_LIST_ERROR_KEY,
+        [],
+      );
+    }
+
+    return {
+      ok: json?.ok ?? true,
+      message: json?.message ?? null,
+      userMessage: json?.userMessage ?? null,
       data: Array.isArray(json?.data) ? json.data : [],
     };
   } catch (error) {
     console.error(
-      "[managementApplication.service][getPendingAdmin] failed",
+      "[managementApplication.service][getGlobalApplications] failed",
       error,
     );
 
-    return buildErrorResult<AdminManagementApplicationListItem[]>(
+    return buildErrorResult<ManagedPropertyApplicationListItemDto[]>(
       ADMIN_PENDING_LIST_UNEXPECTED_ERROR_KEY,
       [],
     );

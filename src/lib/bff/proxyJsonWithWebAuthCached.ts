@@ -25,6 +25,10 @@ import {
   buildMergedRetryHeaders,
 } from "./webAuthProxyCore";
 
+const DEBUG_BFF_PROXY =
+  process.env.NEXT_PUBLIC_DEBUG_BFF_PROXY === "true" ||
+  process.env.DEBUG_BFF_PROXY === "true";
+
 type CachedTransformContext = {
   req: NextRequest;
   correlationId: string;
@@ -71,6 +75,7 @@ type ProxyCachedOptions = {
   logLabel?: string;
   cache?: CachePolicy;
   authMode?: "web-auth-only" | "client-or-service-token";
+  disableTenantHeader?: boolean;
   transformResponse?: (
     payload: unknown,
     context: CachedTransformContext
@@ -171,12 +176,14 @@ async function buildRequestHeaders(
     body?: unknown;
     authMode: "web-auth-only" | "client-or-service-token";
     requestIfNoneMatch?: string | null;
+    disableTenantHeader?: boolean;
   }
 ): Promise<Headers> {
   const headers = buildWebAuthHeaders(req, correlationId, {
     extraHeaders: options.extraHeaders,
     defaultAccept: "application/json",
     includeAuthorization: true,
+    includeTenantHeader: !options.disableTenantHeader,
   });
 
   applyJsonContentTypeIfNeeded(headers, options.body);
@@ -323,6 +330,7 @@ export async function proxyJsonWithWebAuthCached(
       body: options.body,
       authMode,
       requestIfNoneMatch,
+      disableTenantHeader: options.disableTenantHeader,
     });
 
     let upstream: Response;
@@ -344,7 +352,7 @@ export async function proxyJsonWithWebAuthCached(
       }
     }
 
-    if (process.env.NODE_ENV !== "production") {
+    if (DEBUG_BFF_PROXY) {
       console.info(`[BFF][${logLabel}][UPSTREAM_FIRST]`, {
         correlationId,
         status: upstream.status,
@@ -371,6 +379,7 @@ export async function proxyJsonWithWebAuthCached(
       headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
         extraHeaders: options.extraHeaders,
         defaultAccept: "application/json",
+        includeTenantHeader: !options.disableTenantHeader,
       });
 
       applyJsonContentTypeIfNeeded(headers, options.body);

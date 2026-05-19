@@ -5,6 +5,7 @@ import {
   Box,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   Grid,
   Stack,
@@ -12,6 +13,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
+
 import {
   IconKey,
   IconShieldCheck,
@@ -21,14 +23,24 @@ import {
 } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
+
 import type { UserPermissionCatalogRow } from "../../types/UserPermissionOverride.types";
+
 import { getSafePermissionText } from "../../utils/userPermissionOverride.utils";
 
 interface Props {
   rows: UserPermissionCatalogRow[];
   disabled: boolean;
   savingPermissionId: string | null;
-  onToggle: (row: UserPermissionCatalogRow, nextChecked: boolean) => void;
+
+  selectedPermissionIds?: string[];
+
+  onToggleSelection?: (permissionId: string) => void;
+
+  onToggle: (
+    row: UserPermissionCatalogRow,
+    nextChecked: boolean,
+  ) => void;
 }
 
 function getShortTitle(row: UserPermissionCatalogRow): string {
@@ -36,7 +48,9 @@ function getShortTitle(row: UserPermissionCatalogRow): string {
     getSafePermissionText(row.displayName) ||
     getSafePermissionText(row.description);
 
-  if (display && !display.includes(":")) return display;
+  if (display && !display.includes(":")) {
+    return display;
+  }
 
   const parts = row.permissionCode.split(".");
   const action = parts.slice(-2).join(".");
@@ -59,27 +73,43 @@ export default function UserPermissionCatalogCardGrid({
   rows,
   disabled,
   savingPermissionId,
+
+  selectedPermissionIds = [],
+  onToggleSelection,
+
   onToggle,
 }: Props) {
   const theme = useTheme();
+
   const { t } = useI18nNs(["permission", "permissions"]);
+
   const isDark = theme.palette.mode === "dark";
 
   const tr = (key: string, fallback: string): string => {
     const value = t(key);
-    return !value || value === key || value === `[${key}]` ? fallback : value;
+
+    return !value || value === key || value === `[${key}]`
+      ? fallback
+      : value;
   };
 
-  const getDescriptionText = (row: UserPermissionCatalogRow): string => {
+  const getDescriptionText = (
+    row: UserPermissionCatalogRow,
+  ): string => {
     const desc =
       getSafePermissionText(row.description) ||
       getSafePermissionText(row.displayName);
 
-    if (!desc) return "Açıklama yok";
+    if (!desc) {
+      return "Açıklama yok";
+    }
 
     if (desc.includes(":")) {
       const translated = t(desc);
-      return !translated || translated === desc || translated === `[${desc}]`
+
+      return !translated ||
+        translated === desc ||
+        translated === `[${desc}]`
         ? desc
         : translated;
     }
@@ -90,9 +120,18 @@ export default function UserPermissionCatalogCardGrid({
   return (
     <Grid container spacing={2}>
       {rows.map((row) => {
-        const isSaving = savingPermissionId === row.permissionId;
+        const isSaving =
+          savingPermissionId === row.permissionId;
+
         const levelLabel = getLevelLabel(row);
-        const isCritical = levelLabel === "Critical" || levelLabel === "Sensitive";
+
+        const isCritical =
+          levelLabel === "Critical" ||
+          levelLabel === "Sensitive";
+
+        const selected = selectedPermissionIds.includes(
+          row.permissionId,
+        );
 
         return (
           <Grid
@@ -105,22 +144,43 @@ export default function UserPermissionCatalogCardGrid({
               sx={{
                 width: "100%",
                 borderRadius: 3,
+
                 border: "1px solid",
-                borderColor: row.isDirect
-                  ? alpha(theme.palette.success.main, 0.38)
-                  : isCritical
-                    ? alpha(theme.palette.warning.main, 0.35)
-                    : alpha(theme.palette.divider, isDark ? 0.45 : 0.85),
-                bgcolor: row.isDirect
-                  ? alpha(theme.palette.success.main, isDark ? 0.12 : 0.045)
-                  : alpha(theme.palette.background.paper, isDark ? 0.7 : 0.98),
+
+                borderColor: selected
+                  ? alpha(theme.palette.primary.main, 0.45)
+                  : row.isDirect
+                    ? alpha(theme.palette.success.main, 0.38)
+                    : isCritical
+                      ? alpha(theme.palette.warning.main, 0.35)
+                      : alpha(
+                          theme.palette.divider,
+                          isDark ? 0.45 : 0.85,
+                        ),
+
+                bgcolor: selected
+                  ? alpha(theme.palette.primary.main, 0.08)
+                  : row.isDirect
+                    ? alpha(
+                        theme.palette.success.main,
+                        isDark ? 0.12 : 0.045,
+                      )
+                    : alpha(
+                        theme.palette.background.paper,
+                        isDark ? 0.7 : 0.98,
+                      ),
+
                 boxShadow: isDark
                   ? "0 14px 30px rgba(0,0,0,0.24)"
                   : "0 14px 30px rgba(15,23,42,0.06)",
+
                 overflow: "hidden",
+
                 transition: "160ms ease",
+
                 "&:hover": {
                   transform: "translateY(-2px)",
+
                   boxShadow: isDark
                     ? "0 18px 38px rgba(0,0,0,0.32)"
                     : "0 18px 38px rgba(15,23,42,0.10)",
@@ -129,172 +189,163 @@ export default function UserPermissionCatalogCardGrid({
             >
               <CardContent sx={{ p: 2 }}>
                 <Stack spacing={1.5}>
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    alignItems="flex-start"
+                  >
+                    <Checkbox
+                      checked={selected}
+                      disabled={
+                        disabled ||
+                        isSaving ||
+                        !onToggleSelection
+                      }
+                      onChange={() =>
+                        onToggleSelection?.(
+                          row.permissionId,
+                        )
+                      }
+                    />
+
                     <Box
                       sx={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 2,
+                        width: 48,
+                        height: 48,
+                        borderRadius: 3,
+
                         display: "grid",
                         placeItems: "center",
-                        color: row.isDirect ? "success.main" : "primary.main",
+
                         bgcolor: row.isDirect
-                          ? alpha(theme.palette.success.main, 0.12)
-                          : alpha(theme.palette.primary.main, 0.1),
-                        flexShrink: 0,
+                          ? alpha(
+                              theme.palette.success.main,
+                              0.15,
+                            )
+                          : alpha(
+                              theme.palette.primary.main,
+                              0.12,
+                            ),
+
+                        color: row.isDirect
+                          ? theme.palette.success.main
+                          : theme.palette.primary.main,
                       }}
                     >
                       {row.isDirect ? (
-                        <IconShieldCheck size={20} />
+                        <IconShieldCheck size={24} />
+                      ) : row.isRoleSource ? (
+                        <IconUsers size={24} />
                       ) : (
-                        <IconKey size={20} />
+                        <IconKey size={24} />
                       )}
                     </Box>
 
-                    <Box minWidth={0} flex={1}>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        alignItems="center"
-                        justifyContent="space-between"
+                    <Stack spacing={0.5} flex={1}>
+                      <Typography
+                        variant="subtitle1"
+                        fontWeight={800}
                       >
-                        <Typography
-                          variant="subtitle2"
-                          fontWeight={900}
-                          sx={{
-                            lineHeight: 1.25,
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
-                        >
-                          {getShortTitle(row)}
-                        </Typography>
-
-                        <Switch
-                          size="small"
-                          checked={row.isDirect}
-                          disabled={disabled || isSaving}
-                          onChange={(e) => onToggle(row, e.target.checked)}
-                          sx={{ flexShrink: 0, ml: 1 }}
-                        />
-                      </Stack>
+                        {getShortTitle(row)}
+                      </Typography>
 
                       <Typography
                         variant="caption"
                         color="text.secondary"
-                        sx={{
-                          display: "block",
-                          mt: 0.5,
-                          fontFamily: "monospace",
-                          opacity: 0.86,
-                          wordBreak: "break-word",
-                        }}
                       >
                         {row.permissionCode}
                       </Typography>
-                    </Box>
+                    </Stack>
+
+                    <Switch
+                      checked={row.isDirect}
+                      disabled={disabled || isSaving}
+                      onChange={(e) =>
+                        onToggle(
+                          row,
+                          e.target.checked,
+                        )
+                      }
+                    />
                   </Stack>
 
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{
-                      lineHeight: 1.45,
-                      minHeight: 42,
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
                   >
                     {getDescriptionText(row)}
                   </Typography>
 
-                  <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    flexWrap="wrap"
+                    useFlexGap
+                  >
                     <Chip
                       size="small"
                       label={row.module}
+                    />
+
+                    <Chip
+                      size="small"
                       variant="outlined"
-                      sx={{
-                        fontWeight: 800,
-                        maxWidth: "100%",
-                        "& .MuiChip-label": {
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        },
-                      }}
-                    />
-
-                    <Chip
-                      size="small"
                       label={row.scope}
-                      sx={{ fontWeight: 800 }}
                     />
 
                     <Chip
                       size="small"
+                      color={
+                        levelLabel === "Sensitive"
+                          ? "error"
+                          : levelLabel === "Critical"
+                            ? "warning"
+                            : "default"
+                      }
                       label={levelLabel}
-                      color={isCritical ? "warning" : "default"}
-                      variant={isCritical ? "filled" : "outlined"}
-                      sx={{ fontWeight: 800 }}
                     />
-                  </Stack>
 
-                  <Box
-                    sx={{
-                      pt: 1.25,
-                      borderTop: "1px solid",
-                      borderColor: alpha(theme.palette.divider, isDark ? 0.35 : 0.75),
-                    }}
-                  >
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      alignItems="center"
-                      justifyContent="space-between"
-                    >
-                      <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
-                        {row.isRoleSource && (
-                          <Chip
-                            size="small"
-                            icon={<IconUsers size={14} />}
-                            color="info"
-                            variant="outlined"
-                            label={tr("permission:userOverrides.source.role", "Rol Kaynaklı")}
-                            sx={{ fontWeight: 800 }}
-                          />
+                    {row.isRoleSource && (
+                      <Chip
+                        size="small"
+                        color="info"
+                        icon={<IconUsers size={14} />}
+                        label={tr(
+                          "permission:userOverrides.source.role",
+                          "Role",
                         )}
+                      />
+                    )}
 
-                        {row.isDirect && (
-                          <Chip
-                            size="small"
-                            icon={<IconUserCheck size={14} />}
-                            color="success"
-                            label={tr("permission:userOverrides.source.direct", "Direct")}
-                            sx={{ fontWeight: 800 }}
-                          />
+                    {row.isDirect && (
+                      <Chip
+                        size="small"
+                        color="success"
+                        icon={
+                          <IconUserCheck size={14} />
+                        }
+                        label={tr(
+                          "permission:userOverrides.source.direct",
+                          "Direct",
                         )}
+                      />
+                    )}
 
-                        {!row.isEffective && !row.isDirect && !row.isRoleSource && (
-                          <Chip
-                            size="small"
-                            icon={<IconShieldOff size={14} />}
-                            variant="outlined"
-                            label={tr("permission:userOverrides.source.missing", "Eksik")}
-                            sx={{ fontWeight: 800 }}
-                          />
-                        )}
-                      </Stack>
-
-                      {isSaving && (
-                        <Typography variant="caption" color="text.secondary" fontWeight={800}>
-                          Kaydediliyor...
-                        </Typography>
+                    {!row.isDirect &&
+                      !row.isRoleSource && (
+                        <Chip
+                          size="small"
+                          color="default"
+                          icon={
+                            <IconShieldOff size={14} />
+                          }
+                          label={tr(
+                            "permission:userOverrides.source.none",
+                            "Inherited",
+                          )}
+                        />
                       )}
-                    </Stack>
-                  </Box>
+                  </Stack>
                 </Stack>
               </CardContent>
             </Card>

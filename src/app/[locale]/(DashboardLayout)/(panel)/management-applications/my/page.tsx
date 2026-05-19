@@ -1,7 +1,5 @@
-// src/app/[locale]/(DashboardLayout)/(panel)/management-applications/my/page.tsx
+import MyManagementApplicationsView from "@/modules/management-applications/views/MyManagementApplicationsView";
 
-import ManagementApplicationListView from "@/modules/management-applications/views/ManagementApplicationListView";
-
-export default function ManagementApplicationMyListPage() {
-  return <ManagementApplicationListView />;
+export default function MyManagementApplicationsPage() {
+  return <MyManagementApplicationsView />;
 }

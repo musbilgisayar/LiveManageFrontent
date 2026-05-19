@@ -1,4 +1,5 @@
 // src/modules/permissions/views/UserPermissionOverridesView.tsx
+
 "use client";
 
 import {
@@ -31,7 +32,7 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { motion, AnimatePresence } from "framer-motion";
-
+import { useMemo, useState } from "react";
 import { useI18nNs } from "@/app/context/i18nContext";
 
 import UserPermissionCatalogCardGrid from "../components/user-overrides/UserPermissionCatalogCardGrid";
@@ -47,6 +48,96 @@ export default function UserPermissionOverridesView() {
   const theme = useTheme();
   const { t } = useI18nNs(["permission"]);
   const vm = useUserPermissionOverrides();
+  const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
+const [bulkSaving, setBulkSaving] = useState(false);
+
+function getPermissionId(row: unknown): string {
+  const record = row as Record<string, unknown>;
+
+  return String(
+    record.permissionId ??
+      record.id ??
+      record.code ??
+      record.permissionCode ??
+      "",
+  );
+}
+
+function isDirectPermissionGranted(row: unknown): boolean {
+  const record = row as Record<string, unknown>;
+
+  return Boolean(
+    record.hasDirectPermission ??
+      record.isDirectlyAssigned ??
+      record.isGranted ??
+      record.granted ??
+      false,
+  );
+}
+
+const visiblePermissionIds = useMemo(
+  () =>
+    vm.filteredRows
+      .map((row) => getPermissionId(row))
+      .filter(Boolean),
+  [vm.filteredRows],
+);
+
+const allVisibleSelected =
+  visiblePermissionIds.length > 0 &&
+  visiblePermissionIds.every((id) => selectedPermissionIds.includes(id));
+
+function handleTogglePermissionSelection(permissionId: string) {
+  setSelectedPermissionIds((prev) =>
+    prev.includes(permissionId)
+      ? prev.filter((id) => id !== permissionId)
+      : [...prev, permissionId],
+  );
+}
+
+function handleSelectAllVisible() {
+  setSelectedPermissionIds(visiblePermissionIds);
+}
+
+function handleClearSelection() {
+  setSelectedPermissionIds([]);
+}
+
+async function handleGrantSelected() {
+  setBulkSaving(true);
+
+  try {
+    const selectedRows = vm.filteredRows.filter((row) =>
+      selectedPermissionIds.includes(getPermissionId(row)),
+    );
+
+    for (const row of selectedRows) {
+      if (!isDirectPermissionGranted(row)) {
+        await vm.toggleDirectPermission(row, true);
+      }
+    }
+  } finally {
+    setBulkSaving(false);
+  }
+}
+
+async function handleRevokeSelected() {
+  setBulkSaving(true);
+
+  try {
+    const selectedRows = vm.filteredRows.filter((row) =>
+      selectedPermissionIds.includes(getPermissionId(row)),
+    );
+
+    for (const row of selectedRows) {
+      if (isDirectPermissionGranted(row)) {
+        await vm.toggleDirectPermission(row, false);
+      }
+    }
+  } finally {
+    setBulkSaving(false);
+  }
+}
   const isDark = theme.palette.mode === "dark";
 
   // Animation variants
@@ -457,7 +548,73 @@ export default function UserPermissionOverridesView() {
                         </Slide>
 
                         <Divider sx={{ my: 1 }} />
+                              <Paper
+  elevation={0}
+  sx={{
+    p: 2,
+    borderRadius: 3,
+    border: "1px solid",
+    borderColor: "divider",
+    bgcolor: alpha(theme.palette.primary.main, 0.035),
+  }}
+>
+  <Stack
+    direction={{ xs: "column", md: "row" }}
+    spacing={1.5}
+    alignItems={{ xs: "stretch", md: "center" }}
+    justifyContent="space-between"
+  >
+    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+      <Button
+        size="small"
+        variant={allVisibleSelected ? "contained" : "outlined"}
+        onClick={handleSelectAllVisible}
+        disabled={vm.loading || bulkSaving || visiblePermissionIds.length === 0}
+      >
+        Tümünü seç
+      </Button>
 
+      <Button
+        size="small"
+        variant="outlined"
+        color="inherit"
+        onClick={handleClearSelection}
+        disabled={vm.loading || bulkSaving || selectedPermissionIds.length === 0}
+      >
+        Seçimi iptal et
+      </Button>
+
+      <Chip
+        size="small"
+        color="primary"
+        variant="outlined"
+        label={`${selectedPermissionIds.length} seçili`}
+      />
+    </Stack>
+
+    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+      <Button
+        size="small"
+        color="success"
+        variant="contained"
+        onClick={handleGrantSelected}
+        disabled={vm.loading || bulkSaving || selectedPermissionIds.length === 0}
+      >
+        Seçilileri ver
+      </Button>
+
+      <Button
+        size="small"
+        color="error"
+        variant="outlined"
+        onClick={handleRevokeSelected}
+        disabled={vm.loading || bulkSaving || selectedPermissionIds.length === 0}
+      >
+        Seçilileri kaldır
+      </Button>
+    </Stack>
+  </Stack>
+</Paper>
                         {/* Permission List with Animation */}
                         <AnimatePresence mode="wait">
                           <motion.div
@@ -468,19 +625,23 @@ export default function UserPermissionOverridesView() {
                             transition={{ duration: 0.2 }}
                           >
                             {vm.filters.viewMode === "table" ? (
-                              <UserPermissionCatalogTable
-                                rows={vm.filteredRows}
-                                disabled={vm.loading}
-                                savingPermissionId={vm.savingPermissionId}
-                                onToggle={vm.toggleDirectPermission}
-                              />
+                             <UserPermissionCatalogTable
+  rows={vm.filteredRows}
+  disabled={vm.loading || bulkSaving}
+  savingPermissionId={vm.savingPermissionId}
+  selectedPermissionIds={selectedPermissionIds}
+  onToggleSelection={handleTogglePermissionSelection}
+  onToggle={vm.toggleDirectPermission}
+/>
                             ) : (
-                              <UserPermissionCatalogCardGrid
-                                rows={vm.filteredRows}
-                                disabled={vm.loading}
-                                savingPermissionId={vm.savingPermissionId}
-                                onToggle={vm.toggleDirectPermission}
-                              />
+                           <UserPermissionCatalogCardGrid
+  rows={vm.filteredRows}
+  disabled={vm.loading || bulkSaving}
+  savingPermissionId={vm.savingPermissionId}
+  selectedPermissionIds={selectedPermissionIds}
+  onToggleSelection={handleTogglePermissionSelection}
+  onToggle={vm.toggleDirectPermission}
+/>
                             )}
                           </motion.div>
                         </AnimatePresence>

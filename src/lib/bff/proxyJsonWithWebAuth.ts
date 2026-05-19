@@ -46,6 +46,8 @@ export type ProxyJsonOptions = {
   disableProactiveRefresh?: boolean;
   /** Disable retry on 401 (for login endpoints) */
   disableRetryOn401?: boolean;
+  /** Omit x-tenant-key for backend endpoints that intentionally support global scope. */
+  disableTenantHeader?: boolean;
   transformResponse?: (
     payload: unknown,
     context: ResponseTransformContext
@@ -162,6 +164,7 @@ export async function proxyJsonWithWebAuth(
     let headers = buildWebAuthHeaders(req, correlationId, {
       extraHeaders: options.extraHeaders,
       defaultAccept: "application/json",
+      includeTenantHeader: !options.disableTenantHeader,
     });
 
     applyJsonContentTypeIfNeeded(headers, options.body, options.skipContentTypeInjection ?? false);
@@ -181,6 +184,7 @@ export async function proxyJsonWithWebAuth(
         headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
           extraHeaders: options.extraHeaders,
           defaultAccept: "application/json",
+          includeTenantHeader: !options.disableTenantHeader,
         });
         applyJsonContentTypeIfNeeded(headers, options.body, options.skipContentTypeInjection ?? false);
 
@@ -229,6 +233,7 @@ export async function proxyJsonWithWebAuth(
       headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
         extraHeaders: options.extraHeaders,
         defaultAccept: "application/json",
+        includeTenantHeader: !options.disableTenantHeader,
       });
       applyJsonContentTypeIfNeeded(headers, options.body, options.skipContentTypeInjection ?? false);
 

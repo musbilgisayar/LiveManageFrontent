@@ -38,36 +38,26 @@ const Menuitems: NavGroup[] = [
     requiredAnyPermissions: ["account.me.view.self"],
   },
 
-  {
-    navlabel: true,
-    subheader: "sidebar:group.managementApplications",
-    requiredAnyPermissions: [
-      "property.applications.create.self",
-      "property.applications.view_own.self",
-      "admin.property.applications.view_pending.tenant",
-    ],
-  },
-  {
-    id: uniqueId(),
-    title: "sidebar:menu.managementApplications.create",
-    icon: IconFileDescription,
-    href: "/management-applications/create",
-    requiredAnyPermissions: ["property.applications.create.self"],
-  },
-  {
-    id: uniqueId(),
-    title: "sidebar:menu.managementApplications.my",
-    icon: IconChecklist,
-    href: "/management-applications/my",
-    requiredAnyPermissions: ["property.applications.view_own.self"],
-  },
-  {
-    id: uniqueId(),
-    title: "sidebar:menu.managementApplications.review",
-    icon: IconShieldCheck,
-    href: "/management-applications/review",
-    requiredAnyPermissions: ["admin.property.applications.view_pending.tenant"],
-  },
+{
+  navlabel: true,
+  subheader: "sidebar:group.managementApplications",
+  requiredAnyPermissions: [
+    "property.applications.create.self",
+    "property.applications.view_own.self",
+    "admin.property.applications.view_pending.tenant",
+  ],
+},
+{
+  id: uniqueId(),
+  title: "sidebar:menu.managementApplications.dashboard",
+  icon: IconBuildingCommunity,
+  href: "/management-applications",
+  requiredAnyPermissions: [
+    "property.applications.create.self",
+    "property.applications.view_own.self",
+    "admin.property.applications.view_pending.tenant",
+  ],
+},
 
   {
     navlabel: true,

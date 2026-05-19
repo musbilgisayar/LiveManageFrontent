@@ -1,8 +1,5 @@
-//src/app/[locale]/(DashboardLayout)/(panel)/superadmin/roles/page.tsx
-"use client";
-
-import RoleManagerPage from "@/modules/roles/pages/RoleManagerPage";
+import RoleManagementView from "@/modules/roles/views/RoleManagementView";
 
 export default function Page() {
-  return <RoleManagerPage />;
+  return <RoleManagementView />;
 }

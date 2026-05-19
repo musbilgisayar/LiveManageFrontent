@@ -28,6 +28,8 @@ type I18nCtx = {
 const Ctx = createContext<I18nCtx | null>(null);
 
 const DEBUG = process.env.NODE_ENV !== "production";
+const missingKeyWarnings = new Set<string>();
+const ambiguousKeyWarnings = new Set<string>();
 
 function now(): string {
   return new Date().toLocaleString("tr-TR", { hour12: false });
@@ -185,14 +187,92 @@ function candidateKeys(key: string): string[] {
   return Array.from(out);
 }
 
+function findTranslation(
+  dict: Dict,
+  key: string,
+  vars?: Record<string, string | number>
+): string | null {
+  for (const candidate of candidateKeys(key)) {
+    const raw = dict[candidate];
+    if (raw != null) {
+      return formatICU(String(raw), vars);
+    }
+  }
+
+  return null;
+}
+
+function namespaceKeyCandidates(ns: string, key: string): string[] {
+  const cleanNs = ns.trim();
+  const cleanKey = key.trim();
+  if (!cleanNs || !cleanKey) return [];
+  if (cleanKey.startsWith(`${cleanNs}:`) || cleanKey.startsWith(`${cleanNs}.`)) {
+    return candidateKeys(cleanKey);
+  }
+
+  return candidateKeys(`${cleanNs}:${cleanKey}`);
+}
+
+function findScopedTranslation(params: {
+  dict: Dict;
+  key: string;
+  namespaces: string[];
+  vars?: Record<string, string | number>;
+  lang: string;
+}): string | null {
+  const { dict, key, namespaces, vars, lang } = params;
+  const clean = key.trim();
+  if (!clean) return "";
+
+  const direct = findTranslation(dict, clean, vars);
+  if (direct != null) {
+    return direct;
+  }
+
+  if (clean.includes(":") || namespaces.length === 0) {
+    return null;
+  }
+
+  const matches: Array<{ ns: string; value: string }> = [];
+
+  for (const ns of namespaces) {
+    for (const candidate of namespaceKeyCandidates(ns, clean)) {
+      const raw = dict[candidate];
+      if (raw != null) {
+        matches.push({ ns, value: formatICU(String(raw), vars) });
+        break;
+      }
+    }
+  }
+
+  if (matches.length > 1 && DEBUG) {
+    const warningKey = `${lang}|${clean}|${namespaces.join("|")}`;
+    if (!ambiguousKeyWarnings.has(warningKey)) {
+      ambiguousKeyWarnings.add(warningKey);
+      warn("Birden fazla namespace aynÄ± scoped key'i saÄŸlÄ±yor", {
+        lang,
+        key: clean,
+        namespaces: matches.map((match) => match.ns),
+        selectedNamespace: matches[0]?.ns,
+      });
+    }
+  }
+
+  return matches[0]?.value ?? null;
+}
+
 function normalizeNamespaces(namespaces: string[]): string[] {
-  return Array.from(
-    new Set(
-      namespaces
-        .map((item) => item?.trim())
-        .filter((item): item is string => Boolean(item))
-    )
-  ).sort();
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const item of namespaces) {
+    const clean = item?.trim();
+    if (!clean || seen.has(clean)) continue;
+    seen.add(clean);
+    out.push(clean);
+  }
+
+  return out;
 }
 
 type ProviderProps = {
@@ -474,14 +554,17 @@ const hasNamespaces = useCallback(
     (key: string, vars?: Record<string, string | number>): string => {
       if (!key) return "";
 
-      for (const candidate of candidateKeys(key)) {
-        const raw = dict[candidate];
-        if (raw != null) {
-          return formatICU(String(raw), vars);
-        }
+      const translated = findTranslation(dict, key, vars);
+      if (translated != null) {
+        return translated;
       }
 
       if (DEBUG) {
+        const warningKey = `${effectiveLang}|${key}`;
+        if (missingKeyWarnings.has(warningKey)) {
+          return `[${key}]`;
+        }
+        missingKeyWarnings.add(warningKey);
         warn("Eksik çeviri anahtarı", {
           lang: effectiveLang,
           key,
@@ -563,12 +646,34 @@ export function useI18n(namespaces?: string | string[]) {
     return normalizedNamespaces.every((ns) => ctx.hasNamespace(ns));
   }, [ctx, depKey, normalizedNamespaces]);
 
+  const scopedT = useCallback(
+    (key: string, vars?: Record<string, string | number>): string => {
+      if (!key) return "";
+
+      const translated = findScopedTranslation({
+        dict: ctx.dict,
+        key,
+        namespaces: normalizedNamespaces,
+        vars,
+        lang: ctx.lang,
+      });
+
+      if (translated != null) {
+        return translated;
+      }
+
+      return ctx.t(key, vars);
+    },
+    [ctx, depKey, normalizedNamespaces]
+  );
+
   return useMemo(
     () => ({
       ...ctx,
+      t: scopedT,
       ready,
     }),
-    [ctx, ready]
+    [ctx, scopedT, ready]
   );
 }
 

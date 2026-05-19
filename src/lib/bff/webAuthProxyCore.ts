@@ -268,6 +268,7 @@ export function buildWebAuthHeaders(
     extraHeaders?: HeadersInit;
     defaultAccept?: string;
     includeAuthorization?: boolean;
+    includeTenantHeader?: boolean;
   }
 ): Headers {
   const headers = new Headers();
@@ -299,7 +300,9 @@ export function buildWebAuthHeaders(
     headers.set("accept-language", lang);
   }
 
-  headers.set("x-tenant-key", resolveTenant(req));
+  if (options?.includeTenantHeader !== false) {
+    headers.set("x-tenant-key", resolveTenant(req));
+  }
   headers.set("x-correlation-id", correlationId);
 
   applyHeaders(headers, options?.extraHeaders);
@@ -473,6 +476,7 @@ export function buildMergedRetryHeaders(
   options?: {
     extraHeaders?: HeadersInit;
     defaultAccept?: string;
+    includeTenantHeader?: boolean;
   }
 ): Headers {
   const headers = buildWebAuthHeaders(req, correlationId, {

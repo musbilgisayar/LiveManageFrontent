@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 
 import {
   Alert,
@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import { IconArrowLeft } from "@tabler/icons-react";
 
+import { useAuth } from "@/app/context/AuthContext";
 import { useI18nNs } from "@/app/context/i18nContext";
 
 import AdminDecisionPanel from "../components/admin-detail/AdminDecisionPanel";
@@ -23,83 +24,38 @@ import SystemChecksCard from "../components/admin-detail/SystemChecksCard";
 import TimelineCard from "../components/admin-detail/TimelineCard";
 import MetaChip from "../components/admin-detail/shared/MetaChip";
 
-import { getAdminManagementApplicationDetail } from "../services/managementApplication.service";
+import useManagementApplicationReviewDetail from "../hooks/useManagementApplicationReviewDetail";
 
 import {
   riskLabelKey,
   statusLabelKey,
 } from "../utils/adminManagementApplication.utils";
 
-import type {
-  AdminManagementApplicationDetail,
-} from "../types/adminManagementApplication.types";
-
 type AdminManagementApplicationDetailViewProps = {
   applicationId: string;
   onBack?: () => void;
 };
+
+const ADMIN_DECISION_PERMISSIONS = [
+  "admin.property.applications.view_pending.tenant",
+  "admin.property.applications.manage.tenant",
+  "admin.property.applications.approve.tenant",
+  "admin.property.applications.reject.tenant",
+  "admin.property.applications.manage.global",
+  "management.application.review",
+  "management.application.approve",
+  "management.application.reject",
+];
 
 export default function AdminManagementApplicationDetailView({
   applicationId,
   onBack,
 }: AdminManagementApplicationDetailViewProps) {
   const { t } = useI18nNs("management-applications");
-
-  const [data, setData] =
-    useState<AdminManagementApplicationDetail | null>(null);
-
-  const [isLoading, setIsLoading] = useState(true);
-
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!applicationId) {
-      setData(null);
-      setErrorMessage("admin.detail.load.missingApplicationId");
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const response =
-        await getAdminManagementApplicationDetail(applicationId);
-
-      if (!response.ok || !response.data) {
-        setData(null);
-
-        setErrorMessage(
-          response.userMessage ||
-            response.message ||
-            "admin.detail.load.error",
-        );
-
-        return;
-      }
-
-      setData(response.data);
-    } catch (error) {
-      console.error(
-        "[AdminManagementApplicationDetailView][load] failed",
-        error,
-      );
-
-      setData(null);
-
-      setErrorMessage(
-        "admin.detail.load.unexpectedError",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [applicationId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { hasAnyPermission } = useAuth();
+  const canManageDecision = hasAnyPermission(ADMIN_DECISION_PERMISSIONS);
+  const { data, isLoading, errorMessage, reload } =
+    useManagementApplicationReviewDetail(applicationId);
 
   const documentIssueCount = useMemo(() => {
     if (!data) return 0;
@@ -248,7 +204,9 @@ export default function AdminManagementApplicationDetailView({
           display: "grid",
           gridTemplateColumns: {
             xs: "1fr",
-            lg: "minmax(0, 1.75fr) minmax(360px, 0.9fr)",
+            lg: canManageDecision
+              ? "minmax(0, 1.75fr) minmax(360px, 0.9fr)"
+              : "minmax(0, 1fr)",
           },
           gap: 2,
           alignItems: "flex-start",
@@ -283,24 +241,27 @@ export default function AdminManagementApplicationDetailView({
           />
         </Stack>
 
-        <Box
-          sx={{
-            minWidth: 0,
-            position: {
-              lg: "sticky",
-            },
-            top: {
-              lg: 88,
-            },
-          }}
-        >
-          <AdminDecisionPanel
-            applicationId={data.applicationId}
-            onCompleted={() => {
-              void load();
+        {canManageDecision && (
+          <Box
+            sx={{
+              minWidth: 0,
+              position: {
+                lg: "sticky",
+              },
+              top: {
+                lg: 88,
+              },
             }}
-          />
-        </Box>
+          >
+            <AdminDecisionPanel
+              applicationId={data.applicationId}
+              status={data.status}
+              onCompleted={() => {
+                void reload();
+              }}
+            />
+          </Box>
+        )}
       </Box>
     </Stack>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import {
   alpha,
@@ -39,7 +39,7 @@ import type {
   ManagedPropertyApplicationStatus,
 } from "../types/managementApplication.types";
 
-const NS = "property:managementApplication.list";
+const NS = "management-applications:myList";
 
 type TranslateFn = (key: string) => string;
 
@@ -68,7 +68,9 @@ type ManagementApplicationItem = {
 export default function ManagementApplicationListView() {
   const theme = useTheme<Theme>();
   const router = useRouter();
-  const { t } = useI18nNs(NS);
+  const params = useParams<{ locale?: string }>();
+  const locale = params?.locale ?? "tr";
+  const { t } = useI18nNs("management-applications");
 
   const { items, isLoading, errorMessage, reload } =
     useManagementApplicationList();
@@ -362,7 +364,9 @@ export default function ManagementApplicationListView() {
               key={item.id}
               item={item}
               t={t}
-              onOpen={() => router.push(`/management-applications/review/${item.id}`)}
+              onOpen={() =>
+                router.push(`/${locale}/management-applications/my/${item.id}`)
+              }
             />
           ))}
         </Stack>

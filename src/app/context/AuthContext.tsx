@@ -102,6 +102,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 const AUTHENTICATED_SELF_PERMISSIONS = ["account.me.view.self"];
+const SESSION_REFRESH_INTERVAL_MS = 4 * 60 * 1000;
 
 function resolveLocaleFromParams(
   params: Record<string, string | string[] | undefined> | null
@@ -217,7 +218,7 @@ function normalizeAuthUser(json: any): AuthUser | null {
   };
 }
 
-async function fetchCurrentUser(): Promise<AuthUser | null> {
+async function fetchCurrentUser(retryAfterRefresh = true): Promise<AuthUser | null> {
   const response = await fetch("/api/v1.0/account/users/me", {
     method: "GET",
     credentials: "include",
@@ -227,7 +228,17 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
     },
   });
 
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
+    const refreshed = retryAfterRefresh ? await refreshWebSession() : false;
+
+    if (refreshed) {
+      return fetchCurrentUser(false);
+    }
+
+    return null;
+  }
+
+  if (response.status === 403) {
     return null;
   }
 
@@ -252,6 +263,22 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
   );
 
   return normalizedUser;
+}
+
+async function refreshWebSession(): Promise<boolean> {
+  const response = await fetch("/api/v1.0/account/refresh", {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+    headers: {
+      accept: "application/json",
+    },
+  });
+
+  if (!response.ok) return false;
+
+  const json = await response.json().catch(() => null);
+  return json?.ok === true;
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -313,6 +340,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+
+    const renew = async () => {
+      const refreshed = await refreshWebSession();
+
+      if (!active) return;
+
+      if (refreshed) {
+        const currentUser = await fetchCurrentUser(false);
+        if (active) {
+          setUser(currentUser);
+        }
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void renew();
+    }, SESSION_REFRESH_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void renew();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user]);
 
   const logout = useCallback(async () => {
     try {

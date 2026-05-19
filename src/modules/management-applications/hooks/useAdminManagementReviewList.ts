@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useAuth } from "@/app/context/AuthContext";
+
 import { getPendingAdminManagementApplications } from "../services/managementApplication.service";
 
 import type {
@@ -17,7 +19,35 @@ const initialFilter: AdminManagementApplicationReviewFilter = {
   risk: "all",
 };
 
+const SUPERADMIN_GLOBAL_PERMISSIONS = [
+  "admin.property.applications.view_pending.global",
+  "admin.property.applications.detail.global",
+  "admin.property.applications.manage.global",
+  "localization.manage.global",
+  "culture.cache.clear.global",
+  "audit.entity_history.view.tenant",
+  "monitoring.summary.view.tenant",
+];
+
+export function useIsSuperAdminScope() {
+  const { user, hasAnyPermission } = useAuth();
+
+  return useMemo(() => {
+    const roles = [
+      ...(user?.roles ?? []),
+      ...(Array.isArray((user as any)?.role) ? (user as any).role : []),
+    ].map((role) => String(role).toLowerCase());
+
+    return (
+      roles.some((role) => role === "superadmin" || role === "super_admin") ||
+      hasAnyPermission(SUPERADMIN_GLOBAL_PERMISSIONS)
+    );
+  }, [hasAnyPermission, user]);
+}
+
 export default function useAdminManagementReviewList() {
+  const { loading: authLoading } = useAuth();
+
   const [items, setItems] = useState<AdminManagementApplicationListItem[]>([]);
   const [filter, setFilter] =
     useState<AdminManagementApplicationReviewFilter>(initialFilter);
@@ -25,13 +55,19 @@ export default function useAdminManagementReviewList() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const isSuperAdmin = useIsSuperAdminScope();
+
   useEffect(() => {
+    if (authLoading) return;
+
     async function load() {
       setIsLoading(true);
       setErrorMessage(null);
 
       try {
-        const response = await getPendingAdminManagementApplications();
+        const response = await getPendingAdminManagementApplications({
+          scope: isSuperAdmin ? "global" : "tenant",
+        });
 
         if (!response.ok) {
           setItems([]);
@@ -54,7 +90,7 @@ export default function useAdminManagementReviewList() {
     }
 
     void load();
-  }, []);
+  }, [authLoading, isSuperAdmin]);
 
   const filteredItems = useMemo(() => {
     const term = filter.search.trim().toLowerCase();

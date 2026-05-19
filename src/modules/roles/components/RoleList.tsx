@@ -1,129 +1,280 @@
-// 📁 src/modules/roles/components/RoleList.tsx
 "use client";
 
-import React from "react";
 import {
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  IconButton,
-  CircularProgress,
-  Tooltip,
+  alpha,
   Box,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  IconButton,
+  Stack,
+  Tooltip,
   Typography,
+  useTheme,
 } from "@mui/material";
-import { Chip } from "@mui/material";
-import { Edit, Delete } from "lucide-react";
+
+import {
+  IconEdit,
+  IconShieldLock,
+  IconTrash,
+  IconUserShield,
+} from "@tabler/icons-react";
+
+import { useI18nNs } from "@/app/context/i18nContext";
+
 import type { RoleDto } from "../types";
-import { useI18nNs } from "@/app/context/i18nContext"; // 🌍 senin veritabanı tabanlı çeviri sistemi
 
 type Props = {
   roles: RoleDto[];
   isLoading?: boolean;
-  labels: { name: string; description: string; actions: string };
+
+  labels: {
+    name: string;
+    description: string;
+    actions: string;
+  };
+
   onEdit?: (role: RoleDto) => void;
   onDelete?: (role: RoleDto) => void;
 };
 
-/**
- * 📋 RoleList
- * - Kurumsal temaya uygun sade tablo
- * - Veritabanı tabanlı çeviri destekli
- */
-export function RoleList({ roles, isLoading, labels, onEdit, onDelete }: Props) {
+function resolveRoleColor(role: RoleDto) {
+  const roleName = role.name?.toLowerCase() ?? "";
+
+  if (roleName.includes("super")) {
+    return "error";
+  }
+
+  if (roleName.includes("admin")) {
+    return "warning";
+  }
+
+  return "primary";
+}
+
+function resolveRoleName(
+  role: RoleDto,
+  t: (key: string) => string,
+): string {
+  if (role.name?.startsWith("roles:")) {
+    return t(role.name);
+  }
+
+  const key = `roles:name.${role.name?.toLowerCase()}`;
+
+  const translated = t(key);
+
+  if (!translated || translated === key || translated === `[${key}]`) {
+    return role.name ?? "-";
+  }
+
+  return translated;
+}
+
+function resolveRoleDescription(
+  role: RoleDto,
+  t: (key: string) => string,
+  fallback: string,
+): string {
+  if (role.description?.startsWith("roles:")) {
+    return t(role.description);
+  }
+
+  return role.description || fallback;
+}
+
+export default function RoleList({
+  roles,
+  isLoading,
+  onEdit,
+  onDelete,
+}: Props) {
+  const theme = useTheme();
+
   const { t } = useI18nNs(["roles"]);
+
+  const tr = (key: string, fallback: string) => {
+    const value = t(key);
+
+    return !value || value === key || value === `[${key}]`
+      ? fallback
+      : value;
+  };
 
   if (isLoading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-        <CircularProgress size={32} />
+      <Box
+        sx={{
+          py: 10,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <CircularProgress />
       </Box>
     );
   }
 
-  if (!roles || roles.length === 0) {
+  if (!roles?.length) {
     return (
-      <Typography
-        variant="body2"
+      <Card
+        elevation={0}
         sx={{
-          textAlign: "center",
-          py: 3,
-          color: "text.secondary",
-          fontStyle: "italic",
+          borderRadius: 4,
+          border: `1px dashed ${alpha(theme.palette.divider, 0.85)}`,
         }}
       >
-        {t("roles:noData")}
-      </Typography>
+        <CardContent
+          sx={{
+            py: 8,
+            textAlign: "center",
+          }}
+        >
+          <Stack spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 72,
+                height: 72,
+                borderRadius: 4,
+                display: "grid",
+                placeItems: "center",
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                color: theme.palette.primary.main,
+              }}
+            >
+              <IconShieldLock size={34} />
+            </Box>
+
+            <Typography variant="h6" fontWeight={800}>
+              {tr("roles:empty.title", "Henüz rol bulunmuyor")}
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary">
+              {tr(
+                "roles:empty.description",
+                "Yeni rol oluşturarak başlayabilirsiniz.",
+              )}
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <Table size="small" sx={{ minWidth: 500 }}>
-      <TableHead>
-        <TableRow>
-          <TableCell sx={{ fontWeight: 600 }}>{labels.name}</TableCell>
-          <TableCell sx={{ fontWeight: 600 }}>{labels.description}</TableCell>
-          <TableCell sx={{ fontWeight: 600, width: 120, textAlign: "right" }}>
-            {labels.actions}
-          </TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {roles.map((r) => (
-          <TableRow
-            key={r.id}
-            hover
+    <Stack spacing={2}>
+      {roles.map((role) => {
+        const color = resolveRoleColor(role);
+
+        const isSpecialRole =
+          role.name?.toLowerCase().includes("admin") ||
+          role.name?.toLowerCase().includes("super");
+
+        return (
+          <Card
+            key={role.id}
+            elevation={0}
             sx={{
-              "&:hover": { backgroundColor: "action.hover" },
-              transition: "background 0.2s ease-in-out",
+              borderRadius: 4,
+              overflow: "hidden",
+              border: `1px solid ${alpha(theme.palette[color].main, 0.18)}`,
+              background: alpha(theme.palette[color].main, 0.035),
+              transition: "160ms ease",
+              "&:hover": {
+                transform: "translateY(-2px)",
+                boxShadow: "0 16px 36px rgba(15,23,42,0.08)",
+              },
             }}
           >
-            {/* 🧩 Role Name */}
-            <TableCell>
-                {r.name?.startsWith("roles:")
-                  ? t(r.name)
-                  : t(`roles:name.${r.name.toLowerCase()}`) || r.name}
-            </TableCell>
+            <CardContent sx={{ p: 2.5 }}>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={2}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", md: "center" }}
+              >
+                <Stack spacing={1.2} flex={1}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    alignItems="center"
+                    flexWrap="wrap"
+                    useFlexGap
+                  >
+                    <Box
+                      sx={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 3,
+                        display: "grid",
+                        placeItems: "center",
+                        bgcolor: alpha(theme.palette[color].main, 0.12),
+                        color: theme.palette[color].main,
+                      }}
+                    >
+                      <IconUserShield size={22} />
+                    </Box>
 
+                    <Typography variant="h6" fontWeight={900}>
+                      {resolveRoleName(role, t)}
+                    </Typography>
 
-            {/* 🧩 Role Description */}
-            <TableCell>
-              {r.description?.startsWith("roles:")
-                ? t(r.description)
-                : r.description ?? "-"}
-            </TableCell>
+                    {isSpecialRole ? (
+                      <Chip
+                        size="small"
+                        color={color === "error" ? "error" : "warning"}
+                        label={tr("roles:special", "Özel rol")}
+                      />
+                    ) : null}
 
-             {/* 🧩 Aktif mi */}
-            <TableCell align="center">
-              {r.isActive ? (
-                <Chip label={t("roles:active")} color="success" size="small" />
-              ) : (
-                <Chip label={t("roles:inactive")} color="default" size="small" />
-              )}
-            </TableCell>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={role.isActive ? "success" : "default"}
+                      label={
+                        role.isActive
+                          ? tr("roles:active", "Aktif")
+                          : tr("roles:inactive", "Pasif")
+                      }
+                    />
+                  </Stack>
 
+                  <Typography variant="body2" color="text.secondary">
+                    {resolveRoleDescription(
+                      role,
+                      t,
+                      tr("roles:noDescription", "Açıklama bulunmuyor."),
+                    )}
+                  </Typography>
 
-            {/* 🧩 Actions */}
-            <TableCell align="right">
-              <Tooltip title={t("roles:action.edit")}>
-                <IconButton size="small" color="primary" onClick={() => onEdit?.(r)}>
-                  <Edit size={18} />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={t("roles:action.delete")}>
-                <IconButton size="small" color="error" onClick={() => onDelete?.(r)}>
-                  <Delete size={18} />
-                </IconButton>
-              </Tooltip>
-            </TableCell>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`ID: ${role.id}`}
+                    />
+                  </Stack>
+                </Stack>
 
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Tooltip title={tr("roles:action.edit", "Düzenle")}>
+                    <IconButton color="primary" onClick={() => onEdit?.(role)}>
+                      <IconEdit size={20} />
+                    </IconButton>
+                  </Tooltip>
 
-
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                  <Tooltip title={tr("roles:action.delete", "Sil")}>
+                    <IconButton color="error" onClick={() => onDelete?.(role)}>
+                      <IconTrash size={20} />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </Stack>
   );
 }

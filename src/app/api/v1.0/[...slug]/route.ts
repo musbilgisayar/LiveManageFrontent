@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_TENANT_KEY, coerceTenantKey } from "@/lib/tenantKeys";
+import { normalizeSetCookieForBrowser } from "@/lib/bff/authCookies";
+import {
+  mergeCookie,
+  tryRefreshWebSession,
+} from "@/lib/bff/webAuthProxyCore";
 
 const BACKEND = process.env.LM_BACKEND_BASE ?? "https://localhost:5002";
 const DEFAULT_TENANT =
@@ -58,6 +63,12 @@ function appendSetCookies(source: Headers, target: Headers) {
   return 0;
 }
 
+function appendRawSetCookies(cookies: string[], target: Headers) {
+  for (const cookie of cookies) {
+    target.append("set-cookie", normalizeSetCookieForBrowser(cookie));
+  }
+}
+
 async function readUpstreamBody(upstream: Response): Promise<{
   data: unknown;
   contentType: string;
@@ -107,13 +118,18 @@ async function handler(
   headers.set("x-client-version", "lm-frontend/locmgr-1.0.2");
   headers.set("X-Tenant-Key", tenantKey);
 
+  const bodyBuffer =
+    req.method !== "GET" && req.method !== "HEAD"
+      ? await req.arrayBuffer()
+      : undefined;
+
   const init: RequestInit = {
     method: req.method,
     headers,
   };
 
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    init.body = await req.arrayBuffer();
+  if (bodyBuffer) {
+    init.body = bodyBuffer;
   }
 
   console.group("🟦 [BFF CATCH-ALL]");
@@ -152,6 +168,46 @@ async function handler(
     );
   }
 
+  let refreshCookies: string[] = [];
+
+  if (upstream.status === 401 && hasCookie) {
+    const refresh = await tryRefreshWebSession(
+      req,
+      15_000,
+      correlationId,
+      "BFF-CATCH-ALL"
+    );
+
+    if (refresh.ok) {
+      refreshCookies = refresh.cookies;
+
+      const retryHeaders = new Headers(headers);
+      retryHeaders.delete("authorization");
+
+      const mergedCookie = mergeCookie(
+        req.headers.get("cookie"),
+        refreshCookies
+      );
+
+      if (mergedCookie) {
+        retryHeaders.set("cookie", mergedCookie);
+      }
+
+      upstream = await fetch(upstreamUrl, {
+        method: req.method,
+        headers: retryHeaders,
+        body: bodyBuffer,
+      });
+
+      console.info("â™»ï¸ [BFF CATCH-ALL] Refresh sonrasÄ± retry", {
+        correlationId,
+        tenantKey,
+        status: upstream.status,
+        refreshCookieCount: refreshCookies.length,
+      });
+    }
+  }
+
   const { data, contentType } = await readUpstreamBody(upstream);
 if (upstream.status === 204 || upstream.status === 205) {
   const response = new NextResponse(null, {
@@ -160,6 +216,7 @@ if (upstream.status === 204 || upstream.status === 205) {
 
   response.headers.set("x-correlation-id", correlationId);
   appendSetCookies(upstream.headers, response.headers);
+  appendRawSetCookies(refreshCookies, response.headers);
 
   console.info("✅ [BFF CATCH-ALL] Boş response başarıyla tamamlandı", {
     correlationId,
@@ -194,6 +251,7 @@ if (upstream.status === 204 || upstream.status === 205) {
 
     errorResponse.headers.set("x-correlation-id", correlationId);
     appendSetCookies(upstream.headers, errorResponse.headers);
+    appendRawSetCookies(refreshCookies, errorResponse.headers);
 
     console.groupEnd();
     return errorResponse;
@@ -214,6 +272,7 @@ if (upstream.status === 204 || upstream.status === 205) {
 
   response.headers.set("x-correlation-id", correlationId);
   appendSetCookies(upstream.headers, response.headers);
+  appendRawSetCookies(refreshCookies, response.headers);
 
   console.info("✅ [BFF CATCH-ALL] İstek başarıyla tamamlandı", {
     correlationId,

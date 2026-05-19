@@ -8,7 +8,7 @@ import { getMyManagementApplications } from "../services/managementApplication.s
 
 import type { ManagedPropertyApplicationListItemDto } from "../types/managementApplication.types";
 
-const NS = "property:managementApplication.list";
+const NS = "management-applications:myList";
 
 function resolveMessage(
   userMessage: string | null | undefined,
@@ -19,7 +19,7 @@ function resolveMessage(
 }
 
 export default function useManagementApplicationList() {
-  const { t } = useI18nNs(NS);
+  const { t } = useI18nNs("management-applications");
 
   const [items, setItems] = useState<ManagedPropertyApplicationListItemDto[]>(
     [],

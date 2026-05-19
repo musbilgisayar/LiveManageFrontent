@@ -25,23 +25,24 @@ import {
   requestRevisionForAdminManagementApplication,
 } from "../../services/managementApplication.service";
 
-import {
-  decisionButtonLabelKey,
-  decisionNoteLabelKey,
-  decisionNotePlaceholderKey,
-} from "../../utils/adminManagementApplication.utils";
-
 import type {
   AdminApplicationDecision,
+  AdminApplicationStatus,
 } from "../../types/adminManagementApplication.types";
 
 type AdminDecisionPanelProps = {
   applicationId: string;
+  status: AdminApplicationStatus;
   onCompleted?: () => void;
 };
 
+const NS = "management-applications:";
+
+const k = (key: string) => `${NS}${key}`;
+
 export default function AdminDecisionPanel({
   applicationId,
+  status,
   onCompleted,
 }: AdminDecisionPanelProps) {
   const theme = useTheme<Theme>();
@@ -51,11 +52,23 @@ export default function AdminDecisionPanel({
     useState<AdminApplicationDecision>("approve");
 
   const [adminNote, setAdminNote] = useState("");
-  const [notifyApplicant, setNotifyApplicant] = useState<"yes" | "no">("yes");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultMessageKey, setResultMessageKey] = useState<string | null>(null);
   const [errorMessageKey, setErrorMessageKey] = useState<string | null>(null);
+
+  const isFinalStatus =
+    status === "approved" || status === "rejected";
+
+  if (isFinalStatus) {
+    return (
+      <Alert severity="info" sx={{ borderRadius: 3 }}>
+        {status === "approved"
+          ? t(k("admin.detail.decision.final.approved"))
+          : t(k("admin.detail.decision.final.rejected"))}
+      </Alert>
+    );
+  }
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
@@ -66,37 +79,46 @@ export default function AdminDecisionPanel({
     ) {
       setErrorMessageKey(
         decision === "revision"
-          ? "admin.detail.decision.validation.revisionNoteRequired"
-          : "admin.detail.decision.validation.rejectReasonRequired",
+          ? k("admin.detail.decision.validation.revisionNoteRequired")
+          : k("admin.detail.decision.validation.rejectReasonRequired"),
       );
 
       return;
     }
+
     setIsSubmitting(true);
     setResultMessageKey(null);
     setErrorMessageKey(null);
 
-    const payload = {
-      reviewNote: adminNote.trim() || null,
-      notifyApplicant: notifyApplicant === "yes",
-    };
+    const note = adminNote.trim() || null;
 
     try {
       const response =
         decision === "approve"
-          ? await approveAdminManagementApplication(applicationId, payload)
+          ? await approveAdminManagementApplication(applicationId, {
+              reviewNote: note,
+              autoCreateUnitsAfterApproval: false,
+            })
           : decision === "revision"
             ? await requestRevisionForAdminManagementApplication(
-              applicationId,
-              payload,
-            )
-            : await rejectAdminManagementApplication(applicationId, payload);
+                applicationId,
+                {
+                  reviewNote: note,
+                  requestedDocumentNote: note,
+                  autoCreateUnitsAfterApproval: false,
+                },
+              )
+            : await rejectAdminManagementApplication(applicationId, {
+                reviewNote: note,
+                rejectReason: note,
+                autoCreateUnitsAfterApproval: false,
+              });
 
       if (!response.ok) {
         setErrorMessageKey(
           response.userMessage ||
-          response.message ||
-          "admin.detail.decision.result.failed",
+            response.message ||
+            k("admin.detail.decision.result.failed"),
         );
 
         return;
@@ -104,10 +126,10 @@ export default function AdminDecisionPanel({
 
       setResultMessageKey(
         decision === "approve"
-          ? "admin.detail.decision.result.approved"
+          ? k("admin.detail.decision.result.approved")
           : decision === "revision"
-            ? "admin.detail.decision.result.revisionRequested"
-            : "admin.detail.decision.result.rejected",
+            ? k("admin.detail.decision.result.revisionRequested")
+            : k("admin.detail.decision.result.rejected"),
       );
 
       onCompleted?.();
@@ -132,7 +154,7 @@ export default function AdminDecisionPanel({
 
       <TextField
         select
-        label={t("admin.detail.decision.field.decision")}
+        label={t(k("admin.detail.decision.field.decision"))}
         value={decision}
         onChange={(event) =>
           setDecision(event.target.value as AdminApplicationDecision)
@@ -140,67 +162,52 @@ export default function AdminDecisionPanel({
         fullWidth
       >
         <MenuItem value="approve">
-          {t("admin.detail.decision.option.approve")}
+          {t(k("admin.detail.decision.option.approve"))}
         </MenuItem>
+
         <MenuItem value="revision">
-          {t("admin.detail.decision.option.revision")}
+          {t(k("admin.detail.decision.option.revision"))}
         </MenuItem>
+
         <MenuItem value="reject">
-          {t("admin.detail.decision.option.reject")}
+          {t(k("admin.detail.decision.option.reject"))}
         </MenuItem>
       </TextField>
 
       {decision === "approve" && (
         <DecisionInfoBox
           color={theme.palette.success.main}
-          title={t("admin.detail.decision.approve.title")}
-          description={t("admin.detail.decision.approve.description")}
-          footer={t("admin.detail.decision.approve.footer")}
+          title={t(k("admin.detail.decision.approve.title"))}
+          description={t(k("admin.detail.decision.approve.description"))}
+          footer={t(k("admin.detail.decision.approve.footer"))}
         />
       )}
 
       {decision === "revision" && (
         <DecisionInfoBox
           color={theme.palette.warning.main}
-          title={t("admin.detail.decision.revision.title")}
-          description={t("admin.detail.decision.revision.description")}
+          title={t(k("admin.detail.decision.revision.title"))}
+          description={t(k("admin.detail.decision.revision.description"))}
         />
       )}
 
       {decision === "reject" && (
         <DecisionInfoBox
           color={theme.palette.error.main}
-          title={t("admin.detail.decision.reject.title")}
-          description={t("admin.detail.decision.reject.description")}
+          title={t(k("admin.detail.decision.reject.title"))}
+          description={t(k("admin.detail.decision.reject.description"))}
         />
       )}
 
       <TextField
-        label={t(decisionNoteLabelKey(decision))}
+        label={t(k(`admin.detail.decision.note.label.${decision}`))}
         value={adminNote}
         onChange={(event) => setAdminNote(event.target.value)}
-        placeholder={t(decisionNotePlaceholderKey(decision))}
+        placeholder={t(k(`admin.detail.decision.note.placeholder.${decision}`))}
         multiline
         minRows={4}
         fullWidth
       />
-
-      <TextField
-        select
-        label={t("admin.detail.decision.field.notifyApplicant")}
-        value={notifyApplicant}
-        onChange={(event) =>
-          setNotifyApplicant(event.target.value as "yes" | "no")
-        }
-        fullWidth
-      >
-        <MenuItem value="yes">
-          {t("admin.detail.decision.notify.yes")}
-        </MenuItem>
-        <MenuItem value="no">
-          {t("admin.detail.decision.notify.no")}
-        </MenuItem>
-      </TextField>
 
       <Stack spacing={1}>
         <Button
@@ -233,12 +240,12 @@ export default function AdminDecisionPanel({
           }}
         >
           {isSubmitting
-            ? t("admin.detail.decision.submitting")
-            : t(decisionButtonLabelKey(decision))}
+            ? t(k("admin.detail.decision.submitting"))
+            : t(k(`admin.detail.decision.button.${decision}`))}
         </Button>
 
         <Typography variant="caption" color="text.secondary">
-          {t("admin.detail.decision.auditHint")}
+          {t(k("admin.detail.decision.auditHint"))}
         </Typography>
       </Stack>
     </Stack>

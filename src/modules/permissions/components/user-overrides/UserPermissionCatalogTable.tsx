@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Checkbox,
   Chip,
   LinearProgress,
   Stack,
@@ -24,16 +25,17 @@ interface Props {
   rows: UserPermissionCatalogRow[];
   disabled: boolean;
   savingPermissionId: string | null;
-  onToggle: (
-    row: UserPermissionCatalogRow,
-    nextChecked: boolean
-  ) => void;
+  selectedPermissionIds?: string[];
+  onToggleSelection?: (permissionId: string) => void;
+  onToggle: (row: UserPermissionCatalogRow, nextChecked: boolean) => void;
 }
 
 export default function UserPermissionCatalogTable({
   rows,
   disabled,
   savingPermissionId,
+  selectedPermissionIds = [],
+  onToggleSelection,
   onToggle,
 }: Props) {
   const { t } = useI18nNs(["permission", "permissions"]);
@@ -58,18 +60,24 @@ export default function UserPermissionCatalogTable({
     <Table size="small">
       <TableHead>
         <TableRow>
+          <TableCell padding="checkbox" />
+
           <TableCell>
             {t("permission:userOverrides.table.permission")}
           </TableCell>
+
           <TableCell>
             {t("permission:userOverrides.table.module")}
           </TableCell>
+
           <TableCell>
             {t("permission:userOverrides.table.scope")}
           </TableCell>
+
           <TableCell>
             {t("permission:userOverrides.table.source")}
           </TableCell>
+
           <TableCell align="right">
             {t("permission:userOverrides.table.direct")}
           </TableCell>
@@ -79,9 +87,22 @@ export default function UserPermissionCatalogTable({
       <TableBody>
         {rows.map((row) => {
           const saving = savingPermissionId === row.permissionId;
+          const selected = selectedPermissionIds.includes(row.permissionId);
 
           return (
-            <TableRow key={row.permissionId} hover>
+            <TableRow
+              key={row.permissionId}
+              hover
+              selected={selected}
+            >
+              <TableCell padding="checkbox">
+                <Checkbox
+                  checked={selected}
+                  disabled={disabled || saving || !onToggleSelection}
+                  onChange={() => onToggleSelection?.(row.permissionId)}
+                />
+              </TableCell>
+
               <TableCell>
                 <Stack spacing={0.5}>
                   <Typography variant="body2" fontWeight={800}>
