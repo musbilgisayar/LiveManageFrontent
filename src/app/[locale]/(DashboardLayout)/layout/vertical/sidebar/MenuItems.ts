@@ -38,26 +38,26 @@ const Menuitems: NavGroup[] = [
     requiredAnyPermissions: ["account.me.view.self"],
   },
 
-{
-  navlabel: true,
-  subheader: "sidebar:group.managementApplications",
-  requiredAnyPermissions: [
-    "property.applications.create.self",
-    "property.applications.view_own.self",
-    "admin.property.applications.view_pending.tenant",
-  ],
-},
-{
-  id: uniqueId(),
-  title: "sidebar:menu.managementApplications.dashboard",
-  icon: IconBuildingCommunity,
-  href: "/management-applications",
-  requiredAnyPermissions: [
-    "property.applications.create.self",
-    "property.applications.view_own.self",
-    "admin.property.applications.view_pending.tenant",
-  ],
-},
+  {
+    navlabel: true,
+    subheader: "sidebar:group.managementApplications",
+    requiredAnyPermissions: [
+      "property.applications.create.self",
+      "property.applications.view_own.self",
+      "admin.property.applications.view_pending.tenant",
+    ],
+  },
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.managementApplications.dashboard",
+    icon: IconBuildingCommunity,
+    href: "/management-applications",
+    requiredAnyPermissions: [
+      "property.applications.create.self",
+      "property.applications.view_own.self",
+      "admin.property.applications.view_pending.tenant",
+    ],
+  },
 
   {
     navlabel: true,
@@ -133,13 +133,13 @@ const Menuitems: NavGroup[] = [
     subheader: "sidebar:group.users",
     requiredAnyPermissions: ["account.me.view.self", "users.view.tenant"],
   },
-{
-  id: uniqueId(),
-  title: "sidebar:menu.users.myProfile",
-  icon: IconUserCircle,
-  href: "/my-profile",
-  requiredAnyPermissions: ["account.me.view.self"],
-},
+  {
+    id: uniqueId(),
+    title: "sidebar:menu.users.myProfile",
+    icon: IconUserCircle,
+    href: "/my-profile",
+    requiredAnyPermissions: ["account.me.view.self"],
+  },
   {
     id: uniqueId(),
     title: "sidebar:menu.users.admin",
@@ -176,6 +176,17 @@ const Menuitems: NavGroup[] = [
     ],
   },
   {
+  id: uniqueId(),
+  title: "sidebar:menu.authorization.roleManager",
+  icon: IconShieldCheck,
+  href: "/role-manager",
+  requiredAnyPermissions: [
+    "rolemanager.summary.view.tenant",
+    "rolemanager.distribution.view.tenant",
+    "rolemanager.users.view.tenant",
+  ],
+},
+  {
     id: uniqueId(),
     title: "sidebar:menu.authorization.permissions.root",
     icon: IconKey,
@@ -186,6 +197,9 @@ const Menuitems: NavGroup[] = [
       "permissions.revoke.tenant",
       "permissions.role_permissions.view.tenant",
     ],
+
+
+    
     children: [
       {
         id: uniqueId(),
