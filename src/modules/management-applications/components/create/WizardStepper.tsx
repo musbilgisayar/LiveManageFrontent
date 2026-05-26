@@ -1,3 +1,4 @@
+// src/modules/management-applications/components/create/WizardStepper.tsx
 "use client";
 
 import {
@@ -13,9 +14,10 @@ import type { Theme } from "@mui/material/styles";
 import {
   IconCheck,
   IconChevronRight,
+  IconCircleDot,
 } from "@tabler/icons-react";
 
-import { useI18nNs } from "@/app/context/i18nContext";
+import { useI18n } from "@/app/context/i18nContext";
 
 import type {
   WizardStep,
@@ -29,8 +31,6 @@ type WizardStepperProps = {
   onStepClick: (index: number) => void;
 };
 
-const NS = "property:managementApplication.create.steps";
-
 export default function WizardStepper({
   steps,
   activeStepIndex,
@@ -38,26 +38,21 @@ export default function WizardStepper({
   onStepClick,
 }: WizardStepperProps) {
   const theme = useTheme<Theme>();
-  const { t } = useI18nNs(["property"]);
-
-  const tr = (key: string, fallback: string) => {
-    const value = t(key);
-    return value && value !== key ? value : fallback;
-  };
+  const { t } = useI18n();
 
   return (
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 5,
-        border: `1px solid ${alpha(theme.palette.divider, 0.72)}`,
-        bgcolor: alpha(theme.palette.background.paper, 0.96),
-        boxShadow: `0 16px 42px ${alpha(
-          theme.palette.common.black,
-          0.045,
-        )}`,
-        p: { xs: 1.35, md: 1.75 },
+        borderRadius: 3,
+        border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+        bgcolor: alpha(theme.palette.background.paper, 0.98),
+        boxShadow: `0 8px 32px ${alpha(theme.palette.common.black, 0.04)}`,
         overflow: "hidden",
+        transition: "box-shadow 0.3s ease",
+        "&:hover": {
+          boxShadow: `0 12px 40px ${alpha(theme.palette.common.black, 0.08)}`,
+        },
       }}
     >
       <Box
@@ -65,159 +60,188 @@ export default function WizardStepper({
           display: "grid",
           gridTemplateColumns: {
             xs: "1fr",
+            sm: `repeat(${Math.min(steps.length, 2)}, 1fr)`,
             md: `repeat(${steps.length}, 1fr)`,
           },
-          gap: 1.1,
+          gap: 1.5,
+          p: { xs: 1.5, md: 2 },
         }}
       >
         {steps.map((step, index) => {
           const active = index === activeStepIndex;
           const done = stepCompletion[step.id];
+          const isClickable = done || active || index === activeStepIndex + 1;
 
-          const title = tr(
-            `${NS}.${step.id}.title`,
-            step.title,
-          );
+          const title =
+            t(`management-applications:create.steps.${step.id}.title`) ||
+            step.title;
 
-          const description = tr(
-            `${NS}.${step.id}.description`,
-            step.description,
-          );
+          const description =
+            t(`management-applications:create.steps.${step.id}.description`) ||
+            step.description;
 
           return (
             <Box
               key={step.id}
-              onClick={() => onStepClick(index)}
+              onClick={() => isClickable && onStepClick(index)}
               role="button"
-              tabIndex={0}
+              tabIndex={isClickable ? 0 : -1}
               sx={{
                 position: "relative",
-                p: 1.35,
-                borderRadius: 4,
-                cursor: "pointer",
-                border: `1px solid ${
+                p: 1.75,
+                borderRadius: 2.5,
+                cursor: isClickable ? "pointer" : "default",
+                opacity: isClickable ? 1 : 0.6,
+                border: `1.5px solid ${
                   active
-                    ? alpha(theme.palette.primary.main, 0.32)
-                    : alpha(theme.palette.divider, 0.64)
+                    ? theme.palette.primary.main
+                    : done
+                    ? alpha(theme.palette.success.main, 0.3)
+                    : alpha(theme.palette.divider, 0.5)
                 }`,
                 bgcolor: active
-                  ? alpha(theme.palette.primary.main, 0.075)
+                  ? alpha(theme.palette.primary.main, 0.04)
                   : done
-                    ? alpha(theme.palette.success.main, 0.05)
-                    : alpha(theme.palette.background.default, 0.28),
-                transition: "all 180ms ease",
-                overflow: "hidden",
+                  ? alpha(theme.palette.success.main, 0.03)
+                  : alpha(theme.palette.background.default, 0.5),
+                transition: "all 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1)",
 
-                "&::before": active
+                ...(active && {
+                  boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.1)}`,
+                }),
+
+                "&:hover": isClickable
                   ? {
-                      content: '""',
-                      position: "absolute",
-                      inset: 0,
-                      background: `linear-gradient(135deg,
-                        ${alpha(theme.palette.primary.main, 0.08)},
-                        transparent
-                      )`,
-                      pointerEvents: "none",
+                      transform: "translateY(-2px)",
+                      borderColor: active
+                        ? theme.palette.primary.main
+                        : alpha(theme.palette.primary.main, 0.4),
+                      bgcolor: alpha(theme.palette.primary.main, 0.06),
+                      boxShadow: `0 8px 20px ${alpha(theme.palette.primary.main, 0.12)}`,
                     }
-                  : undefined,
+                  : {},
 
-                "&:hover": {
-                  transform: "translateY(-1px)",
-                  borderColor: alpha(
-                    theme.palette.primary.main,
-                    0.28,
-                  ),
+                "&::after": {
+                  content: '""',
+                  position: "absolute",
+                  right: { xs: "auto", md: -12 },
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  display: {
+                    xs: "none",
+                    md: index === steps.length - 1 ? "none" : "block",
+                  },
+                  width: 24,
+                  height: 1.5,
                   bgcolor: alpha(
-                    theme.palette.primary.main,
-                    0.05,
+                    done || active
+                      ? theme.palette.primary.main
+                      : theme.palette.divider,
+                    0.3
                   ),
-                  boxShadow: `0 10px 26px ${alpha(
-                    theme.palette.primary.main,
-                    0.08,
-                  )}`,
+                  borderRadius: 1,
                 },
               }}
             >
-              <Stack
-                direction="row"
-                spacing={1.1}
-                alignItems="center"
-              >
-                <Box
-                  sx={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: "50%",
-                    display: "grid",
-                    placeItems: "center",
-                    flexShrink: 0,
-                    fontWeight: 950,
-
-                    color: done
-                      ? "success.main"
-                      : active
-                        ? "primary.main"
-                        : "text.secondary",
-
-                    bgcolor: done
-                      ? alpha(theme.palette.success.main, 0.12)
-                      : active
-                        ? alpha(theme.palette.primary.main, 0.12)
-                        : alpha(theme.palette.grey[500], 0.08),
-
-                    border: `1px solid ${
-                      done
-                        ? alpha(theme.palette.success.main, 0.18)
-                        : active
-                          ? alpha(theme.palette.primary.main, 0.18)
-                          : "transparent"
-                    }`,
-                  }}
-                >
-                  {done ? (
-                    <IconCheck size={17} />
-                  ) : (
-                    step.index
-                  )}
-                </Box>
-
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography
-                    fontWeight={950}
-                    noWrap
-                    sx={{
-                      fontSize: 14,
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    {title}
-                  </Typography>
-
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    noWrap
-                    sx={{
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {description}
-                  </Typography>
-                </Box>
-
-                {active && (
+              <Stack spacing={1.5}>
+                <Stack direction="row" spacing={1.5} alignItems="flex-start">
                   <Box
                     sx={{
-                      color: "primary.main",
-                      display: {
-                        xs: "none",
-                        md: "flex",
-                      },
+                      width: 44,
+                      height: 44,
+                      borderRadius: 2,
+                      display: "grid",
+                      placeItems: "center",
+                      flexShrink: 0,
+                      fontWeight: 700,
+                      fontSize: "1.1rem",
+                      position: "relative",
+                      overflow: "hidden",
+
+                      color: done
+                        ? theme.palette.success.main
+                        : active
+                        ? theme.palette.primary.main
+                        : alpha(theme.palette.text.primary, 0.5),
+
+                      bgcolor: done
+                        ? alpha(theme.palette.success.main, 0.1)
+                        : active
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha(theme.palette.action.hover, 0.5),
+
+                      border: `1px solid ${
+                        done
+                          ? alpha(theme.palette.success.main, 0.2)
+                          : active
+                          ? alpha(theme.palette.primary.main, 0.3)
+                          : alpha(theme.palette.divider, 0.5)
+                      }`,
+
+                      ...(active && {
+                        "&::after": {
+                          content: '""',
+                          position: "absolute",
+                          inset: 0,
+                          borderRadius: 2,
+                          border: `2px solid ${theme.palette.primary.main}`,
+                          animation: "pulse-border 2s ease-out infinite",
+                        },
+                      }),
                     }}
                   >
-                    <IconChevronRight size={18} />
+                    {done ? (
+                      <IconCheck size={22} strokeWidth={2} />
+                    ) : active ? (
+                      <IconCircleDot size={22} strokeWidth={1.8} />
+                    ) : (
+                      <Typography variant="h6" fontWeight={700}>
+                        {step.index}
+                      </Typography>
+                    )}
                   </Box>
-                )}
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      fontWeight={700}
+                      sx={{
+                        fontSize: "0.95rem",
+                        lineHeight: 1.3,
+                        color: active
+                          ? theme.palette.primary.main
+                          : done
+                          ? theme.palette.text.primary
+                          : alpha(theme.palette.text.primary, 0.7),
+                      }}
+                    >
+                      {title}
+                    </Typography>
+                  </Box>
+
+                  {active && (
+                    <Box
+                      sx={{
+                        display: { xs: "none", md: "flex" },
+                        color: theme.palette.primary.main,
+                      }}
+                    >
+                      <IconChevronRight size={20} />
+                    </Box>
+                  )}
+                </Stack>
+
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: alpha(theme.palette.text.primary, 0.65),
+                    fontSize: "0.75rem",
+                    lineHeight: 1.5,
+                    pl: { xs: 0, sm: 7.5 },
+                    whiteSpace: "normal",
+                  }}
+                >
+                  {description}
+                </Typography>
               </Stack>
             </Box>
           );

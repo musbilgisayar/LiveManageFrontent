@@ -249,7 +249,7 @@ function findScopedTranslation(params: {
     const warningKey = `${lang}|${clean}|${namespaces.join("|")}`;
     if (!ambiguousKeyWarnings.has(warningKey)) {
       ambiguousKeyWarnings.add(warningKey);
-      warn("Birden fazla namespace aynÄ± scoped key'i saÄŸlÄ±yor", {
+      warn("Birden fazla namespace aynı scoped key'i sağlıyor", {
         lang,
         key: clean,
         namespaces: matches.map((match) => match.ns),
@@ -273,6 +273,23 @@ function normalizeNamespaces(namespaces: string[]): string[] {
   }
 
   return out;
+}
+
+async function readJsonIfPossible(response: Response): Promise<any | null> {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+
+  const text = await response.text();
+  if (!text.trim()) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 type ProviderProps = {
@@ -451,7 +468,7 @@ const hasNamespaces = useCallback(
             signal: controller.signal,
           });
 
-          const json = await response.json().catch(() => null);
+          const json = await readJsonIfPossible(response);
 
           if (controller.signal.aborted) {
             log("🛑 Fetch abort edildi", { lang: effectiveLang, ns });
@@ -550,31 +567,59 @@ const hasNamespaces = useCallback(
     };
   }, [effectiveLang, requestedKey, requestedNamespaces]);
 
+  // 🔥 GÜNCELLENEN t() FONKSİYONU
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>): string => {
       if (!key) return "";
 
-      const translated = findTranslation(dict, key, vars);
+      // 1. Direct lookup - full key ile ara
+      let translated = findTranslation(dict, key, vars);
       if (translated != null) {
         return translated;
       }
 
-      if (DEBUG) {
-        const warningKey = `${effectiveLang}|${key}`;
-        if (missingKeyWarnings.has(warningKey)) {
-          return `[${key}]`;
+      // 2. Eğer key'de namespace yoksa, aktif namespace'ler ile dene
+      if (!key.includes(":")) {
+        const activeNamespaces = Array.from(loadedNamespaces);
+        
+        for (const ns of activeNamespaces) {
+          const fullKey = `${ns}:${key}`;
+          translated = findTranslation(dict, fullKey, vars);
+          if (translated != null) {
+            return translated;
+          }
         }
-        missingKeyWarnings.add(warningKey);
-        warn("Eksik çeviri anahtarı", {
-          lang: effectiveLang,
-          key,
-          namespaceGuess: key.split(/[:.]/)[0],
-        });
       }
 
-      return `[${key}]`;
+      // 3. Fallback - FULL KEY formatında
+      let fallbackKey = key;
+      
+      // Eğer key'de namespace yoksa ve loadedNamespaces varsa, ilk namespace'i kullan
+      if (!key.includes(":") && loadedNamespaces.size > 0) {
+        const firstNamespace = Array.from(loadedNamespaces)[0];
+        fallbackKey = `${firstNamespace}:${key}`;
+      }
+
+      // DEBUG: Eksik key warning'ini zenginleştir
+      if (DEBUG) {
+        const warningKey = `${effectiveLang}|${key}`;
+        if (!missingKeyWarnings.has(warningKey)) {
+          missingKeyWarnings.add(warningKey);
+          warn("Eksik çeviri anahtarı", {
+            lang: effectiveLang,
+            originalKey: key,
+            fallbackKey,
+            availableNamespaces: Array.from(loadedNamespaces),
+            suggestion: loadedNamespaces.size > 0 
+              ? `Try: ${Array.from(loadedNamespaces)[0]}:${key}`
+              : "No active namespaces found",
+          });
+        }
+      }
+
+      return `[${fallbackKey}]`;
     },
-    [dict, effectiveLang]
+    [dict, effectiveLang, loadedNamespaces] // loadedNamespaces dependency eklendi
   );
 
  const providerReady = useMemo(() => {

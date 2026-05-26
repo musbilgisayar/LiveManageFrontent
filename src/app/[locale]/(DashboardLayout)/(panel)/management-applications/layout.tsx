@@ -15,15 +15,14 @@ type Dict = Record<string, string>;
 
 type I18nDictResponse = {
   ok?: boolean;
-  lang?: string;
-  ns?: string[];
   data?: Dict;
   error?: string;
   detail?: string;
 };
 
-const MODULE_NS = ["management-applications", "common", "detailPage"] as const;
-const DEBUG_MANAGEMENT_APPLICATIONS_PRELOAD =
+const MODULE_NS = ["management-applications", "common"] as const;
+
+const DEBUG =
   process.env.NEXT_PUBLIC_DEBUG_MANAGEMENT_APPLICATIONS_PRELOAD === "true" ||
   process.env.DEBUG_MANAGEMENT_APPLICATIONS_PRELOAD === "true";
 
@@ -73,56 +72,70 @@ async function fetchModuleDict(locale: string): Promise<Dict> {
     (process.env.HTTPS === "true" ? "https" : "http");
 
   if (!host) {
-    throw new Error(
-      "Management Applications modülü için host bilgisi çözümlenemedi."
-    );
+    throw new Error("Host çözümlenemedi.");
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? `${proto}://${host}`;
-  const url = new URL(`/api/i18n/${encodeURIComponent(locale)}/dict`, baseUrl);
-
-  url.searchParams.set("ns", MODULE_NS.join(","));
-
   const cookieHeader = buildCookieHeader(c);
 
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-      "accept-language": locale,
-      ...(cookieHeader ? { cookie: cookieHeader } : {}),
-      ...(h.get("x-tenant-key")
-        ? { "x-tenant-key": h.get("x-tenant-key")! }
-        : {}),
-      ...(h.get("x-correlation-id")
-        ? { "x-correlation-id": h.get("x-correlation-id")! }
-        : {}),
-    },
-    cache: "no-store",
-    next: { revalidate: 0 },
-  });
+  // 🔥 HER NS AYRI ÇAĞRILIR
+  const results = await Promise.all(
+    MODULE_NS.map(async (ns) => {
+      const url = new URL(`/api/v1/localization/bundle`, baseUrl);
 
-  const json = (await response.json().catch(
-    () => null
-  )) as I18nDictResponse | null;
-  const dict = ensureDict(json?.data);
+      url.searchParams.set("ns", ns);
+      url.searchParams.set("format", "trim");
 
-  if (!response.ok || (!json?.ok && Object.keys(dict).length === 0)) {
-    DEBUG_MANAGEMENT_APPLICATIONS_PRELOAD && console.warn(
-      "[ManagementApplicationsLayout] Çeviri preload isteği başarısız",
-      {
-        locale,
-        namespaces: MODULE_NS,
-        status: response.status,
-        error: json?.error,
-        detail: json?.detail,
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          "accept-language": locale,
+          ...(cookieHeader ? { cookie: cookieHeader } : {}),
+          ...(h.get("x-tenant-key")
+            ? { "x-tenant-key": h.get("x-tenant-key")! }
+            : {}),
+          ...(h.get("x-correlation-id")
+            ? { "x-correlation-id": h.get("x-correlation-id")! }
+            : {}),
+        },
+        cache: "no-store",
+      });
+
+      const json = (await response.json().catch(
+        () => null
+      )) as I18nDictResponse | null;
+
+      const dict = ensureDict(json);
+
+      if (!response.ok) {
+        DEBUG &&
+          console.warn("[i18n] ns fetch failed", {
+            ns,
+            status: response.status,
+            error: json?.error,
+          });
       }
-    );
 
-    return {};
+      return dict;
+    })
+  );
+
+  // 🔥 SAFE MERGE (override yok)
+  const merged: Dict = {};
+
+  for (const dict of results) {
+    for (const [k, v] of Object.entries(dict)) {
+      if (!(k in merged)) {
+        merged[k] = v;
+      }
+    }
   }
 
-  return dict;
+  DEBUG &&
+    console.log("[i18n] total keys loaded:", Object.keys(merged).length);
+
+  return merged;
 }
 
 export default async function ManagementApplicationsLayout({
@@ -135,32 +148,25 @@ export default async function ManagementApplicationsLayout({
   try {
     const dict = await fetchModuleDict(lang);
 
-    const content =
-      Object.keys(dict).length === 0 ? (
-        <>{children}</>
-      ) : (
+    return (
+      <PermissionGuard requiredAnyPermissions={REQUIRED_PERMISSIONS}>
         <I18nProvider lang={lang} dict={dict}>
           {children}
         </I18nProvider>
-      );
-
-    return (
-      <PermissionGuard requiredAnyPermissions={REQUIRED_PERMISSIONS}>
-        {content}
       </PermissionGuard>
     );
   } catch (error) {
-    DEBUG_MANAGEMENT_APPLICATIONS_PRELOAD && console.warn(
-      "[ManagementApplicationsLayout] Çeviri preload sırasında hata oluştu",
-      {
+    DEBUG &&
+      console.warn("[i18n] preload error", {
         lang,
         error: error instanceof Error ? error.message : String(error),
-      }
-    );
+      });
 
     return (
       <PermissionGuard requiredAnyPermissions={REQUIRED_PERMISSIONS}>
-        {children}
+        <I18nProvider lang={lang} dict={{}}>
+          {children}
+        </I18nProvider>
       </PermissionGuard>
     );
   }

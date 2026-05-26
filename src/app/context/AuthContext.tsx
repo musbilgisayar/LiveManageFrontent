@@ -218,6 +218,23 @@ function normalizeAuthUser(json: any): AuthUser | null {
   };
 }
 
+async function readJsonIfPossible<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+
+  const text = await response.text();
+  if (!text.trim()) return null;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchCurrentUser(retryAfterRefresh = true): Promise<AuthUser | null> {
   const response = await fetch("/api/v1.0/account/users/me", {
     method: "GET",
@@ -246,9 +263,7 @@ async function fetchCurrentUser(retryAfterRefresh = true): Promise<AuthUser | nu
     throw new Error(`Kullanıcı bilgisi alınamadı. HTTP ${response.status}`);
   }
 
-  const json = (await response.json().catch(() => null)) as
-    | MeResponseDto
-    | null;
+  const json = await readJsonIfPossible<MeResponseDto>(response);
 
   if (!json?.ok) {
     return null;
@@ -265,6 +280,21 @@ async function fetchCurrentUser(retryAfterRefresh = true): Promise<AuthUser | nu
   return normalizedUser;
 }
 
+function isRefreshResponseSuccessful(payload: any): boolean {
+  if (!payload || typeof payload !== "object") return false;
+
+  if (payload.ok === true) return true;
+  if (payload.isSuccess === true) return true;
+  if (payload.success === true) return true;
+
+  if (payload.data && typeof payload.data === "object") {
+    if (payload.data.isSuccess === true) return true;
+    if (payload.data.success === true) return true;
+  }
+
+  return false;
+}
+
 async function refreshWebSession(): Promise<boolean> {
   const response = await fetch("/api/v1.0/account/refresh", {
     method: "POST",
@@ -277,8 +307,8 @@ async function refreshWebSession(): Promise<boolean> {
 
   if (!response.ok) return false;
 
-  const json = await response.json().catch(() => null);
-  return json?.ok === true;
+  const json = await readJsonIfPossible<any>(response);
+  return isRefreshResponseSuccessful(json);
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -356,6 +386,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (active) {
           setUser(currentUser);
         }
+      } else {
+        setUser(null);
       }
     };
 

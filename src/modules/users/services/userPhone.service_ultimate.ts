@@ -16,6 +16,8 @@ import type {
 const USER_PHONE_VERIFICATION_API_BASE_ULTIMATE =
   "/api/v1.0/profile/phone-verification";
 
+const phoneListRequests = new Map<string, Promise<UserPhoneNumberDtoUltimate[]>>();
+
 export type UserPhoneVerificationSendRequestUltimate = {
   phoneId: string;
 };
@@ -215,6 +217,26 @@ const error = new Error(finalMessage);
 
 
 export async function getUserPhoneNumbersUltimate(
+  userId: string
+): Promise<UserPhoneNumberDtoUltimate[]> {
+  const requestKey = userId.trim();
+  const existingRequest = phoneListRequests.get(requestKey);
+
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = getUserPhoneNumbersUncachedUltimate(requestKey);
+  phoneListRequests.set(requestKey, request);
+
+  try {
+    return await request;
+  } finally {
+    phoneListRequests.delete(requestKey);
+  }
+}
+
+async function getUserPhoneNumbersUncachedUltimate(
   userId: string
 ): Promise<UserPhoneNumberDtoUltimate[]> {
   const response = await fetch(

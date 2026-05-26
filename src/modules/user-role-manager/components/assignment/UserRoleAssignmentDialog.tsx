@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Button,
@@ -15,6 +15,9 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+
+import { useI18nNs }
+  from "@/app/context/i18nContext";
 
 import type {
   AppRoleListItemDto,
@@ -49,6 +52,8 @@ export default function UserRoleAssignmentDialog({
   onClose,
   onSync,
 }: UserRoleAssignmentDialogProps) {
+  const { t } = useI18nNs("userRoleManager");
+
   const activeRoleIds = useMemo(
     () =>
       new Set(
@@ -63,6 +68,17 @@ export default function UserRoleAssignmentDialog({
     );
 
   const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setSelectedRoleIds(
+      activeRoles.map((role) => role.roleId),
+    );
+    setReason("");
+  }, [activeRoles, open]);
 
   const toggleRole = (roleId: string) => {
     setSelectedRoleIds((current) =>
@@ -87,7 +103,7 @@ export default function UserRoleAssignmentDialog({
       maxWidth="sm"
     >
       <DialogTitle>
-        Manage User Roles
+        {t("assignmentDialog.title")}
       </DialogTitle>
 
       <DialogContent>
@@ -96,7 +112,7 @@ export default function UserRoleAssignmentDialog({
             variant="body2"
             color="text.secondary"
           >
-            Select the roles that should remain active for this user.
+            {t("assignmentDialog.description")}
           </Typography>
 
           <Stack spacing={1}>
@@ -125,6 +141,7 @@ export default function UserRoleAssignmentDialog({
                         checked={selectedRoleIds.includes(
                           role.id,
                         )}
+                        disabled={isSubmitting}
                         onChange={() =>
                           toggleRole(role.id)
                         }
@@ -157,7 +174,7 @@ export default function UserRoleAssignmentDialog({
                       <Chip
                         size="small"
                         color="success"
-                        label="Current"
+                        label={t("badges.current")}
                       />
                     )}
 
@@ -165,7 +182,7 @@ export default function UserRoleAssignmentDialog({
                       <Chip
                         size="small"
                         color="warning"
-                        label="Sensitive"
+                        label={t("badges.sensitive")}
                       />
                     )}
 
@@ -173,7 +190,7 @@ export default function UserRoleAssignmentDialog({
                       <Chip
                         size="small"
                         color="error"
-                        label="System"
+                        label={t("badges.system")}
                       />
                     )}
                   </Stack>
@@ -183,14 +200,15 @@ export default function UserRoleAssignmentDialog({
           </Stack>
 
           <TextField
-            label="Reason"
+            label={t("assignmentDialog.reasonLabel")}
             multiline
             minRows={3}
             value={reason}
+            disabled={isSubmitting}
             onChange={(event) =>
               setReason(event.target.value)
             }
-            placeholder="Optional operation reason"
+            placeholder={t("assignmentDialog.reasonPlaceholder")}
           />
         </Stack>
       </DialogContent>
@@ -200,7 +218,7 @@ export default function UserRoleAssignmentDialog({
           onClick={onClose}
           disabled={isSubmitting}
         >
-          Cancel
+          {t("actions.cancel")}
         </Button>
 
         <Button
@@ -208,7 +226,7 @@ export default function UserRoleAssignmentDialog({
           onClick={handleSubmit}
           disabled={isSubmitting}
         >
-          Save Roles
+          {t("actions.saveRoles")}
         </Button>
       </DialogActions>
     </Dialog>

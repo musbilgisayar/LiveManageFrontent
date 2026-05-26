@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useI18nNs } from "@/app/context/i18nContext";
+
 import { getRoleDistribution } from "../services/roleManager.service";
+
+import { resolveRoleManagerErrorMessage }
+  from "../utils/resolveRoleManagerErrorMessage";
 
 import type {
   RoleDistributionDto,
@@ -11,23 +16,19 @@ import type {
 
 type UseRoleDistributionReturn = {
   items: RoleDistributionDto[];
-
   isLoading: boolean;
-
   errorMessage: string | null;
-
   reload: () => Promise<void>;
 };
 
 export default function useRoleDistribution(
   scope: RoleManagerScopeState,
 ): UseRoleDistributionReturn {
+  const { t } = useI18nNs("userRoleManager");
+
   const [items, setItems] = useState<RoleDistributionDto[]>([]);
-
   const [isLoading, setIsLoading] = useState(true);
-
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -42,16 +43,17 @@ export default function useRoleDistribution(
       setItems(data);
     } catch (error) {
       setItems([]);
-
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Rol dağılımı alınamadı.",
+        resolveRoleManagerErrorMessage(
+          error,
+          "errors.distributionLoadFailed",
+          t,
+        ),
       );
     } finally {
       setIsLoading(false);
     }
-  }, [scope.mode, scope.tenantId]);
+  }, [scope.mode, scope.tenantId, t]);
 
   useEffect(() => {
     void load();

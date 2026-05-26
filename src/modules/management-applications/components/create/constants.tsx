@@ -1,5 +1,6 @@
 import React from "react";
 import { IconBuildingCommunity, IconHome } from "@tabler/icons-react";
+
 import type {
   ManagementStructureType,
   RepresentationType,
@@ -11,40 +12,51 @@ export const premiumFieldSx = {
     borderRadius: 2.5,
     bgcolor: "rgba(255, 255, 255, 0.98)",
     transition: "background-color 160ms ease, box-shadow 160ms ease",
+
     "& fieldset": {
       borderColor: "rgba(148, 163, 184, 0.36)",
     },
+
     "&:hover": {
       bgcolor: "background.paper",
     },
+
     "&:hover fieldset": {
       borderColor: "rgba(37, 99, 235, 0.32)",
     },
+
     "&.Mui-focused": {
       bgcolor: "background.paper",
       boxShadow: "0 0 0 3px rgba(37, 99, 235, 0.08)",
     },
+
     "&.Mui-focused fieldset": {
       borderWidth: 1,
     },
+
     "&.Mui-error": {
       boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.09)",
     },
+
     "&.Mui-error fieldset": {
       borderColor: "rgba(239, 68, 68, 0.72)",
     },
   },
+
   "& .MuiInputBase-input": {
     fontSize: 14,
   },
+
   "& .MuiInputLabel-root": {
     fontWeight: 700,
   },
+
   "& .MuiSelect-select": {
     fontSize: 14,
     display: "flex",
     alignItems: "center",
   },
+
   "& .MuiFormHelperText-root": {
     ml: 0,
     mt: 0.6,
@@ -54,6 +66,7 @@ export const premiumFieldSx = {
     color: "text.secondary",
     lineHeight: 1.45,
   },
+
   "& .MuiFormHelperText-root.Mui-error": {
     color: "error.main",
     fontWeight: 700,
@@ -70,21 +83,23 @@ export const structureOptions: Array<{
 }> = [
   {
     value: "site",
-    labelKey: "property:managementApplication.create.options.structure.site.label",
+    labelKey: "management-applications:create.options.structure.site.label",
     descriptionKey:
-      "property:managementApplication.create.options.structure.site.description",
+      "management-applications:create.options.structure.site.description",
     fallbackLabel: "Site Yönetimi",
-    fallbackDescription: "Birden fazla blok veya toplu yaşam alanı için başvuru",
+    fallbackDescription:
+      "Birden fazla blok veya toplu yaşam alanı için başvuru",
     icon: <IconBuildingCommunity size={28} stroke={1.9} />,
   },
   {
     value: "apartment",
     labelKey:
-      "property:managementApplication.create.options.structure.apartment.label",
+      "management-applications:create.options.structure.apartment.label",
     descriptionKey:
-      "property:managementApplication.create.options.structure.apartment.description",
+      "management-applications:create.options.structure.apartment.description",
     fallbackLabel: "Apartman Yönetimi",
-    fallbackDescription: "Tek yapı veya sınırlı bağımsız bölüm için başvuru",
+    fallbackDescription:
+      "Tek yapı veya sınırlı bağımsız bölüm için başvuru",
     icon: <IconHome size={28} stroke={1.9} />,
   },
 ];
@@ -99,36 +114,36 @@ export const representationOptions: Array<{
   {
     value: "owner",
     labelKey:
-      "property:managementApplication.create.options.representation.owner.label",
+      "management-applications:create.options.representation.owner.label",
     descriptionKey:
-      "property:managementApplication.create.options.representation.owner.description",
+      "management-applications:create.options.representation.owner.description",
     fallbackLabel: "Malik / Kat Maliki",
     fallbackDescription: "Doğrudan malik sıfatıyla başvuru",
   },
   {
     value: "proxy",
     labelKey:
-      "property:managementApplication.create.options.representation.proxy.label",
+      "management-applications:create.options.representation.proxy.label",
     descriptionKey:
-      "property:managementApplication.create.options.representation.proxy.description",
+      "management-applications:create.options.representation.proxy.description",
     fallbackLabel: "Vekil",
     fallbackDescription: "Vekaletname ile temsil",
   },
   {
     value: "board_member",
     labelKey:
-      "property:managementApplication.create.options.representation.boardMember.label",
+      "management-applications:create.options.representation.boardMember.label",
     descriptionKey:
-      "property:managementApplication.create.options.representation.boardMember.description",
+      "management-applications:create.options.representation.boardMember.description",
     fallbackLabel: "Yönetim Kurulu / Temsilci",
     fallbackDescription: "Karar veya görevlendirme ile temsil",
   },
   {
     value: "professional_manager",
     labelKey:
-      "property:managementApplication.create.options.representation.professionalManager.label",
+      "management-applications:create.options.representation.professionalManager.label",
     descriptionKey:
-      "property:managementApplication.create.options.representation.professionalManager.description",
+      "management-applications:create.options.representation.professionalManager.description",
     fallbackLabel: "Profesyonel Yönetici",
     fallbackDescription: "Sözleşme veya hizmet anlaşması ile temsil",
   },
@@ -144,51 +159,49 @@ export const documentCatalog: Record<
   }
 > = {
   signed_contract: {
-    titleKey:
-      "property:managementApplication.create.documents.signedContract.title",
+    titleKey: "management-applications:create.documents.signedContract.title",
     descriptionKey:
-      "property:managementApplication.create.documents.signedContract.description",
+      "management-applications:create.documents.signedContract.description",
     fallbackTitle: "İmzalı Hizmet Sözleşmesi",
-    fallbackDescription: "Sistemden indirilen sözleşmenin imzalanmış hali.",
+    fallbackDescription:
+      "Sistemden indirilen sözleşmenin imzalanmış hali.",
   },
   authority_decision: {
-    titleKey:
-      "property:managementApplication.create.documents.authorityDecision.title",
+    titleKey: "management-applications:create.documents.authorityDecision.title",
     descriptionKey:
-      "property:managementApplication.create.documents.authorityDecision.description",
+      "management-applications:create.documents.authorityDecision.description",
     fallbackTitle: "Yönetim Kararı / Karar Defteri",
-    fallbackDescription: "Yönetim veya kurul kararı ile verilen yetki belgesi.",
+    fallbackDescription:
+      "Yönetim veya kurul kararı ile verilen yetki belgesi.",
   },
   power_of_attorney: {
-    titleKey:
-      "property:managementApplication.create.documents.powerOfAttorney.title",
+    titleKey: "management-applications:create.documents.powerOfAttorney.title",
     descriptionKey:
-      "property:managementApplication.create.documents.powerOfAttorney.description",
+      "management-applications:create.documents.powerOfAttorney.description",
     fallbackTitle: "Vekaletname",
     fallbackDescription: "Temsil yetkisini gösteren resmi vekalet belgesi.",
   },
   assignment_letter: {
-    titleKey:
-      "property:managementApplication.create.documents.assignmentLetter.title",
+    titleKey: "management-applications:create.documents.assignmentLetter.title",
     descriptionKey:
-      "property:managementApplication.create.documents.assignmentLetter.description",
+      "management-applications:create.documents.assignmentLetter.description",
     fallbackTitle: "Görevlendirme Yazısı",
     fallbackDescription:
       "Kurul, yönetim veya malikçe verilmiş görevlendirme belgesi.",
   },
   professional_service_agreement: {
     titleKey:
-      "property:managementApplication.create.documents.professionalServiceAgreement.title",
+      "management-applications:create.documents.professionalServiceAgreement.title",
     descriptionKey:
-      "property:managementApplication.create.documents.professionalServiceAgreement.description",
+      "management-applications:create.documents.professionalServiceAgreement.description",
     fallbackTitle: "Profesyonel Yönetim Sözleşmesi",
     fallbackDescription:
       "Profesyonel yönetici ile yapı arasında yapılan hizmet sözleşmesi.",
   },
   other: {
-    titleKey: "property:managementApplication.create.documents.other.title",
+    titleKey: "management-applications:create.documents.other.title",
     descriptionKey:
-      "property:managementApplication.create.documents.other.description",
+      "management-applications:create.documents.other.description",
     fallbackTitle: "Diğer Belge",
     fallbackDescription: "Başvuruyu destekleyen ek belge.",
   },

@@ -26,10 +26,29 @@ const MobileSidebar = () => {
   useEffect(() => {
     const lang = pathname.split("/")[1] || "en";
 
-    fetch(`/api/v1/${lang}/menus/top`)
-      .then((res) => res.json())
+    fetch(`/api/v1/${lang}/menus/top`, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+
+        if (!res.ok || !contentType.includes("application/json")) {
+          return [];
+        }
+
+        const text = await res.text();
+        if (!text.trim()) return [];
+
+        try {
+          return JSON.parse(text);
+        } catch {
+          return [];
+        }
+      })
       .then((data) => {
-        const filtered = data.filter(
+        const items = Array.isArray(data) ? data : [];
+        const filtered = items.filter(
           (item: TopMenuItem) =>
             item.isFeatureEnabled && item.displayMode === "visible"
         );

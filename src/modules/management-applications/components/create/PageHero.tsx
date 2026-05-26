@@ -1,3 +1,4 @@
+﻿// src/modules/management-applications/components/create/PageHero.tsx
 "use client";
 
 import {
@@ -5,143 +6,243 @@ import {
   Box,
   Card,
   Chip,
-  LinearProgress,
   Stack,
   Typography,
   useTheme,
 } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
-import { IconShieldCheck } from "@tabler/icons-react";
+
+import {
+  IconBuildingCommunity,
+  IconFileCheck,
+  IconLockCheck,
+  IconShieldCheck,
+  IconSparkles,
+} from "@tabler/icons-react";
+
 import { useI18nNs } from "@/app/context/i18nContext";
 
-type PageHeroProps = {
-  progressValue: number;
-  completedStepCount: number;
-  totalSteps: number;
-};
+const NS = "management-applications:create.pageHero";
 
-const NS = "property:managementApplication.create.hero";
-
-export default function PageHero({
-  progressValue,
-  completedStepCount,
-  totalSteps,
-}: PageHeroProps) {
+export default function PageHero() {
   const theme = useTheme<Theme>();
-  const { t } = useI18nNs(["property"]);
+  const { t } = useI18nNs("management-applications");
 
   const tr = (key: string, fallback: string) => {
-    const value = t(`${NS}.${key}`);
-    return value && value !== `${NS}.${key}` ? value : fallback;
+    const fullKey = `${NS}.${key}`;
+    const value = t(fullKey);
+
+    if (!value) return fallback;
+    if (value === fullKey) return fallback;
+    if (value === `[${fullKey}]`) return fallback;
+
+    return value;
   };
+
+  const trustItems = [
+    {
+      icon: <IconLockCheck size={17} />,
+      label: tr("trust.secureStorage", "Güvenli veri saklama"),
+    },
+    {
+      icon: <IconFileCheck size={17} />,
+      label: tr("trust.documentReview", "Belgeli inceleme"),
+    },
+    {
+      icon: <IconBuildingCommunity size={17} />,
+      label: tr("trust.tenantAware", "Kurumsal yönetim akışı"),
+    },
+  ];
 
   return (
     <Card
       variant="outlined"
       sx={{
-        p: { xs: 2.25, md: 3 },
+        position: "relative",
+        overflow: "hidden",
+        p: { xs: 2.5, md: 4 },
         borderRadius: 5,
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
-        background: `linear-gradient(135deg, ${alpha(
-          theme.palette.primary.main,
-          0.08,
-        )}, ${alpha(theme.palette.info.main, 0.045)}, ${alpha(
-          theme.palette.background.paper,
-          0.98,
-        )})`,
-        boxShadow: `0 22px 70px ${alpha(theme.palette.common.black, 0.07)}`,
+        border: "1px solid",
+        borderColor: alpha(theme.palette.primary.main, 0.18),
+        bgcolor: "background.paper",
+        boxShadow: `0 24px 70px ${alpha(
+          theme.palette.common.black,
+          theme.palette.mode === "dark" ? 0.32 : 0.08,
+        )}`,
+
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          inset: 0,
+          background: `radial-gradient(circle at top right, ${alpha(
+            theme.palette.primary.main,
+            0.16,
+          )} 0%, transparent 34%)`,
+          pointerEvents: "none",
+        },
+
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          right: -90,
+          top: -90,
+          width: 220,
+          height: 220,
+          borderRadius: "50%",
+          bgcolor: alpha(theme.palette.primary.main, 0.08),
+          pointerEvents: "none",
+        },
       }}
     >
       <Stack
         direction={{ xs: "column", md: "row" }}
+        spacing={{ xs: 3, md: 4 }}
+        alignItems={{ xs: "flex-start", md: "center" }}
         justifyContent="space-between"
-        alignItems={{ xs: "stretch", md: "center" }}
-        spacing={2.5}
+        sx={{ position: "relative", zIndex: 1 }}
       >
-        <Stack spacing={0.85}>
+        <Stack spacing={1.6} sx={{ maxWidth: 720 }}>
           <Chip
             icon={<IconShieldCheck size={15} />}
             label={tr("badge", "Güvenli başvuru süreci")}
-            size="small"
             sx={{
               width: "fit-content",
+              height: 30,
               borderRadius: 999,
               fontWeight: 900,
-              bgcolor: alpha(theme.palette.success.main, 0.1),
-              color: "success.dark",
-              border: `1px solid ${alpha(theme.palette.success.main, 0.18)}`,
+              color: "primary.main",
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
               "& .MuiChip-icon": {
-                color: "success.main",
+                color: "primary.main",
               },
             }}
           />
 
-          <Typography
-            sx={{
-              fontSize: { xs: 23, md: 30 },
-              fontWeight: 950,
-              letterSpacing: "-0.04em",
-              lineHeight: 1.15,
-            }}
-          >
-            {tr("title", "Yönetim başvurunuzu tamamlayın")}
-          </Typography>
+          <Box>
+            <Typography
+              variant="h4"
+              fontWeight={950}
+              sx={{
+                letterSpacing: "-0.045em",
+                lineHeight: 1.08,
+                fontSize: { xs: 30, md: 40 },
+              }}
+            >
+              {tr("title", "Yönetim başvurusu oluştur")}
+            </Typography>
 
-          <Typography
-            color="text.secondary"
-            sx={{
-              maxWidth: 760,
-              fontSize: 14.5,
-              lineHeight: 1.75,
-            }}
+            <Typography
+              sx={{
+                mt: 1.2,
+                maxWidth: 620,
+                color: alpha(theme.palette.text.secondary, 0.82),
+                fontSize: { xs: 14.5, md: 15.5 },
+                lineHeight: 1.75,
+                fontWeight: 500,
+              }}
+            >
+              {tr(
+                "description",
+                "Başvurunuzu güvenli, belgeli ve kontrollü bir süreçle tamamlayın.",
+              )}
+            </Typography>
+          </Box>
+
+          <Stack
+            direction="row"
+            spacing={1}
+            flexWrap="wrap"
+            useFlexGap
+            sx={{ pt: 0.6 }}
           >
-            {tr(
-              "description",
-              "Yapı bilgileri, adres, belgeler ve onaylar sadeleştirilmiş bir akışla toplanır. Eksik alanlar varsa göndermeden önce size gösterilir.",
-            )}
-          </Typography>
+            {trustItems.map((item) => (
+              <Box
+                key={item.label}
+                sx={{
+                  px: 1.25,
+                  py: 0.75,
+                  borderRadius: 999,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.75,
+                  color: "text.primary",
+                  bgcolor: alpha(theme.palette.background.default, 0.62),
+                  border: `1px solid ${alpha(theme.palette.divider, 0.72)}`,
+                  boxShadow: `0 10px 24px ${alpha(
+                    theme.palette.common.black,
+                    theme.palette.mode === "dark" ? 0.18 : 0.04,
+                  )}`,
+                }}
+              >
+                <Box
+                  sx={{
+                    color: "primary.main",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  {item.icon}
+                </Box>
+
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontWeight: 850,
+                    color: alpha(theme.palette.text.primary, 0.82),
+                  }}
+                >
+                  {item.label}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
         </Stack>
 
         <Box
           sx={{
-            minWidth: { xs: "100%", md: 280 },
-            p: 2,
+            width: { xs: "100%", md: 220 },
+            minHeight: 150,
             borderRadius: 4,
-            border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
-            bgcolor: alpha(theme.palette.background.paper, 0.78),
-            boxShadow: `0 14px 40px ${alpha(theme.palette.common.black, 0.045)}`,
+            p: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: alpha(theme.palette.primary.main, 0.065),
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.16)}`,
+            boxShadow: `inset 0 1px 0 ${alpha(
+              theme.palette.common.white,
+              0.28,
+            )}`,
           }}
         >
-          <Stack spacing={1}>
-            <Stack direction="row" justifyContent="space-between">
-              <Typography variant="body2" color="text.secondary" fontWeight={800}>
-                {tr("progressLabel", "Tamamlanma")}
-              </Typography>
-
-              <Typography variant="body2" fontWeight={950}>
-                {progressValue === 0
-                  ? tr("notStarted", "Henüz başlanmadı")
-                  : `%${progressValue}`}
-              </Typography>
-            </Stack>
-
-            <LinearProgress
-              variant="determinate"
-              value={progressValue}
+          <Stack spacing={1.2} alignItems="center" textAlign="center">
+            <Box
               sx={{
-                height: 9,
-                borderRadius: 999,
-                bgcolor: alpha(theme.palette.primary.main, 0.08),
-                "& .MuiLinearProgress-bar": {
-                  borderRadius: 999,
-                },
+                width: 70,
+                height: 70,
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                color: "primary.main",
+                bgcolor: alpha(theme.palette.primary.main, 0.12),
+                boxShadow: `0 18px 44px ${alpha(
+                  theme.palette.primary.main,
+                  0.18,
+                )}`,
               }}
-            />
+            >
+              <IconSparkles size={34} />
+            </Box>
 
-            <Typography variant="caption" color="text.secondary">
-              {tr("completedSteps", "{completed}/{total} adım tamamlandı.")
-                .replace("{completed}", String(completedStepCount))
-                .replace("{total}", String(totalSteps))}
+            <Typography
+              sx={{
+                fontSize: 13,
+                fontWeight: 900,
+                color: alpha(theme.palette.text.primary, 0.78),
+              }}
+            >
+              {tr("sideNote", "Adım adım güvenli doğrulama")}
             </Typography>
           </Stack>
         </Box>

@@ -25,8 +25,11 @@ const BACKEND_ROUTE =
 
 export async function GET(req: NextRequest) {
   try {
+    const upstreamUrl =
+      `${BACKEND_ROUTE}${req.nextUrl.search || ""}`;
+
     return await proxyJsonWithWebAuth(req, {
-      url: BACKEND_ROUTE,
+      url: upstreamUrl,
       method: "GET",
       logLabel: LOG_LABEL,
     });

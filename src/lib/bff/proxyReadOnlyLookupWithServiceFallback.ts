@@ -87,7 +87,7 @@ export async function proxyReadOnlyLookupWithServiceFallback(
   let upstream = await fetchWithHeaders(url, headers, timeoutMs);
   let usedServiceFallback = false;
 
-  if (upstream.status === 403) {
+  if (upstream.status === 401 || upstream.status === 403) {
     const serviceToken = (await getServiceToken()).trim();
 
     if (serviceToken) {
@@ -99,7 +99,7 @@ export async function proxyReadOnlyLookupWithServiceFallback(
       headers.delete("cookie");
       headers.set("authorization", `Bearer ${serviceToken}`);
 
-      logger.warn("User lookup forbidden, retrying read-only lookup with service token", {
+      logger.warn("User lookup unauthorized, retrying read-only lookup with service token", {
         firstStatus: upstream.status,
       });
 

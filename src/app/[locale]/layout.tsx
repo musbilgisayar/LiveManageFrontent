@@ -8,13 +8,18 @@ import MuiProviders from "@/app/providers/MuiProviders";
 import MuiAndIntlProvider from "@/app/providers/MuiAndIntl";
 import { ReactQueryProvider } from "@/app/providers/ReactQueryProvider";
 import { AuthProvider } from "@/app/context/AuthContext";
+import { CultureProvider } from "@/app/context/CultureContext";
+import {
+  normalizeCultures,
+  type CultureUiItem,
+} from "@/lib/i18n/normalizeCultures";
 
 export const metadata: Metadata = {
   title: "LiveManage",
 };
 
 const DEFAULT_NS =
-  "common,auth,header,footer,errors,sidebar,dashboard,banner,roles";
+  "common,auth,header,footer,errors,sidebar,dashboard,banner,roles,userRoleManager";
 
 const RTL = new Set(["ar", "fa", "he"]);
 
@@ -50,6 +55,30 @@ function ensureDict(input: unknown): Record<string, string> {
   }
 
   return result;
+}
+
+function buildCookieHeader(store: Awaited<ReturnType<typeof cookies>>) {
+  const values = store.getAll();
+  if (!values.length) return undefined;
+
+  return values.map(({ name, value }) => `${name}=${value}`).join("; ");
+}
+
+async function readJsonIfPossible(res: Response): Promise<unknown | null> {
+  const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+
+  const text = await res.text();
+  if (!text.trim()) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 export default async function LocaleLayout({
@@ -109,7 +138,7 @@ export default async function LocaleLayout({
       next: { revalidate: 0 },
     });
 
-    const json = await res.json().catch(() => null);
+    const json = await readJsonIfPossible(res) as any;
 
     if (!res.ok) {
       console.warn(
@@ -132,18 +161,49 @@ export default async function LocaleLayout({
 
   log(`🚀 Render | lang='${lang}' | keys=${Object.keys(dict).length}`);
 
+  let initialLanguages: CultureUiItem[] = [];
+
+  try {
+    const languageUrl = `${baseUrl}/api/v1.0/localization/languages`;
+    const cookieHeader = buildCookieHeader(c);
+    const languageRes = await fetch(languageUrl, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        "accept-language": lang,
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+        ...(h.get("x-tenant-key")
+          ? { "x-tenant-key": h.get("x-tenant-key")! }
+          : {}),
+      },
+      cache: "no-store",
+      next: { revalidate: 0 },
+    });
+
+    const languageJson = await readJsonIfPossible(languageRes);
+    initialLanguages = languageRes.ok ? normalizeCultures(languageJson) : [];
+  } catch (err: any) {
+    DEBUG_LOCALE &&
+      console.warn(
+        `[LocaleLayout] Culture preload hatasi -> ${err?.message ?? err}`
+      );
+    initialLanguages = [];
+  }
+
   return (
     <I18nProvider lang={lang} dict={dict}>
       <AuthProvider>
-        <MuiProviders dir={dir} mode={themeMode}>
-          <MuiAndIntlProvider locale={lang}>
-            <CustomizerContextProvider initialSettings={customizerInitial}>
-              <ReactQueryProvider>
-                <MyApp>{children}</MyApp>
-              </ReactQueryProvider>
-            </CustomizerContextProvider>
-          </MuiAndIntlProvider>
-        </MuiProviders>
+        <CultureProvider locale={lang} initialLanguages={initialLanguages}>
+          <MuiProviders dir={dir} mode={themeMode}>
+            <MuiAndIntlProvider locale={lang}>
+              <CustomizerContextProvider initialSettings={customizerInitial}>
+                <ReactQueryProvider>
+                  <MyApp>{children}</MyApp>
+                </ReactQueryProvider>
+              </CustomizerContextProvider>
+            </MuiAndIntlProvider>
+          </MuiProviders>
+        </CultureProvider>
       </AuthProvider>
     </I18nProvider>
   );

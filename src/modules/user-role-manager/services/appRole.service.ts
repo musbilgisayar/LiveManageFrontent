@@ -33,7 +33,7 @@ export async function getAppRoles(): Promise<
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Rol listesi alınamadı.",
+        "userRoleManager:errors.rolesLoadFailed",
     );
   }
 

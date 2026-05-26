@@ -1,3 +1,5 @@
+//src/modules/management-applications/types/managementApplication.types.ts
+//bu dosya, yönetim uygulamalarıyla ilgili tür tanımlarını içerir. Yönetim uygulaması oluşturma sürecinde kullanılan form durumları, hata türleri, belge gereksinimleri ve API yanıt yapıları gibi çeşitli türler tanımlanır. Bu türler, yönetim uygulaması modülünün farklı bileşenlerinde ve işlevlerinde tutarlı bir şekilde kullanılmak üzere merkezi bir konumda toplanır.
 export type ManagementStructureType = "site" | "apartment";
 
 export type RepresentationType =
@@ -7,19 +9,31 @@ export type RepresentationType =
   | "professional_manager";
 
 export type RequiredDocumentKind =
-  | "signed_contract"
-  | "authority_decision"
-  | "power_of_attorney"
-  | "assignment_letter"
-  | "professional_service_agreement"
-  | "other";
+  | "SignedContract"
+  | "AuthorityDecision"
+  | "PowerOfAttorney"
+  | "AssignmentLetter"
+  | "ProfessionalServiceAgreement"
+  | "IdentityDocument"
+  | "PropertyRegistryDocument"
+  | "Other";
 
-export type UploadedFileItem = {
+ export type UploadedFileItem = {
   id: string;
   name: string;
   sizeLabel: string;
   kind: RequiredDocumentKind;
   description?: string;
+
+  file: File;
+
+  backendDocumentId?: string;
+  fileDocumentId?: string;
+
+  sortOrder?: number;
+
+  uploadStatus?: "local" | "uploading" | "uploaded" | "failed";
+  errorMessage?: string;
 };
 
 export type ManagementApplicationAddressForm = {
@@ -171,4 +185,49 @@ export type ManagementApplicationListViewItem = {
   createdAt: string;
   updatedAt: string;
   description: string;
+};
+
+
+export type ManagedPropertyApplicationDocumentListItemDto = {
+  id: string;
+  applicationId: string;
+  fileDocumentId: string;
+  documentType: string;
+  status: string;
+  isRequired: boolean;
+  isSensitive: boolean;
+  sortOrder: number;
+  reviewNote?: string | null;
+  createdAt?: string | null;
+  reviewedAtUtc?: string | null;
+};
+
+export type ManagedPropertyApplicationDocumentUploadResultDto = {
+  id: string;
+  applicationId: string;
+  fileDocumentId: string;
+  fileName?: string | null;
+  contentType?: string | null;
+  fileSize?: number | null;
+  documentType: string;
+  status: string;
+  isRequired: boolean;
+  isSensitive: boolean;
+  sortOrder: number;
+  createdAt?: string | null;
+};
+
+export type UploadApplicationDocumentInput = {
+  applicationId: string;
+  documentType: RequiredDocumentKind;
+  file: File;
+  isRequired: boolean;
+  isSensitive: boolean;
+  sortOrder: number;
+};
+
+export type ApplicationDocumentUploadProgress = {
+  total: number;
+  completed: number;
+  failed: number;
 };

@@ -1,3 +1,4 @@
+//src/modules/management-applications/views/ManagementApplicationCreateView.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -26,7 +27,9 @@ import {
 } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
+import { useAuth } from "@/app/context/AuthContext";
 import { useAccountMe } from "@/modules/profile/hooks/useAccountMe";
+import { useUserPhoneNumbersUltimate } from "@/modules/users/hooks/useUserPhoneNumbers_ultimate";
 
 import PageHero from "../components/create/PageHero";
 import WizardStepper from "../components/create/WizardStepper";
@@ -59,17 +62,64 @@ import type {
   UploadedFileItem,
 } from "../types/managementApplication.types";
 
-const NS = "property:managementApplication.create";
+function cleanText(value?: string | null): string {
+  return (value ?? "").trim();
+}
+
+function joinNonEmpty(
+  values: Array<string | null | undefined>,
+  separator = " ",
+): string {
+  return values.map(cleanText).filter(Boolean).join(separator).trim();
+}
+
+function readString(
+  source: Record<string, unknown> | null,
+  keys: string[],
+): string {
+  for (const key of keys) {
+    const value = source?.[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function readBoolean(
+  source: Record<string, unknown> | null,
+  keys: string[],
+): boolean {
+  return keys.some((key) => source?.[key] === true);
+}
+
+function firstNonEmptyString(...values: Array<unknown>): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
 
 export default function ManagementApplicationCreateView() {
   const router = useRouter();
   const theme = useTheme<Theme>();
-  const { t } = useI18nNs(["property"]);
+  const { t: tNs } = useI18nNs("management-applications");
   const { user } = useAccountMe();
+  const { user: authUser } = useAuth();
 
-  const translate = (key: string, fallback: string) => {
-    const value = t(key);
-    return value && value !== key ? value : fallback;
+  const t = (key: string, fallback?: string) => {
+    const value = tNs(key);
+
+    if (!value) return fallback ?? key;
+    if (value === key) return fallback ?? key;
+    if (value === `[${key}]`) return fallback ?? key;
+
+    return value;
   };
 
   const [form, setForm] = useState<ManagementApplicationFormState>(
@@ -80,7 +130,7 @@ export default function ManagementApplicationCreateView() {
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
   const [selectedDocumentKind, setSelectedDocumentKind] =
-    useState<RequiredDocumentKind>("signed_contract");
+    useState<RequiredDocumentKind>("SignedContract");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentDescription, setDocumentDescription] = useState("");
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
@@ -90,22 +140,144 @@ export default function ManagementApplicationCreateView() {
 
   const compactFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const isEmailVerified = true;
-  const isPhoneVerified = true;
+  const accountRecord = user as Record<string, unknown> | null;
+  const selfProfileRecord = accountRecord;
+  const selfIdentityRecord =
+    selfProfileRecord?.identity && typeof selfProfileRecord.identity === "object"
+      ? (selfProfileRecord.identity as Record<string, unknown>)
+      : null;
+  const selfContactRecord =
+    selfProfileRecord?.contact && typeof selfProfileRecord.contact === "object"
+      ? (selfProfileRecord.contact as Record<string, unknown>)
+      : null;
+  const selfVerificationRecord =
+    selfProfileRecord?.verification && typeof selfProfileRecord.verification === "object"
+      ? (selfProfileRecord.verification as Record<string, unknown>)
+      : null;
+  const authRecord = authUser as Record<string, unknown> | null;
+  const accountNestedUser =
+    accountRecord?.user && typeof accountRecord.user === "object"
+      ? (accountRecord.user as Record<string, unknown>)
+      : null;
+  const authNestedUser =
+    authRecord?.user && typeof authRecord.user === "object"
+      ? (authRecord.user as Record<string, unknown>)
+      : null;
+
+  const applicantUserId = firstNonEmptyString(
+    readString(selfIdentityRecord, ["id", "userId", "appUserId", "applicationUserId", "sub"]),
+    authUser?.id,
+    authUser?.userId,
+    authUser?.appUserId,
+    authUser?.applicationUserId,
+    authUser?.sub,
+    authUser?.user?.id,
+    authUser?.user?.userId,
+    authUser?.user?.appUserId,
+    authUser?.user?.applicationUserId,
+    readString(accountRecord, ["id", "userId", "appUserId", "applicationUserId", "sub"]),
+    readString(accountNestedUser, ["id", "userId", "appUserId", "applicationUserId", "sub"]),
+    readString(selfProfileRecord, ["id", "userId", "appUserId", "applicationUserId", "sub"]),
+  );
+
+  const { items: applicantPhoneItems } = useUserPhoneNumbersUltimate(
+    applicantUserId || undefined,
+    { enabled: Boolean(applicantUserId) },
+  );
+
+  const selectedApplicantPhone = useMemo(() => {
+    return (
+      applicantPhoneItems.find((item) => item.isPrimary && item.isVerified) ||
+      applicantPhoneItems.find((item) => item.isVerified) ||
+      applicantPhoneItems.find((item) => item.isPrimary) ||
+      applicantPhoneItems[0] ||
+      null
+    );
+  }, [applicantPhoneItems]);
+
+  const firstName =
+    readString(selfIdentityRecord, ["firstName", "givenName"]) ||
+    readString(selfProfileRecord, ["firstName", "givenName"]) ||
+    readString(accountRecord, ["firstName", "givenName"]) ||
+    readString(accountNestedUser, ["firstName", "givenName"]) ||
+    readString(authRecord, ["firstName", "givenName"]) ||
+    readString(authNestedUser, ["firstName", "givenName"]);
+
+  const lastName =
+    readString(selfIdentityRecord, ["lastName", "surname", "familyName"]) ||
+    readString(selfProfileRecord, ["lastName", "surname", "familyName"]) ||
+    readString(accountRecord, ["lastName", "surname", "familyName"]) ||
+    readString(accountNestedUser, ["lastName", "surname", "familyName"]) ||
+    readString(authRecord, ["lastName", "surname", "familyName"]) ||
+    readString(authNestedUser, ["lastName", "surname", "familyName"]);
+
+  const applicantEmail =
+    readString(selfContactRecord, ["email", "emailAddress"]) ||
+    readString(selfProfileRecord, ["email", "emailAddress"]) ||
+    readString(accountRecord, ["email", "emailAddress"]) ||
+    readString(accountNestedUser, ["email", "emailAddress"]) ||
+    readString(authRecord, ["email", "emailAddress"]) ||
+    readString(authNestedUser, ["email", "emailAddress"]);
 
   const applicantFullName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
-    translate(`${NS}.defaults.user`, "Kullanıcı");
+    joinNonEmpty([firstName, lastName]) ||
+    readString(selfIdentityRecord, ["fullName", "displayName", "name", "userName"]) ||
+    readString(selfProfileRecord, ["fullName", "displayName", "name", "userName"]) ||
+    readString(accountRecord, ["fullName", "displayName", "name", "userName"]) ||
+    readString(accountNestedUser, ["fullName", "displayName", "name", "userName"]) ||
+    readString(authRecord, ["fullName", "displayName", "name", "userName"]) ||
+    readString(authNestedUser, ["fullName", "displayName", "name", "userName"]) ||
+    applicantEmail;
+
+  const phoneCountryCode =
+    readString(selfContactRecord, ["phoneCountryCode", "countryCode"]) ||
+    readString(selfProfileRecord, ["phoneCountryCode", "countryCode"]) ||
+    readString(accountRecord, ["phoneCountryCode", "countryCode"]) ||
+    readString(accountNestedUser, ["phoneCountryCode", "countryCode"]) ||
+    readString(authRecord, ["phoneCountryCode", "countryCode"]) ||
+    readString(authNestedUser, ["phoneCountryCode", "countryCode"]) ||
+    cleanText(selectedApplicantPhone?.countryCode);
+
+  const phoneNumber =
+    readString(selfContactRecord, ["phoneNumber", "phone", "mobilePhone"]) ||
+    readString(selfProfileRecord, ["phoneNumber", "phone", "mobilePhone"]) ||
+    readString(accountRecord, ["phoneNumber", "phone", "mobilePhone"]) ||
+    readString(accountNestedUser, ["phoneNumber", "phone", "mobilePhone"]) ||
+    readString(authRecord, ["phoneNumber", "phone", "mobilePhone"]) ||
+    readString(authNestedUser, ["phoneNumber", "phone", "mobilePhone"]) ||
+    cleanText(selectedApplicantPhone?.phoneNumber);
+
+  const applicantPhone = joinNonEmpty(
+    [phoneCountryCode, phoneNumber],
+    " ",
+  );
+
+  const isEmailVerified =
+    readBoolean(selfVerificationRecord, ["isEmailConfirmed", "emailConfirmed", "emailVerified"]) ||
+    readBoolean(selfProfileRecord, ["isEmailConfirmed", "emailConfirmed", "emailVerified"]) ||
+    readBoolean(accountRecord, ["isEmailConfirmed", "emailConfirmed", "emailVerified"]) ||
+    readBoolean(accountNestedUser, ["isEmailConfirmed", "emailConfirmed", "emailVerified"]) ||
+    readBoolean(authRecord, ["isEmailConfirmed", "emailConfirmed", "emailVerified"]) ||
+    readBoolean(authNestedUser, ["isEmailConfirmed", "emailConfirmed", "emailVerified"]);
+
+  const isPhoneVerified =
+    readBoolean(selfVerificationRecord, ["isPhoneConfirmed", "phoneConfirmed", "phoneVerified"]) ||
+    readBoolean(selfProfileRecord, ["isPhoneConfirmed", "phoneConfirmed", "phoneVerified"]) ||
+    readBoolean(accountRecord, ["isPhoneConfirmed", "phoneConfirmed", "phoneVerified"]) ||
+    readBoolean(accountNestedUser, ["isPhoneConfirmed", "phoneConfirmed", "phoneVerified"]) ||
+    readBoolean(authRecord, ["isPhoneConfirmed", "phoneConfirmed", "phoneVerified"]) ||
+    readBoolean(authNestedUser, ["isPhoneConfirmed", "phoneConfirmed", "phoneVerified"]) ||
+    selectedApplicantPhone?.isVerified === true;
 
   const currentStep = managementApplicationWizardSteps[activeStepIndex];
 
-  const currentStepTitle = translate(
-    `${NS}.steps.${currentStep.id}.title`,
+  const currentStepTitle = t(
+    `management-applications:create.steps.${currentStep.id}.title`,
     currentStep.title,
   );
 
-  const currentStepDescription = translate(
-    `${NS}.steps.${currentStep.id}.description`,
+  const currentStepDescription = t(
+    `management-applications:create.steps.${currentStep.id}.description`,
     currentStep.description,
   );
 
@@ -121,7 +293,7 @@ export default function ManagementApplicationCreateView() {
 
     if (!item) {
       return field === "title"
-        ? translate(`${NS}.documents.fallback.title`, "Belge")
+        ? t("management-applications:create.documents.fallback.title", "Belge")
         : "";
     }
 
@@ -129,15 +301,15 @@ export default function ManagementApplicationCreateView() {
     const fallback =
       field === "title" ? item.fallbackTitle : item.fallbackDescription;
 
-    return translate(key, fallback);
+    return t(key, fallback);
   };
 
   const documentRequirements = useMemo<DocumentRequirement[]>(() => {
     const common: DocumentRequirement[] = [
       {
-        kind: "signed_contract",
-        title: getDocumentText("signed_contract", "title"),
-        description: getDocumentText("signed_contract", "description"),
+        kind: "SignedContract",
+        title: getDocumentText("SignedContract", "title"),
+        description: getDocumentText("SignedContract", "description"),
         required: true,
       },
     ];
@@ -146,9 +318,9 @@ export default function ManagementApplicationCreateView() {
       return [
         ...common,
         {
-          kind: "power_of_attorney",
-          title: getDocumentText("power_of_attorney", "title"),
-          description: getDocumentText("power_of_attorney", "description"),
+          kind: "PowerOfAttorney",
+          title: getDocumentText("PowerOfAttorney", "title"),
+          description: getDocumentText("PowerOfAttorney", "description"),
           required: true,
         },
       ];
@@ -158,15 +330,15 @@ export default function ManagementApplicationCreateView() {
       return [
         ...common,
         {
-          kind: "authority_decision",
-          title: getDocumentText("authority_decision", "title"),
-          description: getDocumentText("authority_decision", "description"),
+          kind: "AuthorityDecision",
+          title: getDocumentText("AuthorityDecision", "title"),
+          description: getDocumentText("AuthorityDecision", "description"),
           required: true,
         },
         {
-          kind: "assignment_letter",
-          title: getDocumentText("assignment_letter", "title"),
-          description: getDocumentText("assignment_letter", "description"),
+          kind: "AssignmentLetter",
+          title: getDocumentText("AssignmentLetter", "title"),
+          description: getDocumentText("AssignmentLetter", "description"),
           required: false,
         },
       ];
@@ -176,18 +348,18 @@ export default function ManagementApplicationCreateView() {
       return [
         ...common,
         {
-          kind: "professional_service_agreement",
-          title: getDocumentText("professional_service_agreement", "title"),
+          kind: "ProfessionalServiceAgreement",
+          title: getDocumentText("ProfessionalServiceAgreement", "title"),
           description: getDocumentText(
-            "professional_service_agreement",
+            "ProfessionalServiceAgreement",
             "description",
           ),
           required: true,
         },
         {
-          kind: "authority_decision",
-          title: getDocumentText("authority_decision", "title"),
-          description: getDocumentText("authority_decision", "description"),
+          kind: "AuthorityDecision",
+          title: getDocumentText("AuthorityDecision", "title"),
+          description: getDocumentText("AuthorityDecision", "description"),
           required: true,
         },
       ];
@@ -196,9 +368,9 @@ export default function ManagementApplicationCreateView() {
     return [
       ...common,
       {
-        kind: "assignment_letter",
-        title: getDocumentText("assignment_letter", "title"),
-        description: getDocumentText("assignment_letter", "description"),
+        kind: "AssignmentLetter",
+        title: getDocumentText("AssignmentLetter", "title"),
+        description: getDocumentText("AssignmentLetter", "description"),
         required: true,
       },
     ];
@@ -211,12 +383,14 @@ export default function ManagementApplicationCreateView() {
         return acc;
       },
       {
-        signed_contract: 0,
-        authority_decision: 0,
-        power_of_attorney: 0,
-        assignment_letter: 0,
-        professional_service_agreement: 0,
-        other: 0,
+        SignedContract: 0,
+        AuthorityDecision: 0,
+        PowerOfAttorney: 0,
+        AssignmentLetter: 0,
+        ProfessionalServiceAgreement: 0,
+        IdentityDocument: 0,
+        PropertyRegistryDocument: 0,
+        Other: 0,
       },
     );
   }, [uploadedFiles]);
@@ -252,8 +426,6 @@ export default function ManagementApplicationCreateView() {
   const stepCompletion = useMemo(
     () => ({
       basic:
-        isEmailVerified &&
-        isPhoneVerified &&
         !!form.propertyName.trim() &&
         !!form.structureType &&
         !!form.representationType &&
@@ -283,8 +455,6 @@ export default function ManagementApplicationCreateView() {
     [
       blockCount,
       form,
-      isEmailVerified,
-      isPhoneVerified,
       requiredDocumentsMissing.length,
       totalApartmentCount,
       validationErrors.authorityEndDate,
@@ -304,17 +474,34 @@ export default function ManagementApplicationCreateView() {
     stepCompletion.review;
 
   useEffect(() => {
-    if (!applicantFullName.trim()) return;
+    if (!applicantFullName && !applicantEmail && !applicantPhone) return;
 
-    setForm((prev) =>
-      prev.contactFullName.trim()
-        ? prev
-        : {
-            ...prev,
-            contactFullName: applicantFullName,
-          },
-    );
-  }, [applicantFullName]);
+    setForm((prev) => {
+      const nextContactFullName =
+        prev.contactFullName.trim() || applicantFullName;
+      const nextContactEmail = prev.contactEmail.trim() || applicantEmail;
+      const nextContactPhone = prev.contactPhone.trim() || applicantPhone;
+
+      if (
+        prev.contactFullName === nextContactFullName &&
+        prev.contactEmail === nextContactEmail &&
+        prev.contactPhone === nextContactPhone
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        contactFullName: nextContactFullName,
+        contactEmail: nextContactEmail,
+        contactPhone: nextContactPhone,
+      };
+    });
+  }, [
+    applicantEmail,
+    applicantFullName,
+    applicantPhone,
+  ]);
 
   const handlePatch = <K extends keyof ManagementApplicationFormState>(
     key: K,
@@ -351,6 +538,8 @@ export default function ManagementApplicationCreateView() {
           : `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`,
       kind: selectedDocumentKind,
       description: documentDescription.trim() || undefined,
+      file: selectedFile,
+      uploadStatus: "local",
     };
 
     setUploadedFiles((prev) => [...prev, nextItem]);
@@ -407,31 +596,32 @@ export default function ManagementApplicationCreateView() {
     }
   };
 
-  const handleSubmit = async () => {
-    setSubmitAttempted(true);
+const handleSubmit = async () => {
+  if (currentStep.id !== "review") {
+    handleGoNext();
+    return;
+  }
 
-    const nextErrors = validateManagementApplicationForm(
-      form,
-      requiredDocumentsMissing,
-      t,
-    );
+  setSubmitAttempted(true);
 
-    if (Object.keys(nextErrors).length > 0) return;
+  const nextErrors = validateManagementApplicationForm(
+    form,
+    requiredDocumentsMissing,
+    t,
+  );
 
-    const result = await submit(form);
+  if (Object.keys(nextErrors).length > 0) return;
 
-    if (result.ok && result.data?.id) {
-      setSuccessDialogOpen(true);
-    }
-  };
+  const result = await submit(form, uploadedFiles);
+
+  if (result.ok && result.data?.id) {
+    setSuccessDialogOpen(true);
+  }
+};
 
   return (
     <Stack spacing={3}>
-      <PageHero
-        progressValue={progressValue}
-        completedStepCount={completedStepCount}
-        totalSteps={managementApplicationWizardSteps.length}
-      />
+      <PageHero />
 
       <WizardStepper
         steps={managementApplicationWizardSteps}
@@ -478,7 +668,7 @@ export default function ManagementApplicationCreateView() {
             <Stack spacing={0.9}>
               <Chip
                 icon={<IconFileCheck size={16} />}
-                label={`${translate(`${NS}.stepLabel`, "Adım")} ${
+                label={`${t("management-applications:create.stepLabel", "Adım")} ${
                   activeStepIndex + 1
                 } / ${managementApplicationWizardSteps.length}`}
                 size="small"
@@ -530,7 +720,7 @@ export default function ManagementApplicationCreateView() {
             >
               <Chip
                 icon={<IconShieldCheck size={16} />}
-                label={translate(`${NS}.securityBadge`, "Güvenli inceleme")}
+                label={t("management-applications:create.securityBadge", "Güvenli inceleme")}
                 size="small"
                 sx={{
                   borderRadius: 999,
@@ -571,6 +761,8 @@ export default function ManagementApplicationCreateView() {
               form={form}
               errors={visibleErrors}
               applicantFullName={applicantFullName}
+              applicantEmail={applicantEmail}
+              applicantPhone={applicantPhone}
               isEmailVerified={isEmailVerified}
               isPhoneVerified={isPhoneVerified}
               onPatch={handlePatch}
@@ -682,14 +874,14 @@ export default function ManagementApplicationCreateView() {
           </Box>
 
           <DialogTitle sx={{ p: 0, fontWeight: 950, letterSpacing: "-0.03em" }}>
-            {translate(`${NS}.success.title`, "Başvurunuz alınmıştır")}
+            {t("management-applications:create.success.title", "Başvurunuz alınmıştır")}
           </DialogTitle>
         </Box>
 
         <DialogContent sx={{ px: 3, pt: 2 }}>
           <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
-            {translate(
-              `${NS}.success.description`,
+            {t(
+              "management-applications:create.success.description",
               "Site/apartman yönetim başvurunuz başarıyla oluşturuldu. Başvurunuz incelenmek üzere sisteme alınmıştır.",
             )}
           </Typography>
@@ -709,7 +901,7 @@ export default function ManagementApplicationCreateView() {
               px: 3,
             }}
           >
-            {translate(`${NS}.success.ok`, "Tamam")}
+            {t("management-applications:create.success.ok", "Tamam")}
           </Button>
         </DialogActions>
       </Dialog>

@@ -19,6 +19,8 @@ import {
   REFRESH_TOKEN_COOKIE_NAMES,
   appendExpiredAuthCookies,
   createHttpOnlyCookie,
+  extractAuthTokenPayload,
+  normalizeSetCookieForBrowser,
   readFirstCookieValue,
 } from "@/lib/bff/authCookies";
 
@@ -37,10 +39,12 @@ interface RefreshResponseData {
 }
 
 interface RefreshApiResponse {
-  ok: boolean;
+  ok?: boolean;
+  success?: boolean;
+  isSuccess?: boolean;
   message?: string;
   userMessage?: string;
-  data?: RefreshResponseData | null;
+  data?: RefreshResponseData | Record<string, unknown> | null;
 }
 
 interface ErrorResponse {
@@ -76,7 +80,61 @@ function validateRefreshResponse(body: unknown): body is RefreshApiResponse {
   if (!body || typeof body !== "object") return false;
 
   const value = body as Record<string, unknown>;
-  return typeof value.ok === "boolean";
+  const data =
+    value.data && typeof value.data === "object"
+      ? (value.data as Record<string, unknown>)
+      : null;
+
+  return (
+    typeof value.ok === "boolean" ||
+    typeof value.success === "boolean" ||
+    typeof value.isSuccess === "boolean" ||
+    typeof data?.ok === "boolean" ||
+    typeof data?.success === "boolean" ||
+    typeof data?.isSuccess === "boolean"
+  );
+}
+
+function isRefreshBodySuccessful(body: RefreshApiResponse | null): boolean {
+  if (!body) return false;
+  if (body.ok === true) return true;
+  if (body.success === true) return true;
+  if (body.isSuccess === true) return true;
+
+  const data =
+    body.data && typeof body.data === "object"
+      ? (body.data as Record<string, unknown>)
+      : null;
+
+  return (
+    data?.ok === true ||
+    data?.success === true ||
+    data?.isSuccess === true
+  );
+}
+
+function appendNormalizedSetCookies(
+  headers: Headers,
+  cookies: string[]
+): number {
+  let count = 0;
+
+  for (const cookie of cookies) {
+    if (!cookie) continue;
+    headers.append("set-cookie", normalizeSetCookieForBrowser(cookie));
+    count += 1;
+  }
+
+  return count;
+}
+
+function hasAuthCookie(cookies: string[], names: readonly string[]): boolean {
+  const expected = new Set(names.map((name) => name.toLowerCase()));
+
+  return cookies.some((cookie) => {
+    const name = cookie.split("=")[0]?.trim().toLowerCase();
+    return !!name && expected.has(name);
+  });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -169,13 +227,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       upstreamSetCookieCount: upstreamSetCookies.length,
     });
 
-    const newAccessToken = body?.data?.accessToken ?? null;
-    const newRefreshToken = body?.data?.refreshToken ?? null;
-    const accessTokenExpiresAt = body?.data?.accessTokenExpiresAt ?? null;
-    const refreshTokenExpiresAt = body?.data?.refreshTokenExpiresAt ?? null;
-    const shouldGenerateCookiesFromBody = upstreamSetCookies.length === 0;
+    const tokenPayload = extractAuthTokenPayload(parsedBody);
+    const newAccessToken = tokenPayload.accessToken ?? null;
+    const newRefreshToken = tokenPayload.refreshToken ?? null;
+    const accessTokenExpiresAt = tokenPayload.accessTokenExpiresAt ?? null;
+    const refreshTokenExpiresAt = tokenPayload.refreshTokenExpiresAt ?? null;
+    const forwardedCookieCount = appendNormalizedSetCookies(
+      responseHeaders,
+      upstreamSetCookies
+    );
+    const upstreamHasAccessTokenCookie = hasAuthCookie(
+      upstreamSetCookies,
+      ACCESS_TOKEN_COOKIE_NAMES
+    );
+    const upstreamHasRefreshTokenCookie = hasAuthCookie(
+      upstreamSetCookies,
+      REFRESH_TOKEN_COOKIE_NAMES
+    );
 
-    if (shouldGenerateCookiesFromBody && newAccessToken) {
+    if (!upstreamHasAccessTokenCookie && newAccessToken) {
       responseHeaders.append(
         "set-cookie",
         createHttpOnlyCookie(
@@ -186,7 +256,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (shouldGenerateCookiesFromBody && newRefreshToken) {
+    if (!upstreamHasRefreshTokenCookie && newRefreshToken) {
       responseHeaders.append(
         "set-cookie",
         createHttpOnlyCookie(
@@ -197,21 +267,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const hasAccessTokenCookie =
+      !!newAccessToken ||
+      upstreamHasAccessTokenCookie;
+
+    const hasRefreshTokenCookie =
+      !!newRefreshToken ||
+      upstreamHasRefreshTokenCookie;
+
     const isSuccess =
       upstream.ok &&
-      body?.ok === true &&
-      !!newAccessToken &&
-      !!newRefreshToken;
+      isRefreshBodySuccessful(body) &&
+      hasAccessTokenCookie &&
+      hasRefreshTokenCookie;
 
     if (!isSuccess) {
       const expiredCookieCount = appendExpiredAuthCookies(responseHeaders);
 
       logger.warn("Refresh failed", {
         upstreamStatus: upstream.status,
-        bodyOk: body?.ok,
+        bodyOk: isRefreshBodySuccessful(body),
         hasAccessToken: !!newAccessToken,
         hasRefreshToken: !!newRefreshToken,
+        hasAccessTokenCookie,
+        hasRefreshTokenCookie,
         hasDeviceId: !!currentDeviceId,
+        forwardedCookieCount,
         expiredCookieCount,
       });
 
@@ -234,16 +315,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     logger.info("Refresh successful", {
       hasAccessToken: !!newAccessToken,
       hasRefreshToken: !!newRefreshToken,
-      generatedSetCookieCount: shouldGenerateCookiesFromBody
-        ? Number(!!newAccessToken) + Number(!!newRefreshToken)
-        : 0,
+      generatedSetCookieCount:
+        Number(!upstreamHasAccessTokenCookie && !!newAccessToken) +
+        Number(!upstreamHasRefreshTokenCookie && !!newRefreshToken),
       upstreamSetCookieCount: upstreamSetCookies.length,
+      forwardedCookieCount,
     });
 
     const successBody: SuccessResponse = {
       ok: true,
-      message: body.message,
-      userMessage: body.userMessage ?? body.message,
+      message: body?.message,
+      userMessage: body?.userMessage ?? body?.message,
       data: {
         accessTokenExpiresAt,
         refreshTokenExpiresAt,

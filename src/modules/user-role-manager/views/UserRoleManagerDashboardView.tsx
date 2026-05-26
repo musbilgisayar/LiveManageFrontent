@@ -1,12 +1,19 @@
+//src/modules/user-role-manager/views/UserRoleManagerDashboardView.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Alert,
   Grid,
   Stack,
 } from "@mui/material";
+
+import { useTenantOptions }
+  from "@/modules/tenants/hooks/useTenantOptions";
+
+import { useI18nNs }
+  from "@/app/context/i18nContext";
 
 import useAppRoles
   from "../hooks/useAppRoles";
@@ -52,18 +59,9 @@ import type {
   RoleManagerUserListItemDto,
 } from "../types/RoleManager.types";
 
-const TENANT_OPTIONS = [
-  {
-    id: "livemanage",
-    name: "LiveManage",
-  },
-  {
-    id: "kulturtisch",
-    name: "KulturTisch",
-  },
-];
-
 export default function UserRoleManagerDashboardView() {
+  const { t } = useI18nNs("userRoleManager");
+
   const [scope, setScope] =
     useState<RoleManagerScopeState>({
       mode: "currentTenant",
@@ -80,6 +78,31 @@ export default function UserRoleManagerDashboardView() {
 
   const [assignmentOpen, setAssignmentOpen] =
     useState(false);
+
+  const {
+    options: tenantOptions,
+    loading: tenantsLoading,
+    error: tenantsError,
+  } = useTenantOptions(false);
+
+  useEffect(() => {
+    if (
+      scope.mode !== "specificTenant" ||
+      scope.tenantId ||
+      tenantOptions.length === 0
+    ) {
+      return;
+    }
+
+    setScope((current) => ({
+      ...current,
+      tenantId: tenantOptions[0].id,
+    }));
+  }, [
+    scope.mode,
+    scope.tenantId,
+    tenantOptions,
+  ]);
 
   const {
     summary,
@@ -99,6 +122,13 @@ export default function UserRoleManagerDashboardView() {
     setFilters,
     errorMessage:
       usersErrorMessage,
+    pagination,
+    pageNumber,
+    setPageNumber,
+    pageSize,
+    setPageSize,
+    isLoading:
+      usersLoading,
   } = useRoleManagerUsers(scope);
 
   const {
@@ -118,24 +148,36 @@ export default function UserRoleManagerDashboardView() {
     () =>
       summaryErrorMessage ||
       distributionErrorMessage ||
-      usersErrorMessage,
+      usersErrorMessage ||
+      tenantsError,
     [
       distributionErrorMessage,
       summaryErrorMessage,
+      tenantsError,
       usersErrorMessage,
     ],
+  );
+
+  const normalizedTenantOptions = useMemo(
+    () =>
+      tenantOptions.map((tenant) => ({
+        id: tenant.id,
+        name: `${tenant.name} (${tenant.key})`,
+      })),
+    [tenantOptions],
   );
 
   return (
     <Stack spacing={3}>
       <RoleManagerPageHeader
-        title="User Role Manager"
-        subtitle="Role assignment and role visibility management"
+        title={t("page.title")}
+        subtitle={t("page.subtitle")}
         actions={
           <RoleScopeSelector
             value={scope}
-            tenantOptions={TENANT_OPTIONS}
+            tenantOptions={normalizedTenantOptions}
             onChange={setScope}
+            disabled={tenantsLoading}
           />
         }
       />
@@ -151,57 +193,64 @@ export default function UserRoleManagerDashboardView() {
       />
 
       <Grid
-        container
-        spacing={3}
-      >
-        <Grid
-          size={{
-            xs: 12,
-          }}
-        >
-          <RoleDistributionTable
-            items={distributionItems}
-          />
-        </Grid>
+  container
+  spacing={3}
+>
+  <Grid
+    size={{
+      xs: 12,
+    }}
+  >
+    <Stack spacing={3}>
+      <RoleManagerUserFilters
+        filters={filters}
+        roles={roles}
+        disabled={usersLoading}
+        onChange={setFilters}
+        onReset={() =>
+          setFilters({
+            search: "",
+            isVerified: null,
+            isSuspended: null,
+            roleId: null,
+            hasActiveRole: null,
+          })
+        }
+      />
 
-        <Grid
-          size={{
-            xs: 12,
-          }}
-        >
-          <Stack spacing={3}>
-            <RoleManagerUserFilters
-              filters={filters}
-              roles={roles}
-              onChange={setFilters}
-              onReset={() =>
-                setFilters({
-                  search: "",
-                  isVerified: null,
-                  isSuspended: null,
-                  roleId: null,
-                  hasActiveRole: null,
-                })
-              }
-            />
+      <RoleManagerUsersTable
+        users={users}
+        pagination={pagination}
+        pageNumber={pageNumber}
+        pageSize={pageSize}
+        isLoading={usersLoading}
+        onPageChange={setPageNumber}
+        onPageSizeChange={setPageSize}
+        onHistoryClick={(user) => {
+          setSelectedUser(user);
 
-            <RoleManagerUsersTable
-              users={users}
-              onHistoryClick={(user) => {
-                setSelectedUser(user);
+          setHistoryOpen(true);
+        }}
+        onRolesClick={(user) => {
+          setSelectedUser(user);
 
-                setHistoryOpen(true);
-              }}
-              onRolesClick={(user) => {
-                setSelectedUser(user);
+          setAssignmentOpen(true);
+        }}
+      />
+    </Stack>
+  </Grid>
 
-                setAssignmentOpen(true);
-              }}
-            />
-          </Stack>
-        </Grid>
-      </Grid>
-
+  <Grid
+    size={{
+      xs: 12,
+      lg: 5,
+    }}
+  >
+    <RoleDistributionTable
+      items={distributionItems}
+    />
+  </Grid>
+</Grid>
       <UserRoleHistoryDrawer
         open={historyOpen}
         items={roleHistory}

@@ -3,12 +3,27 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/app/context/AuthContext";
 import { getWebFetcher } from "@/utils/fetchers.web.client";
 import type { UserDetailResponseDto } from "../../users/components/detail/cards/UserAccountDetailCard";
 
 type RawResponse = any;
 
+function unwrapMeResponse(json: RawResponse): Record<string, any> | null {
+  const root = json?.data?.data ?? json?.data ?? null;
+
+  if (!root || typeof root !== "object") {
+    return null;
+  }
+
+  return {
+    ...root,
+    ...(root.user && typeof root.user === "object" ? root.user : {}),
+  };
+}
+
 export function useAccountMe() {
+  const { user: authUser, loading: authLoading } = useAuth();
   const [user, setUser] = useState<UserDetailResponseDto | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +43,7 @@ export function useAccountMe() {
         return;
       }
 
-      const userData = json?.data ?? null;
+      const userData = unwrapMeResponse(json);
 
       if (!userData) {
         setUser(null);
@@ -48,7 +63,7 @@ export function useAccountMe() {
           userData.effectivePermissions ?? userData.permissions ?? [],
       };
 
-      setUser(normalizedUserData);
+      setUser(normalizedUserData as unknown as UserDetailResponseDto);
     } catch (err: any) {
       setUser(null);
       setError(err?.message ?? "Kullanıcı bilgileri alınamadı (network).");
@@ -58,8 +73,21 @@ export function useAccountMe() {
   }, []);
 
   useEffect(() => {
-    fetchMe();
-  }, [fetchMe]);
+    if (authLoading) {
+      return;
+    }
 
-  return { user, isLoading, error, reload: fetchMe };
+    if (authUser) {
+      setUser(authUser as unknown as UserDetailResponseDto);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setUser(null);
+    setError(null);
+    setIsLoading(false);
+  }, [authLoading, authUser]);
+
+  return { user, isLoading: authLoading || isLoading, error, reload: fetchMe };
 }

@@ -11,12 +11,6 @@ import {
 } from "@/lib/bff/userScopedCache";
 import { proxyJsonWithWebAuthCached } from "@/lib/bff/proxyJsonWithWebAuthCached";
 
-type Ctx = {
-  params?: {
-    lang?: string;
-  };
-};
-
 function toPrefix(value?: string | null): string {
   return (value ?? "tr").split("-")[0].toLowerCase();
 }
@@ -44,9 +38,8 @@ function extractProfile(payload: unknown): unknown {
   return obj.data?.data ?? obj.data ?? obj;
 }
 
-export async function GET(req: NextRequest, ctx: Ctx) {
-  const routeLang = ctx?.params?.lang;
-  const langSeg = resolveLangSeg(req, routeLang);
+export async function GET(req: NextRequest) {
+  const langSeg = resolveLangSeg(req);
 
   const cacheKey = buildUserScopedCacheKey({
     namespace: `userprofile:me:${langSeg}`,
@@ -56,7 +49,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   });
 
   return proxyJsonWithWebAuthCached(req, {
-    url: "/api/v1.0/UserProfile/me",
+    url: "/api/v1.0/account/me",
     method: "GET",
     logLabel: "UserProfile.Me.GET",
     authMode: "client-or-service-token",
@@ -119,9 +112,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   });
 }
 
-export async function PATCH(req: NextRequest, ctx: Ctx) {
-  const routeLang = ctx?.params?.lang;
-  const langSeg = resolveLangSeg(req, routeLang);
+export async function PATCH(req: NextRequest) {
+  const langSeg = resolveLangSeg(req);
   const bodyText = await req.text().catch(() => "");
 
   const cacheKey = buildUserScopedCacheKey({
@@ -132,7 +124,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   });
 
   return proxyJsonWithWebAuthCached(req, {
-    url: "/api/v1.0/UserProfile/me",
+    url: "/api/v1.0/account/me",
     method: "PATCH",
     body: bodyText,
     logLabel: "UserProfile.Me.PATCH",

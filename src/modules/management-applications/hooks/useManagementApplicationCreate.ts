@@ -1,19 +1,24 @@
+// src/modules/management-applications/hooks/useManagementApplicationCreate.ts
 "use client";
 
 import { useCallback, useState } from "react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
 
-import { createManagementApplication } from "../services/managementApplication.service";
+import {
+  createManagementApplication,
+  uploadManagementApplicationDocument,
+} from "../services/managementApplication.service";
 
 import type {
   ManagedPropertyApplicationDetailDto,
   ManagementApplicationFormState,
+  UploadedFileItem,
 } from "../types/managementApplication.types";
 
 import { mapManagementApplicationFormToCreateDto } from "../utils/managementApplication.mapper";
 
-const NS = "property:managementApplication.create";
+const NS = "management-applications:create";
 
 export type ManagementApplicationSubmitResult = {
   ok?: boolean;
@@ -21,6 +26,8 @@ export type ManagementApplicationSubmitResult = {
   data: ManagedPropertyApplicationDetailDto | null;
   code?: string | null;
   existingApplicationId?: string | null;
+  uploadedDocumentCount?: number;
+  failedDocumentCount?: number;
 };
 
 type DuplicateApplicationMetadata = {
@@ -67,13 +74,22 @@ function resolveMessage(
   return response.userMessage || response.message || fallback;
 }
 
+function getDocumentSortOrder(
+  file: UploadedFileItem,
+  index: number,
+): number {
+  return typeof file.sortOrder === "number" ? file.sortOrder : index + 1;
+}
+
 export function useManagementApplicationCreate() {
-  const { t } = useI18nNs(NS);
+  const { t } = useI18nNs("management-applications");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+
   const [createdApplication, setCreatedApplication] =
     useState<ManagedPropertyApplicationDetailDto | null>(null);
+
   const [existingApplicationId, setExistingApplicationId] =
     useState<string | null>(null);
 
@@ -86,13 +102,18 @@ export function useManagementApplicationCreate() {
   const submit = useCallback(
     async (
       form: ManagementApplicationFormState,
+      uploadedFiles: UploadedFileItem[] = [],
     ): Promise<ManagementApplicationSubmitResult> => {
       setIsSubmitting(true);
+
       resetSubmitState();
 
       try {
-        const payload = mapManagementApplicationFormToCreateDto(form);
-        const response = await createManagementApplication(payload);
+        const payload =
+          mapManagementApplicationFormToCreateDto(form);
+
+        const response =
+          await createManagementApplication(payload);
 
         const code = response.message ?? null;
 
@@ -102,41 +123,106 @@ export function useManagementApplicationCreate() {
             t(`${NS}.submit.error`),
           );
 
-          const duplicateApplicationId = getDuplicateApplicationId(
-            code,
-            response.data,
-          );
+          const duplicateApplicationId =
+            getDuplicateApplicationId(
+              code,
+              response.data,
+            );
 
           setSubmitMessage(message);
-          setExistingApplicationId(duplicateApplicationId);
+
+          setExistingApplicationId(
+            duplicateApplicationId,
+          );
 
           return {
             ok: false,
             message,
             data: null,
             code,
-            existingApplicationId: duplicateApplicationId,
+            existingApplicationId:
+              duplicateApplicationId,
+            uploadedDocumentCount: 0,
+            failedDocumentCount:
+              uploadedFiles.length,
           };
         }
 
-        const createdData = isApplicationDetail(response.data)
+        const createdData = isApplicationDetail(
+          response.data,
+        )
           ? response.data
           : null;
 
-        const message = resolveMessage(
-          response,
-          t(`${NS}.submit.success`),
-        );
+        if (!createdData?.id) {
+          const message = t(
+            `${NS}.submit.error`,
+          );
+
+          setSubmitMessage(message);
+
+          setCreatedApplication(null);
+
+          return {
+            ok: false,
+            message,
+            data: null,
+            code,
+            existingApplicationId: null,
+            uploadedDocumentCount: 0,
+            failedDocumentCount:
+              uploadedFiles.length,
+          };
+        }
+
+        let uploadedDocumentCount = 0;
+        let failedDocumentCount = 0;
+
+        for (const [index, item] of uploadedFiles.entries()) {
+          const uploadResponse =
+            await uploadManagementApplicationDocument({
+              applicationId: createdData.id,
+              documentType: item.kind,
+              file: item.file,
+              isRequired: true,
+              isSensitive: false,
+              sortOrder: getDocumentSortOrder(
+                item,
+                index,
+              ),
+            });
+
+          if (uploadResponse.ok) {
+            uploadedDocumentCount += 1;
+          } else {
+            failedDocumentCount += 1;
+          }
+        }
+
+        const message =
+          failedDocumentCount > 0
+            ? t(
+                `${NS}.submit.successWithDocumentWarnings`,
+              )
+            : resolveMessage(
+                response,
+                t(
+                  `${NS}.submit.success`,
+                ),
+              );
 
         setSubmitMessage(message);
+
         setCreatedApplication(createdData);
 
         return {
-          ok: true,
+          ok: failedDocumentCount === 0,
           message,
           data: createdData,
           code,
           existingApplicationId: null,
+          uploadedDocumentCount,
+          failedDocumentCount,
         };
       } finally {
         setIsSubmitting(false);

@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
 import { Avatar, Box } from "@mui/material";
 import { Stack } from "@mui/system";
@@ -179,9 +179,6 @@ export default function AuthSocialButtons({
           withLocalePrefix(result.data?.redirectTo, redirectLocale),
           resolvedTenantKey
         );
-
-        await onSuccess(withLocalePrefix(result.data?.redirectTo, redirectLocale));
-
       } catch (error) {
         onError(
           error instanceof Error
@@ -226,6 +223,12 @@ export default function AuthSocialButtons({
     setGoogleReady(true);
   }, [googleClientId, handleGoogleCredential, locale]);
 
+  useEffect(() => {
+    if (window.google?.accounts?.id) {
+      initializeGoogle();
+    }
+  }, [initializeGoogle]);
+
   return (
     <Stack direction="row" justifyContent="center" spacing={2} mt={3}>
       {googleClientId && (
@@ -233,6 +236,7 @@ export default function AuthSocialButtons({
           src="https://accounts.google.com/gsi/client"
           strategy="afterInteractive"
           onLoad={initializeGoogle}
+          onReady={initializeGoogle}
         />
       )}
 

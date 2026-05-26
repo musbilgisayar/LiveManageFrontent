@@ -1,3 +1,5 @@
+//src/modules/management-applications/types/adminManagementApplication.types.ts
+//bu dosya, yönetim uygulamalarının yönetici inceleme süreciyle ilgili tür tanımlarını içerir. Yönetici inceleme sürecinde kullanılan uygulama durumları, risk seviyeleri, belge durumları, karar türleri ve API yanıt yapıları gibi çeşitli türler tanımlanır. Bu türler, yönetici inceleme modülünün farklı bileşenlerinde ve işlevlerinde tutarlı bir şekilde kullanılmak üzere merkezi bir konumda toplanır.
 export type AdminApplicationStatus =
   | "pending"
   | "in_review"

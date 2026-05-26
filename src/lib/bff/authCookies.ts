@@ -53,29 +53,44 @@ function readString(record: Record<string, unknown> | null, key: string): string
 export function extractAuthTokenPayload(payload: unknown): AuthTokenPayload {
   const root = asRecord(payload);
   const data = asRecord(root?.data);
+  const innerData = asRecord(data?.data);
   const tokens = asRecord(data?.tokens) ?? asRecord(root?.tokens);
+  const innerTokens = asRecord(innerData?.tokens);
   const auth = asRecord(data?.auth) ?? asRecord(root?.auth);
+  const innerAuth = asRecord(innerData?.auth);
 
   return {
     accessToken:
       readString(data, "accessToken") ??
+      readString(innerData, "accessToken") ??
       readString(tokens, "accessToken") ??
+      readString(innerTokens, "accessToken") ??
       readString(auth, "accessToken") ??
+      readString(innerAuth, "accessToken") ??
       readString(root, "accessToken"),
     refreshToken:
       readString(data, "refreshToken") ??
+      readString(innerData, "refreshToken") ??
       readString(tokens, "refreshToken") ??
+      readString(innerTokens, "refreshToken") ??
       readString(auth, "refreshToken") ??
+      readString(innerAuth, "refreshToken") ??
       readString(root, "refreshToken"),
     accessTokenExpiresAt:
       readString(data, "accessTokenExpiresAt") ??
+      readString(innerData, "accessTokenExpiresAt") ??
       readString(tokens, "accessTokenExpiresAt") ??
+      readString(innerTokens, "accessTokenExpiresAt") ??
       readString(auth, "accessTokenExpiresAt") ??
+      readString(innerAuth, "accessTokenExpiresAt") ??
       readString(root, "accessTokenExpiresAt"),
     refreshTokenExpiresAt:
       readString(data, "refreshTokenExpiresAt") ??
+      readString(innerData, "refreshTokenExpiresAt") ??
       readString(tokens, "refreshTokenExpiresAt") ??
+      readString(innerTokens, "refreshTokenExpiresAt") ??
       readString(auth, "refreshTokenExpiresAt") ??
+      readString(innerAuth, "refreshTokenExpiresAt") ??
       readString(root, "refreshTokenExpiresAt"),
   };
 }

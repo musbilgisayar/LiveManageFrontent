@@ -6,6 +6,8 @@ import {
   useState,
 } from "react";
 
+import { useI18nNs } from "@/app/context/i18nContext";
+
 import {
   assignRole,
   getUserActiveRoles,
@@ -14,6 +16,9 @@ import {
   revokeRole,
   syncUserRoles,
 } from "../services/userRoleAssignment.service";
+
+import { resolveRoleManagerErrorMessage }
+  from "../utils/resolveRoleManagerErrorMessage";
 
 import type {
   AppUserRoleDto,
@@ -24,31 +29,20 @@ import type {
 
 type UseUserRoleAssignmentsReturn = {
   activeRoles: AppUserRoleDto[];
-
   roleHistory: AppUserRoleHistoryDto[];
-
   isLoading: boolean;
-
   isSubmitting: boolean;
-
   errorMessage: string | null;
-
   reload: () => Promise<void>;
-
   assignUserRole: (
     roleId: string,
     payload?: UserRoleChangeReasonDto,
   ) => Promise<void>;
-
   revokeUserRole: (
     roleId: string,
     payload?: UserRoleChangeReasonDto,
   ) => Promise<void>;
-
-  syncRoles: (
-    payload: UserRoleSyncRequestDto,
-  ) => Promise<void>;
-
+  syncRoles: (payload: UserRoleSyncRequestDto) => Promise<void>;
   revokeAllUserRoles: (
     payload?: UserRoleChangeReasonDto,
   ) => Promise<void>;
@@ -57,58 +51,47 @@ type UseUserRoleAssignmentsReturn = {
 export default function useUserRoleAssignments(
   userId: string | null,
 ): UseUserRoleAssignmentsReturn {
-  const [activeRoles, setActiveRoles] =
-    useState<AppUserRoleDto[]>([]);
+  const { t } = useI18nNs("userRoleManager");
 
-  const [roleHistory, setRoleHistory] =
-    useState<AppUserRoleHistoryDto[]>([]);
-
-  const [isLoading, setIsLoading] =
-    useState(true);
-
-  const [isSubmitting, setIsSubmitting] =
-    useState(false);
-
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
+  const [activeRoles, setActiveRoles] = useState<AppUserRoleDto[]>([]);
+  const [roleHistory, setRoleHistory] = useState<AppUserRoleHistoryDto[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) {
       setActiveRoles([]);
       setRoleHistory([]);
       setIsLoading(false);
-
       return;
     }
 
     try {
       setIsLoading(true);
-
       setErrorMessage(null);
 
-      const [roles, history] =
-        await Promise.all([
-          getUserActiveRoles(userId),
-          getUserRoleHistory(userId),
-        ]);
+      const [roles, history] = await Promise.all([
+        getUserActiveRoles(userId),
+        getUserRoleHistory(userId),
+      ]);
 
       setActiveRoles(roles);
-
       setRoleHistory(history);
     } catch (error) {
       setActiveRoles([]);
-
       setRoleHistory([]);
-
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Kullanıcı rol bilgileri alınamadı.",
+        resolveRoleManagerErrorMessage(
+          error,
+          "errors.assignmentsLoadFailed",
+          t,
+        ),
       );
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [t, userId]);
 
   useEffect(() => {
     void load();
@@ -119,35 +102,28 @@ export default function useUserRoleAssignments(
       roleId: string,
       payload?: UserRoleChangeReasonDto,
     ) => {
-      if (!userId) {
-        return;
-      }
+      if (!userId) return;
 
       try {
         setIsSubmitting(true);
-
         setErrorMessage(null);
 
-        await assignRole(
-          userId,
-          roleId,
-          payload,
-        );
-
+        await assignRole(userId, roleId, payload);
         await load();
       } catch (error) {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Rol atama işlemi başarısız oldu.",
+          resolveRoleManagerErrorMessage(
+            error,
+            "errors.assignRoleFailed",
+            t,
+          ),
         );
-
         throw error;
       } finally {
         setIsSubmitting(false);
       }
     },
-    [load, userId],
+    [load, t, userId],
   );
 
   const revokeUserRole = useCallback(
@@ -155,116 +131,89 @@ export default function useUserRoleAssignments(
       roleId: string,
       payload?: UserRoleChangeReasonDto,
     ) => {
-      if (!userId) {
-        return;
-      }
+      if (!userId) return;
 
       try {
         setIsSubmitting(true);
-
         setErrorMessage(null);
 
-        await revokeRole(
-          userId,
-          roleId,
-          payload,
-        );
-
+        await revokeRole(userId, roleId, payload);
         await load();
       } catch (error) {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Rol kaldırma işlemi başarısız oldu.",
+          resolveRoleManagerErrorMessage(
+            error,
+            "errors.revokeRoleFailed",
+            t,
+          ),
         );
-
         throw error;
       } finally {
         setIsSubmitting(false);
       }
     },
-    [load, userId],
+    [load, t, userId],
   );
 
   const syncRoles = useCallback(
-    async (
-      payload: UserRoleSyncRequestDto,
-    ) => {
-      if (!userId) {
-        return;
-      }
+    async (payload: UserRoleSyncRequestDto) => {
+      if (!userId) return;
 
       try {
         setIsSubmitting(true);
-
         setErrorMessage(null);
 
-        await syncUserRoles(
-          userId,
-          payload,
-        );
-
+        await syncUserRoles(userId, payload);
         await load();
       } catch (error) {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Rol senkronizasyonu başarısız oldu.",
+          resolveRoleManagerErrorMessage(
+            error,
+            "errors.syncRolesFailed",
+            t,
+          ),
         );
-
         throw error;
       } finally {
         setIsSubmitting(false);
       }
     },
-    [load, userId],
+    [load, t, userId],
   );
 
   const revokeAllUserRoles = useCallback(
-    async (
-      payload?: UserRoleChangeReasonDto,
-    ) => {
-      if (!userId) {
-        return;
-      }
+    async (payload?: UserRoleChangeReasonDto) => {
+      if (!userId) return;
 
       try {
         setIsSubmitting(true);
-
         setErrorMessage(null);
 
-        await revokeAllRoles(
-          userId,
-          payload,
-        );
-
+        await revokeAllRoles(userId, payload);
         await load();
       } catch (error) {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Tüm roller kaldırılamadı.",
+          resolveRoleManagerErrorMessage(
+            error,
+            "errors.revokeAllFailed",
+            t,
+          ),
         );
-
         throw error;
       } finally {
         setIsSubmitting(false);
       }
     },
-    [load, userId],
+    [load, t, userId],
   );
 
   return {
     activeRoles,
     roleHistory,
-
     isLoading,
     isSubmitting,
-
     errorMessage,
-
     reload: load,
-
     assignUserRole,
     revokeUserRole,
     syncRoles,

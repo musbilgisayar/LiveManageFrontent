@@ -72,7 +72,7 @@ export async function getRoleManagerSummary(params?: {
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Rol yönetimi özeti alınamadı.",
+        "userRoleManager:errors.summaryLoadFailed",
     );
   }
 
@@ -97,7 +97,7 @@ export async function getRoleDistribution(params?: {
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Rol dağılımı alınamadı.",
+        "userRoleManager:errors.distributionLoadFailed",
     );
   }
 
@@ -125,7 +125,7 @@ export async function getRoleManagerUsers(
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Rol kullanıcı listesi alınamadı.",
+        "userRoleManager:errors.usersLoadFailed",
     );
   }
 

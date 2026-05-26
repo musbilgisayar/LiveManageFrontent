@@ -1,6 +1,14 @@
 "use client";
 
-import { Alert, Button, Chip, Paper, Stack, Typography } from "@mui/material";
+import {
+  Alert,
+  Button,
+  Chip,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+
 import { IconCirclePlus } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
@@ -44,15 +52,6 @@ export default function PhoneNumbersCard({ userId }: Props) {
       title={t("users:detail.cards.phoneNumbers", {
         defaultValue: "Telefon Numaraları",
       })}
-      action={
-        <Button
-          size="small"
-          startIcon={<IconCirclePlus size={16} />}
-          variant="contained"
-        >
-          {t("common:actions.add", { defaultValue: "Ekle" })}
-        </Button>
-      }
     >
       <Paper
         variant="outlined"
@@ -63,6 +62,29 @@ export default function PhoneNumbersCard({ userId }: Props) {
         }}
       >
         <Stack spacing={1.5}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            spacing={2}
+          >
+            <Typography fontWeight={700}>
+              {t("users:detail.phone.title", {
+                defaultValue: "Kayıtlı telefonlar",
+              })}
+            </Typography>
+
+            <Button
+              size="small"
+              startIcon={<IconCirclePlus size={16} />}
+              variant="contained"
+            >
+              {t("common:actions.add", {
+                defaultValue: "Ekle",
+              })}
+            </Button>
+          </Stack>
+
           {phones.length === 0 ? (
             <Alert severity="info">
               {t("users:detail.phone.empty", {
@@ -76,6 +98,7 @@ export default function PhoneNumbersCard({ userId }: Props) {
                 direction="row"
                 justifyContent="space-between"
                 alignItems="center"
+                spacing={2}
               >
                 <Stack>
                   <Typography fontWeight={500}>

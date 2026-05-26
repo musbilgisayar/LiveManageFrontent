@@ -1,3 +1,4 @@
+
 //src/modules/users/pages/UserDetailView.tsx
 "use client";
 
@@ -6,7 +7,7 @@ import { Alert, Box, CircularProgress, Grid, Stack } from "@mui/material";
 
 import { useI18nNs } from "@/app/context/i18nContext";
 import { useAuth } from "@/app/context/AuthContext";
-
+import { getWebFetcher } from "@/utils/fetchers.web.client";
 
 import { useUserDetail } from "../hooks/useUserDetail";
 import { getUserDetailTabs } from "../config/userDetailTabs.config";
@@ -18,7 +19,8 @@ import UserIdentityTab from "../components/detail/tabs/UserIdentityTab";
 import UserContactTab from "../components/detail/tabs/ContactTab";
 import PreferencesTab from "../components/detail/tabs/PreferencesTab";
 import SecurityTab from "../components/detail/tabs/SecurityTab";
-import { PasswordChangeCard } from "../components/detail/cards/PasswordChangeCard";
+import PasswordChangeCard from "../components/detail/cards/PasswordChangeCard";
+import CreatePasswordCard from "../components/detail/cards/CreatePasswordCard";
 
 import type { UserDetailTabKey } from "../types/UserDetail.types";
 import type { UserDetailMode } from "../config/userDetailTabs.config";
@@ -27,6 +29,10 @@ type Props = {
   locale: string;
   mode: UserDetailMode;
   userId?: string;
+};
+
+type AccountSecurityStateDto = {
+  hasPassword: boolean;
 };
 
 function firstNonEmptyString(...values: Array<unknown>): string {
@@ -39,15 +45,24 @@ function firstNonEmptyString(...values: Array<unknown>): string {
   return "";
 }
 
+function extractHasPassword(payload: any): boolean | null {
+  const root = payload?.data?.data ?? payload?.data ?? payload;
+  if (typeof root?.hasPassword === "boolean") {
+    return root.hasPassword;
+  }
+  return null;
+}
+
 export default function UserDetailView({ locale, mode, userId }: Props) {
-  const { t, ready } = useI18nNs(["users", "common", "header"]);
+  const { t, ready } = useI18nNs(["users", "common", "header", "account"]);
   const { user: authUser, effectivePermissions } = useAuth();
   const [activeTab, setActiveTab] = useState<UserDetailTabKey>("overview");
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [securityError, setSecurityError] = useState<string | null>(null);
 
   const isSelfMode = mode === "self";
   const missingAdminUserId = !isSelfMode && !userId;
-
- 
 
   const { user, isLoading, error, mutate } = useUserDetail({
     mode,
@@ -65,18 +80,73 @@ export default function UserDetailView({ locale, mode, userId }: Props) {
     }
   }, [activeTab, tabs]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadSecurityState() {
+      if (!isSelfMode || activeTab !== "security") {
+        return;
+      }
+
+      try {
+        setSecurityLoading(true);
+        setSecurityError(null);
+
+        const response = await getWebFetcher("/api/v1.0/account/security-state");
+        if (ignore) return;
+
+        const nextHasPassword = extractHasPassword(response);
+
+        if (nextHasPassword === null) {
+          throw new Error("Invalid security state response.");
+        }
+
+        setHasPassword(nextHasPassword);
+      } catch {
+        if (ignore) return;
+        setHasPassword(null);
+        setSecurityError(
+          t("account:password.securityStateError") === "[account:password.securityStateError]"
+            ? "Şifre durumu alınamadı. Lütfen tekrar deneyin."
+            : t("account:password.securityStateError")
+        );
+      } finally {
+        if (!ignore) {
+          setSecurityLoading(false);
+        }
+      }
+    }
+
+    loadSecurityState();
+
+    return () => {
+      ignore = true;
+    };
+  }, [activeTab, isSelfMode, t]);
+
   const tr = (key: string, fallback: string) => {
     const value = t(key);
     return value === `[${key}]` ? fallback : value;
   };
 
+  async function handlePasswordCredentialChanged() {
+    await mutate();
+
+    if (!isSelfMode) return;
+
+    try {
+      const response = await getWebFetcher("/api/v1.0/account/security-state");
+      const nextHasPassword = extractHasPassword(response);
+      setHasPassword(nextHasPassword);
+    } catch {
+      setHasPassword(true);
+    }
+  }
+
   if (missingAdminUserId) {
     return (
       <Alert severity="error">
-        {tr(
-          "users:detail.errors.userIdRequired",
-          "Admin mode için userId zorunludur."
-        )}
+        {tr("users:detail.errors.userIdRequired", "Admin mode için userId zorunludur.")}
       </Alert>
     );
   }
@@ -158,14 +228,28 @@ export default function UserDetailView({ locale, mode, userId }: Props) {
           <UserContactTab user={user} userId={effectiveUserId} />
         )}
 
-        {activeTab === "preferences" && (
-          <PreferencesTab data={user} t={t} />
-        )}
+        {activeTab === "preferences" && <PreferencesTab data={user} t={t} />}
 
         {mode === "self" && activeTab === "security" && (
           <Grid container spacing={3}>
             <Grid size={{ xs: 12, lg: 12 }}>
-              <PasswordChangeCard userId={effectiveUserId} />
+              {securityLoading ? (
+                <Box display="flex" justifyContent="center" py={6}>
+                  <CircularProgress />
+                </Box>
+              ) : securityError ? (
+                <Alert severity="error">{securityError}</Alert>
+              ) : hasPassword ? (
+                <PasswordChangeCard
+                  userId={effectiveUserId}
+                  source="self"
+                  onPasswordCredentialChanged={handlePasswordCredentialChanged}
+                />
+              ) : (
+                <CreatePasswordCard
+                  onPasswordCredentialChanged={handlePasswordCredentialChanged}
+                />
+              )}
             </Grid>
           </Grid>
         )}

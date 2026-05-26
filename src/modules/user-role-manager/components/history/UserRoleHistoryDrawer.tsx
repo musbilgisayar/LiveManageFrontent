@@ -12,6 +12,9 @@ import {
   Typography,
 } from "@mui/material";
 
+import { useI18nNs }
+  from "@/app/context/i18nContext";
+
 import type {
   AppUserRoleHistoryDto,
 } from "../../types/UserRoleAssignment.types";
@@ -29,6 +32,8 @@ export default function UserRoleHistoryDrawer({
   items,
   onClose,
 }: UserRoleHistoryDrawerProps) {
+  const { t } = useI18nNs("userRoleManager");
+
   return (
     <Drawer
       anchor="right"
@@ -54,14 +59,14 @@ export default function UserRoleHistoryDrawer({
             variant="h5"
             fontWeight={800}
           >
-            Role History
+            {t("history.title")}
           </Typography>
 
           <Typography
             variant="body2"
             color="text.secondary"
           >
-            Historical role assignment and revoke timeline
+            {t("history.subtitle")}
           </Typography>
         </Stack>
 
@@ -69,23 +74,23 @@ export default function UserRoleHistoryDrawer({
           <TableHead>
             <TableRow>
               <TableCell>
-                Role
+                {t("columns.role")}
               </TableCell>
 
               <TableCell>
-                Assigned At
+                {t("columns.assignedAt")}
               </TableCell>
 
               <TableCell>
-                Status
+                {t("columns.status")}
               </TableCell>
 
               <TableCell>
-                Revoked At
+                {t("columns.revokedAt")}
               </TableCell>
 
               <TableCell>
-                Revoke Reason
+                {t("columns.revokeReason")}
               </TableCell>
             </TableRow>
           </TableHead>
@@ -119,13 +124,13 @@ export default function UserRoleHistoryDrawer({
                     <Chip
                       size="small"
                       color="error"
-                      label="Revoked"
+                      label={t("badges.revoked")}
                     />
                   ) : (
                     <Chip
                       size="small"
                       color="success"
-                      label="Active"
+                      label={t("badges.active")}
                     />
                   )}
                 </TableCell>

@@ -1,0 +1,80 @@
+LFOS — LiveManage Frontend Orchestration Standardı
+
+LFOS’un ana kuralı
+Veri bir kez yüklenir, merkezi sahiplenilir, context/cache üzerinden tüketilir.
+Component fetch yapmaz.
+Aynı request iki kez network’e çıkmaz.
+Strateji özeti
+
+1. Data Owner prensibi
+
+Her verinin tek sahibi olacak:
+
+account/me        → AuthProvider
+culture/list      → CultureProvider
+i18n bundles      → Route Layout / I18nProvider
+page-specific data→ Page-level hook
+UI state          → Component/local state
+
+2. Component fetch yasağı
+
+Componentler:
+
+fetch çağırmaz
+endpoint bilmez
+token bilmez
+namespace yüklemez
+
+Sadece:
+
+props
+context
+hook state
+
+tüketir.
+
+3. Route-level preload
+
+Sayfa açılmadan önce gerekli veriler layout/page seviyesinde hazırlanır:
+
+common
+management-applications
+culture list
+gerekirse auth state
+
+4. Request deduplication
+
+Aynı anda aynı endpoint çağrılırsa:
+
+1 network request
+çoklu consumer aynı promise’i kullanır
+
+5. Namespace standardı
+
+Karışık kullanım yasak:
+
+property
+property:managementApplication.create
+detailPage
+management-applications
+
+Her modül için tek standart namespace seçilir.
+
+6. Cache katmanları
+
+Redis cache          → backend/db yükünü azaltır
+BFF/Next cache       → backend çağrısını azaltır
+Client memory cache  → aynı render döngüsündeki duplicate çağrıyı engeller
+Context/store        → component tekrarlarını engeller
+
+7. Kod yazarken uygulanacak karar
+
+Bundan sonra LiveManage frontend kodu yazarken varsayılan yaklaşım:
+
+Layout preload eder
+Provider sahiplenir
+Hook orkestre eder
+Component render eder
+Fetcher dedupe eder
+
+Bu standardı bundan sonra LFOS diye referans alacağız.2

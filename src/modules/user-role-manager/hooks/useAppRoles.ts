@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getAppRoles }
-  from "../services/appRole.service";
+import { useI18nNs } from "@/app/context/i18nContext";
+
+import { getAppRoles } from "../services/appRole.service";
+
+import { resolveRoleManagerErrorMessage }
+  from "../utils/resolveRoleManagerErrorMessage";
 
 import type {
   AppRoleListItemDto,
@@ -12,26 +16,18 @@ import type {
 
 type UseAppRolesReturn = {
   roles: AppRoleListItemDto[];
-
   roleOptions: AppRoleOption[];
-
   isLoading: boolean;
-
   errorMessage: string | null;
-
   reload: () => Promise<void>;
 };
 
-export default function useAppRoles():
-UseAppRolesReturn {
-  const [roles, setRoles] =
-    useState<AppRoleListItemDto[]>([]);
+export default function useAppRoles(): UseAppRolesReturn {
+  const { t } = useI18nNs("userRoleManager");
 
-  const [isLoading, setIsLoading] =
-    useState(true);
-
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
+  const [roles, setRoles] = useState<AppRoleListItemDto[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const roleOptions = useMemo<AppRoleOption[]>(
     () =>
@@ -48,24 +44,23 @@ UseAppRolesReturn {
   const load = useCallback(async () => {
     try {
       setIsLoading(true);
-
       setErrorMessage(null);
 
       const data = await getAppRoles();
-
       setRoles(data);
     } catch (error) {
       setRoles([]);
-
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Rol listesi alınamadı.",
+        resolveRoleManagerErrorMessage(
+          error,
+          "errors.rolesLoadFailed",
+          t,
+        ),
       );
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();

@@ -1,3 +1,4 @@
+﻿// src/modules/management-applications/components/create/AddressAndBuildingStep.tsx
 "use client";
 
 import { Box, Stack, TextField } from "@mui/material";
@@ -5,9 +6,9 @@ import { IconHome, IconMapPin } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
 
-import SectionCard from "./shared/SectionCard";
-import InlineNotice from "./shared/InlineNotice";
 import AddressHierarchySection from "./AddressHierarchySection";
+import InlineNotice from "./shared/InlineNotice";
+import SectionCard from "./shared/SectionCard";
 
 import { premiumFieldSx, structureOptions } from "./constants";
 
@@ -26,7 +27,30 @@ type AddressAndBuildingStepProps = {
   onAddressChange: (next: AddressForm) => void;
 };
 
-const NS = "property:managementApplication.create.address";
+const I18N_PREFIX = "management-applications";
+
+const KEYS = {
+  addressTitle: "management-applications:create.address.address.title",
+  addressDescription:
+    "management-applications:create.address.address.description",
+
+  scaleTitle: "management-applications:create.address.scale.title",
+  scaleDescription: "management-applications:create.address.scale.description",
+
+  blockCount: "management-applications:create.address.fields.blockCount",
+  blockCountHint:
+    "management-applications:create.address.fields.blockCountHint",
+
+  totalApartmentCount:
+    "management-applications:create.address.fields.totalApartmentCount",
+  totalApartmentCountHint:
+    "management-applications:create.address.fields.totalApartmentCountHint",
+
+  noPropertyName:
+    "management-applications:create.address.summary.noPropertyName",
+  blocks: "management-applications:create.address.summary.blocks",
+  apartments: "management-applications:create.address.summary.apartments",
+} as const;
 
 export default function AddressAndBuildingStep({
   form,
@@ -36,17 +60,26 @@ export default function AddressAndBuildingStep({
   onPatch,
   onAddressChange,
 }: AddressAndBuildingStepProps) {
-  const { t } = useI18nNs(["property"]);
+  const { t } = useI18nNs(I18N_PREFIX);
 
-  const tr = (key: string, fallback: string) => {
-    const fullKey = `${NS}.${key}`;
+  const tr = (fullKey: string, fallback: string) => {
     const value = t(fullKey);
-    return value && value !== fullKey ? value : fallback;
+
+    if (!value) return fallback;
+    if (value === fullKey) return fallback;
+    if (value === `[${fullKey}]`) return fallback;
+
+    return value;
   };
 
-  const trDirect = (key: string, fallback: string) => {
-    const value = t(key);
-    return value && value !== key ? value : fallback;
+  const trDirect = (fullKey: string, fallback: string) => {
+    const value = t(fullKey);
+
+    if (!value) return fallback;
+    if (value === fullKey) return fallback;
+    if (value === `[${fullKey}]`) return fallback;
+
+    return value;
   };
 
   const selectedStructure = structureOptions.find(
@@ -61,9 +94,9 @@ export default function AddressAndBuildingStep({
     <Stack spacing={3}>
       <SectionCard
         icon={<IconMapPin size={19} />}
-        title={tr("address.title", "Adres bilgileri")}
+        title={tr(KEYS.addressTitle, "Adres bilgileri")}
         description={tr(
-          "address.description",
+          KEYS.addressDescription,
           "Adresinizi hiyerarşik seçimlerle tamamlayın.",
         )}
       >
@@ -76,9 +109,9 @@ export default function AddressAndBuildingStep({
 
       <SectionCard
         icon={<IconHome size={19} />}
-        title={tr("scale.title", "Yapı ölçeği")}
+        title={tr(KEYS.scaleTitle, "Yapı ölçeği")}
         description={tr(
-          "scale.description",
+          KEYS.scaleDescription,
           "Başvuru yapılan yapının blok ve daire bilgisini girin.",
         )}
       >
@@ -86,19 +119,22 @@ export default function AddressAndBuildingStep({
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "1fr 1fr",
+              },
               gap: 2,
             }}
           >
             <TextField
               type="number"
-              label={tr("fields.blockCount", "Blok sayısı")}
+              label={tr(KEYS.blockCount, "Blok sayısı")}
               value={form.blockCount}
               onChange={(event) => onPatch("blockCount", event.target.value)}
               error={!!errors.blockCount}
               helperText={
-                errors.blockCount ??
-                tr("fields.blockCountHint", "Yapıdaki toplam blok sayısı")
+                errors.blockCount ||
+                tr(KEYS.blockCountHint, "Yapıdaki toplam blok sayısı")
               }
               fullWidth
               sx={premiumFieldSx}
@@ -106,16 +142,16 @@ export default function AddressAndBuildingStep({
 
             <TextField
               type="number"
-              label={tr("fields.totalApartmentCount", "Toplam daire sayısı")}
+              label={tr(KEYS.totalApartmentCount, "Toplam daire sayısı")}
               value={form.totalApartmentCount}
               onChange={(event) =>
                 onPatch("totalApartmentCount", event.target.value)
               }
               error={!!errors.totalApartmentCount}
               helperText={
-                errors.totalApartmentCount ??
+                errors.totalApartmentCount ||
                 tr(
-                  "fields.totalApartmentCountHint",
+                  KEYS.totalApartmentCountHint,
                   "Yapıdaki toplam daire sayısı",
                 )
               }
@@ -126,9 +162,10 @@ export default function AddressAndBuildingStep({
 
           <InlineNotice tone="info">
             {structureLabel} ·{" "}
-            {form.propertyName || tr("summary.noPropertyName", "Yapı adı girilmedi")}{" "}
-            · {blockCount || 0} {tr("summary.blocks", "blok")} ·{" "}
-            {totalApartmentCount || 0} {tr("summary.apartments", "daire")}
+            {form.propertyName ||
+              tr(KEYS.noPropertyName, "Yapı adı girilmedi")}{" "}
+            · {blockCount || 0} {tr(KEYS.blocks, "blok")} ·{" "}
+            {totalApartmentCount || 0} {tr(KEYS.apartments, "daire")}
           </InlineNotice>
         </Stack>
       </SectionCard>

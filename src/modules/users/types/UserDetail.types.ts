@@ -46,6 +46,7 @@ export type UserSecurityBlock = {
   lastKnownIp?: string | null;
   passwordAlgorithm: string;
   hasPassword: boolean;
+  externalProviders: string[];
   hasSalt: boolean;
   isAuthenticatorConfigured: boolean;
   isSuspended: boolean;

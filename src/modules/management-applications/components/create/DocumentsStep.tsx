@@ -1,12 +1,17 @@
+// src/modules/management-applications/components/create/DocumentsStep.tsx
 "use client";
 
 import React from "react";
-import { Stack } from "@mui/material";
 
-import InlineNotice from "./shared/InlineNotice";
-import DocumentRequirementSummary from "./DocumentRequirementSummary";
+import { alpha, Box, Stack, useTheme } from "@mui/material";
+import type { Theme } from "@mui/material/styles";
+
 import CompactDocumentUploader from "./CompactDocumentUploader";
+import DocumentRequirementSummary from "./DocumentRequirementSummary";
+import InlineNotice from "./shared/InlineNotice";
 import UploadedDocumentList from "./UploadedDocumentList";
+import UploadSecurityBadge from "./upload/UploadSecurityBadge";
+
 import type {
   DocumentRequirement,
   RequiredDocumentKind,
@@ -44,28 +49,56 @@ export default function DocumentsStep({
   onAdd,
   onRemove,
 }: DocumentsStepProps) {
-  return (
-    <Stack spacing={3}>
-      <DocumentRequirementSummary
-        requirements={requirements}
-        uploadedKindCounts={uploadedKindCounts}
-      />
+  const theme = useTheme<Theme>();
 
-      <CompactDocumentUploader
-        requirements={requirements}
-        selectedKind={selectedKind}
-        selectedFile={selectedFile}
-        description={description}
-        onKindChange={onKindChange}
-        onFileChange={onFileChange}
-        onDescriptionChange={onDescriptionChange}
-        onAdd={onAdd}
-        inputRef={inputRef}
-      />
+  return (
+    <Stack spacing={2.2}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            lg: "0.95fr 1.45fr",
+          },
+          gap: 2.2,
+          alignItems: "stretch",
+        }}
+      >
+        <DocumentRequirementSummary
+          requirements={requirements}
+          uploadedKindCounts={uploadedKindCounts}
+        />
+
+        <CompactDocumentUploader
+          requirements={requirements}
+          selectedKind={selectedKind}
+          selectedFile={selectedFile}
+          description={description}
+          onKindChange={onKindChange}
+          onFileChange={onFileChange}
+          onDescriptionChange={onDescriptionChange}
+          onAdd={onAdd}
+          inputRef={inputRef}
+        />
+      </Box>
+
+      <UploadSecurityBadge />
 
       <UploadedDocumentList files={uploadedFiles} onRemove={onRemove} />
 
-      {error && <InlineNotice tone="warning">{error}</InlineNotice>}
+      {error && (
+        <Box
+          sx={{
+            borderRadius: 4,
+            boxShadow: `0 14px 34px ${alpha(
+              theme.palette.warning.main,
+              0.08,
+            )}`,
+          }}
+        >
+          <InlineNotice tone="warning">{error}</InlineNotice>
+        </Box>
+      )}
     </Stack>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import {
   Alert,
@@ -31,6 +31,7 @@ import {
 } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
+import { useAuth } from "@/app/context/AuthContext";
 import useManagementApplicationsDashboard from "../hooks/useManagementApplicationsDashboard";
 
 const PERMISSIONS = {
@@ -39,98 +40,6 @@ const PERMISSIONS = {
   admin: "admin.property.applications.view_pending.tenant",
   global: "admin.property.applications.view_pending.global",
 };
-
-type AccountMePermissionResponse = {
-  ok?: boolean;
-  data?: unknown;
-};
-
-function collectPermissions(value: unknown): string[] {
-  if (!value || typeof value !== "object") {
-    return [];
-  }
-
-  const record = value as Record<string, unknown>;
-
-  const direct =
-    record.effectivePermissions ??
-    record.permissions ??
-    record.permissionCodes;
-
-  if (Array.isArray(direct)) {
-    return direct.map(String);
-  }
-
-  const nestedData = record.data;
-
-  if (nestedData && typeof nestedData === "object") {
-    return collectPermissions(nestedData);
-  }
-
-  const user = record.user;
-
-  if (user && typeof user === "object") {
-    return collectPermissions(user);
-  }
-
-  return [];
-}
-
-function useCurrentPermissions() {
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function load() {
-      setIsLoading(true);
-
-      try {
-        const response = await fetch("/api/v1.0/account/users/me", {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            Accept: "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          if (mounted) {
-            setPermissions([]);
-          }
-
-          return;
-        }
-
-        const json = (await response.json()) as AccountMePermissionResponse;
-
-        if (mounted) {
-          setPermissions(collectPermissions(json));
-        }
-      } catch {
-        if (mounted) {
-          setPermissions([]);
-        }
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  return {
-    permissions,
-    isLoading,
-  };
-}
 
 export default function ManagementApplicationsDashboardView() {
   const theme = useTheme();
@@ -145,9 +54,9 @@ export default function ManagementApplicationsDashboardView() {
     useManagementApplicationsDashboard();
 
   const {
-    permissions,
-    isLoading: permissionsLoading,
-  } = useCurrentPermissions();
+    effectivePermissions: permissions,
+    loading: permissionsLoading,
+  } = useAuth();
 
   const permissionSet = useMemo(
     () => new Set(permissions),

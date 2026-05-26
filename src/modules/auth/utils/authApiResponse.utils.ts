@@ -2,6 +2,8 @@
 
 export type ApiErrorResponse = {
   ok: false;
+  success?: false;
+  isSuccess?: false;
   error?: string;
   message?: string;
   title?: string;
@@ -11,6 +13,8 @@ export type ApiErrorResponse = {
 
 export type ApiSuccessResponse<TData = unknown> = {
   ok: true;
+  success?: true;
+  isSuccess?: true;
   message?: string;
   userMessage?: string;
   data?: TData;
@@ -57,8 +61,20 @@ export function unwrapApiResponse<TData = unknown>(
 
   const obj = raw as Record<string, unknown>;
 
-  if (typeof obj.ok === "boolean") {
-    return obj as ApiResponse<TData>;
+  if (
+    typeof obj.ok === "boolean" ||
+    typeof obj.success === "boolean" ||
+    typeof obj.isSuccess === "boolean"
+  ) {
+    const ok =
+      obj.ok === true ||
+      obj.success === true ||
+      obj.isSuccess === true;
+
+    return {
+      ...(obj as Record<string, unknown>),
+      ok,
+    } as ApiResponse<TData>;
   }
 
   const data = obj.data;
@@ -66,8 +82,20 @@ export function unwrapApiResponse<TData = unknown>(
   if (data && typeof data === "object") {
     const dataObj = data as Record<string, unknown>;
 
-    if (typeof dataObj.ok === "boolean") {
-      return dataObj as ApiResponse<TData>;
+    if (
+      typeof dataObj.ok === "boolean" ||
+      typeof dataObj.success === "boolean" ||
+      typeof dataObj.isSuccess === "boolean"
+    ) {
+      const ok =
+        dataObj.ok === true ||
+        dataObj.success === true ||
+        dataObj.isSuccess === true;
+
+      return {
+        ...dataObj,
+        ok,
+      } as ApiResponse<TData>;
     }
   }
 

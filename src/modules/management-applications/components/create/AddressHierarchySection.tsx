@@ -1,3 +1,4 @@
+// src/modules/management-applications/components/create/AddressHierarchySection.tsx
 "use client";
 
 import { Box, MenuItem, Stack, TextField } from "@mui/material";
@@ -20,19 +21,49 @@ type AddressHierarchySectionProps = {
   errors: FormErrors;
 };
 
-const NS = "property:managementApplication.create.addressHierarchy";
+const I18N_PREFIX = "management-applications";
+
+const KEYS = {
+  loading: "management-applications:create.addressHierarchy.loading",
+  summaryEmpty: "management-applications:create.addressHierarchy.summaryEmpty",
+  country: "management-applications:create.addressHierarchy.country",
+  countryPlaceholder:
+    "management-applications:create.addressHierarchy.countryPlaceholder",
+  countryCode: "management-applications:create.addressHierarchy.countryCode",
+  province: "management-applications:create.addressHierarchy.province",
+  provincePlaceholder:
+    "management-applications:create.addressHierarchy.provincePlaceholder",
+  district: "management-applications:create.addressHierarchy.district",
+  districtPlaceholder:
+    "management-applications:create.addressHierarchy.districtPlaceholder",
+  neighborhood: "management-applications:create.addressHierarchy.neighborhood",
+  neighborhoodPlaceholder:
+    "management-applications:create.addressHierarchy.neighborhoodPlaceholder",
+  street: "management-applications:create.addressHierarchy.street",
+  buildingNumber:
+    "management-applications:create.addressHierarchy.buildingNumber",
+  apartmentNumber:
+    "management-applications:create.addressHierarchy.apartmentNumber",
+  postalCode: "management-applications:create.addressHierarchy.postalCode",
+  optional: "management-applications:create.addressHierarchy.optional",
+  summary: "management-applications:create.addressHierarchy.summary",
+} as const;
 
 export default function AddressHierarchySection({
   value,
   onChange,
   errors,
 }: AddressHierarchySectionProps) {
-  const { t } = useI18nNs(["property"]);
+  const { t } = useI18nNs(I18N_PREFIX);
 
-  const tr = (key: string, fallback: string) => {
-    const fullKey = `${NS}.${key}`;
+  const tr = (fullKey: string, fallback: string) => {
     const translated = t(fullKey);
-    return translated && translated !== fullKey ? translated : fallback;
+
+    if (!translated) return fallback;
+    if (translated === fullKey) return fallback;
+    if (translated === `[${fullKey}]`) return fallback;
+
+    return translated;
   };
 
   const {
@@ -158,7 +189,7 @@ export default function AddressHierarchySection({
 
   const getError = (field: keyof AddressForm) => errors[`address.${field}`];
 
-  const loadingText = tr("loading", "Yükleniyor...");
+  const loadingText = tr(KEYS.loading, "Yükleniyor...");
 
   const summaryText =
     [
@@ -171,7 +202,7 @@ export default function AddressHierarchySection({
       value.postalCode,
     ]
       .filter(Boolean)
-      .join(", ") || tr("summaryEmpty", "Henüz adres tamamlanmadı");
+      .join(", ") || tr(KEYS.summaryEmpty, "Henüz adres tamamlanmadı");
 
   return (
     <Stack spacing={2}>
@@ -194,7 +225,7 @@ export default function AddressHierarchySection({
       >
         <TextField
           select
-          label={tr("country", "Ülke")}
+          label={tr(KEYS.country, "Ülke")}
           value={safeCountryCode}
           onChange={(event) => void handleCountryChange(event.target.value)}
           disabled={isCountriesLoading}
@@ -206,7 +237,7 @@ export default function AddressHierarchySection({
           sx={premiumFieldSx}
         >
           <MenuItem value="">
-            {tr("countryPlaceholder", "Ülke seçiniz")}
+            {tr(KEYS.countryPlaceholder, "Ülke seçiniz")}
           </MenuItem>
 
           {countries.map(
@@ -224,7 +255,7 @@ export default function AddressHierarchySection({
         </TextField>
 
         <TextField
-          label={tr("countryCode", "Ülke kodu")}
+          label={tr(KEYS.countryCode, "Ülke kodu")}
           value={value.countryCode}
           InputProps={{ readOnly: true }}
           helperText=" "
@@ -234,7 +265,7 @@ export default function AddressHierarchySection({
 
         <TextField
           select
-          label={tr("province", "İl")}
+          label={tr(KEYS.province, "İl")}
           value={value.provinceId}
           onChange={(event) => void handleProvinceChange(event.target.value)}
           disabled={!value.countryCode || isProvincesLoading}
@@ -246,7 +277,7 @@ export default function AddressHierarchySection({
           sx={premiumFieldSx}
         >
           <MenuItem value="">
-            {tr("provincePlaceholder", "İl seçiniz")}
+            {tr(KEYS.provincePlaceholder, "İl seçiniz")}
           </MenuItem>
 
           {provinces.map((province) => (
@@ -258,7 +289,7 @@ export default function AddressHierarchySection({
 
         <TextField
           select
-          label={tr("district", "İlçe")}
+          label={tr(KEYS.district, "İlçe")}
           value={value.districtId}
           onChange={(event) => void handleDistrictChange(event.target.value)}
           disabled={!value.provinceId || isDistrictsLoading}
@@ -270,7 +301,7 @@ export default function AddressHierarchySection({
           sx={premiumFieldSx}
         >
           <MenuItem value="">
-            {tr("districtPlaceholder", "İlçe seçiniz")}
+            {tr(KEYS.districtPlaceholder, "İlçe seçiniz")}
           </MenuItem>
 
           {districts.map((district) => (
@@ -282,7 +313,7 @@ export default function AddressHierarchySection({
 
         <TextField
           select
-          label={tr("neighborhood", "Mahalle / Köy")}
+          label={tr(KEYS.neighborhood, "Mahalle / Köy")}
           value={value.neighborhoodId}
           onChange={(event) => handleNeighborhoodChange(event.target.value)}
           disabled={!value.districtId || isNeighborhoodsLoading}
@@ -295,7 +326,7 @@ export default function AddressHierarchySection({
           sx={premiumFieldSx}
         >
           <MenuItem value="">
-            {tr("neighborhoodPlaceholder", "Mahalle / köy seçiniz")}
+            {tr(KEYS.neighborhoodPlaceholder, "Mahalle / köy seçiniz")}
           </MenuItem>
 
           {neighborhoods.map((neighborhood) => (
@@ -306,7 +337,7 @@ export default function AddressHierarchySection({
         </TextField>
 
         <TextField
-          label={tr("street", "Cadde / Sokak")}
+          label={tr(KEYS.street, "Cadde / Sokak")}
           value={value.street}
           onChange={(event) => patch({ street: event.target.value })}
           error={!!getError("street")}
@@ -316,7 +347,7 @@ export default function AddressHierarchySection({
         />
 
         <TextField
-          label={tr("buildingNumber", "Bina no")}
+          label={tr(KEYS.buildingNumber, "Bina no")}
           value={value.buildingNumber}
           onChange={(event) => patch({ buildingNumber: event.target.value })}
           error={!!getError("buildingNumber")}
@@ -326,16 +357,16 @@ export default function AddressHierarchySection({
         />
 
         <TextField
-          label={tr("apartmentNumber", "Daire / Kapı no")}
+          label={tr(KEYS.apartmentNumber, "Daire / Kapı no")}
           value={value.apartmentNumber}
           onChange={(event) => patch({ apartmentNumber: event.target.value })}
-          helperText={tr("optional", "Opsiyonel")}
+          helperText={tr(KEYS.optional, "Opsiyonel")}
           fullWidth
           sx={premiumFieldSx}
         />
 
         <TextField
-          label={tr("postalCode", "Posta kodu")}
+          label={tr(KEYS.postalCode, "Posta kodu")}
           value={value.postalCode}
           onChange={(event) => patch({ postalCode: event.target.value })}
           error={!!getError("postalCode")}
@@ -346,7 +377,7 @@ export default function AddressHierarchySection({
       </Box>
 
       <InlineNotice tone="info">
-        {tr("summary", "Adres özeti")}: {summaryText}
+        {tr(KEYS.summary, "Adres özeti")}: {summaryText}
       </InlineNotice>
     </Stack>
   );

@@ -8,7 +8,7 @@ import { Stack } from "@mui/system";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useCustomizer } from "@/app/context/customizerContext";
-import { normalizeCultures } from "@/lib/i18n/normalizeCultures";
+import { useCulture } from "@/app/context/CultureContext";
 
 interface LanguageItem {
   cultureCode: string;
@@ -16,8 +16,6 @@ interface LanguageItem {
   isDefault: boolean;
   flagEmoji?: string;
 }
-
-const LANGUAGE_ENDPOINT = "/api/v1.0/localization/languages";
 
 const LOCALE_PREFIX_RE = /^\/[a-z]{2}(?:-[A-Za-z]{2})?(?=\/|$)/i;
 
@@ -31,17 +29,6 @@ const FALLBACK_LANGUAGES: LanguageItem[] = [
 ];
 
 const toPrefix = (c: string) => (c || "tr").split("-")[0].toLowerCase();
-
-const toCulture = (prefix: string) => {
-  const p = (prefix || "tr").toLowerCase();
-  if (p === "tr") return "tr-TR";
-  if (p === "en") return "en-US";
-  if (p === "de") return "de-DE";
-  if (p === "fr") return "fr-FR";
-  if (p === "it") return "it-IT";
-  if (p === "ar") return "ar-SA";
-  return `${p}-${p.toUpperCase()}`;
-};
 
 const getFlagUrl = (cultureCode: string) => `/images/flag/${cultureCode}.svg`;
 
@@ -66,12 +53,24 @@ export default function LanguageSelector() {
   const pathname = usePathname();
 
   const { isLanguage, setIsLanguage } = useCustomizer();
+  const { languages: cultureLanguages } = useCulture();
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [languages, setLanguages] = useState<LanguageItem[]>(FALLBACK_LANGUAGES);
 
   const open = Boolean(anchorEl);
   const urlPrefix = useMemo(() => getUrlPrefix(pathname), [pathname]);
+  const languages = useMemo<LanguageItem[]>(() => {
+    if (!cultureLanguages.length) {
+      return FALLBACK_LANGUAGES;
+    }
+
+    return cultureLanguages.map((item) => ({
+      cultureCode: item.cultureCode,
+      name: item.name,
+      isDefault: item.isDefault,
+      flagEmoji: undefined,
+    }));
+  }, [cultureLanguages]);
 
   const currentLang = useMemo(() => {
     const found = languages.find((l) => l.cultureCode === isLanguage);
@@ -117,63 +116,20 @@ export default function LanguageSelector() {
     [pathname, router, setIsLanguage, isLanguage]
   );
 
- useEffect(() => {
-  const ac = new AbortController();
+  useEffect(() => {
+    const matched = languages.find((l) => toPrefix(l.cultureCode) === urlPrefix);
+    const fallback = languages.find((x) => x.isDefault) || languages[0];
+    const selected = matched?.cultureCode || fallback?.cultureCode;
 
-  (async () => {
-    try {
-      const acceptCulture = toCulture(urlPrefix);
+    if (!selected) return;
 
-      const res = await fetch(LANGUAGE_ENDPOINT, {
-        headers: {
-          accept: "application/json",
-          "accept-language": acceptCulture,
-        },
-        credentials: "include",
-        cache: "no-store",
-        signal: ac.signal,
-      });
+    setLocaleCookie(selected);
 
-      if (!res.ok) {
-        console.warn("[LanguageSelector] languages HTTP not ok:", res.status);
-        return;
-      }
-
-      const json = await res.json().catch(() => null);
-      const normalized = normalizeCultures(json);
-
-      if (!normalized.length) {
-        console.warn("[LanguageSelector] languages empty:", json);
-        return;
-      }
-
-      const nextLanguages = normalized.map((x) => ({
-        cultureCode: x.cultureCode,
-        name: x.name,
-        isDefault: x.isDefault,
-      }));
-
-      setLanguages(nextLanguages);
-
-      const matched = normalized.find(
-        (l) => toPrefix(l.cultureCode) === urlPrefix
-      );
-      const fallback = normalized.find((x) => x.isDefault) || normalized[0];
-      const selected = matched?.cultureCode || fallback.cultureCode;
-
-      setLocaleCookie(selected);
-
-      if (isLanguage !== selected) {
-        setIsLanguage(selected);
-      }
-    } catch (err: any) {
-      if (err?.name === "AbortError") return;
-      console.warn("[LanguageSelector] languages fetch failed:", err);
+    if (isLanguage !== selected) {
+      setIsLanguage(selected);
     }
-  })();
+  }, [isLanguage, languages, setIsLanguage, urlPrefix]);
 
-  return () => ac.abort();
-}, [urlPrefix]);
   const shownCulture = currentLang?.cultureCode || "en-US";
   const shownName = currentLang?.name || "English";
 

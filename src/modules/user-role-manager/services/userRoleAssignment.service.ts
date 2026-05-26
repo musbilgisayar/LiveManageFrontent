@@ -21,6 +21,22 @@ type GenericResponseDto<T> = {
   errors?: string[] | null;
 };
 
+function unwrapArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (
+    value &&
+    typeof value === "object" &&
+    Array.isArray((value as GenericResponseDto<T[]>).data)
+  ) {
+    return (value as GenericResponseDto<T[]>).data ?? [];
+  }
+
+  return [];
+}
+
 function buildBaseUrl(userId: string): string {
   return `/api/v1.0/admin/role-manager/users/${userId}/roles`;
 }
@@ -30,11 +46,9 @@ export async function getUserActiveRoles(
 ): Promise<AppUserRoleDto[]> {
   const response = (await getWebFetcher(
     buildBaseUrl(userId),
-  )) as AppUserRoleDto[];
+  )) as unknown;
 
-  return Array.isArray(response)
-    ? response
-    : [];
+  return unwrapArray<AppUserRoleDto>(response);
 }
 
 export async function getUserRoleHistory(
@@ -42,11 +56,9 @@ export async function getUserRoleHistory(
 ): Promise<AppUserRoleHistoryDto[]> {
   const response = (await getWebFetcher(
     `${buildBaseUrl(userId)}/history`,
-  )) as AppUserRoleHistoryDto[];
+  )) as unknown;
 
-  return Array.isArray(response)
-    ? response
-    : [];
+  return unwrapArray<AppUserRoleHistoryDto>(response);
 }
 
 export async function assignRole(
@@ -67,7 +79,7 @@ export async function assignRole(
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Rol atama işlemi başarısız oldu.",
+        "userRoleManager:errors.assignRoleFailed",
     );
   }
 
@@ -92,7 +104,7 @@ export async function revokeRole(
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Rol kaldırma işlemi başarısız oldu.",
+        "userRoleManager:errors.revokeRoleFailed",
     );
   }
 
@@ -116,7 +128,7 @@ export async function syncUserRoles(
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Rol senkronizasyonu başarısız oldu.",
+        "userRoleManager:errors.syncRolesFailed",
     );
   }
 
@@ -140,7 +152,7 @@ export async function revokeAllRoles(
     throw new Error(
       response?.userMessage ||
         response?.message ||
-        "Tüm roller kaldırılamadı.",
+        "userRoleManager:errors.revokeAllFailed",
     );
   }
 

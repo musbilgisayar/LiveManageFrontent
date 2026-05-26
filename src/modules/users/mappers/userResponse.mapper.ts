@@ -20,6 +20,14 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
 function mapUserListItem(input: Record<string, unknown>): UserListItemDto {
   return {
     id: asString(input.id) ?? "",
@@ -157,6 +165,14 @@ export function normalizeUserDetailResponse(input: unknown): AdminUserDetailDto 
       accessFailedCount: num(security.accessFailedCount),
       passwordAlgorithm: str(security.passwordAlgorithm),
       hasPassword: bool(security.hasPassword),
+      externalProviders: stringArray(
+        security.externalProviders ??
+          security.externalLoginProviders ??
+          security.loginProviders ??
+          input.externalProviders ??
+          input.externalLoginProviders ??
+          input.loginProviders
+      ),
       hasSalt: bool(security.hasSalt),
       isAuthenticatorConfigured: bool(security.isAuthenticatorConfigured),
       isSuspended: bool(security.isSuspended ?? input.isSuspended),

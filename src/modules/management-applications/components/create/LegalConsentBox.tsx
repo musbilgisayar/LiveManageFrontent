@@ -1,3 +1,4 @@
+// src/modules/management-applications/components/create/LegalConsentBox.tsx
 "use client";
 
 import {
@@ -13,8 +14,8 @@ import { IconShieldCheck } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
 
-import SectionCard from "./shared/SectionCard";
 import InlineNotice from "./shared/InlineNotice";
+import SectionCard from "./shared/SectionCard";
 
 import type {
   ManagementApplicationFormErrors as FormErrors,
@@ -27,7 +28,16 @@ type LegalConsentBoxProps = {
   onPatch: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 };
 
-const NS = "property:managementApplication.create.legalConsent";
+const I18N_PREFIX = "management-applications";
+
+const KEYS = {
+  title: "management-applications:create.legalConsent.title",
+  description: "management-applications:create.legalConsent.description",
+  accuracy: "management-applications:create.legalConsent.accuracy",
+  authority: "management-applications:create.legalConsent.authority",
+  privacy: "management-applications:create.legalConsent.privacy",
+  contract: "management-applications:create.legalConsent.contract",
+} as const;
 
 export default function LegalConsentBox({
   form,
@@ -35,21 +45,26 @@ export default function LegalConsentBox({
   onPatch,
 }: LegalConsentBoxProps) {
   const theme = useTheme<Theme>();
-  const { t } = useI18nNs(["property"]);
+  const { t } = useI18nNs(I18N_PREFIX);
+
   const hasError = !!errors.consents;
 
-  const tr = (key: string, fallback: string) => {
-    const fullKey = `${NS}.${key}`;
+  const tr = (fullKey: string, fallback: string) => {
     const value = t(fullKey);
-    return value && value !== fullKey ? value : fallback;
+
+    if (!value) return fallback;
+    if (value === fullKey) return fallback;
+    if (value === `[${fullKey}]`) return fallback;
+
+    return value;
   };
 
   return (
     <SectionCard
       icon={<IconShieldCheck size={19} />}
-      title={tr("title", "Beyan ve onaylar")}
+      title={tr(KEYS.title, "Beyan ve onaylar")}
       description={tr(
-        "description",
+        KEYS.description,
         "Başvurunuzu göndermek için aşağıdaki onayları tamamlayın.",
       )}
     >
@@ -77,7 +92,7 @@ export default function LegalConsentBox({
             />
           }
           label={tr(
-            "accuracy",
+            KEYS.accuracy,
             "Beyan ettiğim bilgilerin doğru ve güncel olduğunu kabul ediyorum.",
           )}
         />
@@ -92,7 +107,7 @@ export default function LegalConsentBox({
             />
           }
           label={tr(
-            "authority",
+            KEYS.authority,
             "İlgili yapı adına başvuru yapmaya yetkili olduğumu beyan ediyorum.",
           )}
         />
@@ -107,7 +122,7 @@ export default function LegalConsentBox({
             />
           }
           label={tr(
-            "privacy",
+            KEYS.privacy,
             "Aydınlatma metnini okudum ve başvuru kapsamında veri işleme sürecini anladım.",
           )}
         />
@@ -122,7 +137,7 @@ export default function LegalConsentBox({
             />
           }
           label={tr(
-            "contract",
+            KEYS.contract,
             "Hizmet sözleşmesi ve platform koşullarını kabul ediyorum.",
           )}
         />

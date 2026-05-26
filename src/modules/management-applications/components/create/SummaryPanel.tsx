@@ -1,3 +1,6 @@
+﻿
+//src/modules/management-applications/components/create/SummaryPanel.tsx
+//bu dosya, baÅŸvuru oluÅŸturma sÃ¼recinin son adÄ±mÄ±nda, kullanÄ±cÄ±nÄ±n girdiÄŸi bilgileri Ã¶zetleyen bir paneli temsil eder. Bu panel, kullanÄ±cÄ±nÄ±n baÅŸvurusunu gÃ¶ndermeden Ã¶nce bilgilerini gÃ¶zden geÃ§irmesine olanak tanÄ±r. Her bir bilgi Ã¶ÄŸesi, etiket ve deÄŸer Ã§iftleri olarak gÃ¶rÃ¼ntÃ¼lenir ve panel, gÃ¶rsel olarak Ã§ekici ve kullanÄ±cÄ± dostu olacak ÅŸekilde tasarlanmÄ±ÅŸtÄ±r.
 "use client";
 
 import { alpha, Box, Typography, useTheme } from "@mui/material";
@@ -15,11 +18,11 @@ type SummaryPanelProps = {
   }>;
 };
 
-const NS = "property:managementApplication.create.summaryPanel";
+const NS = "management-applications:managementApplication.create.summaryPanel";
 
 export default function SummaryPanel({ items }: SummaryPanelProps) {
   const theme = useTheme<Theme>();
-  const { t } = useI18nNs(["property"]);
+  const { t } = useI18nNs("management-applications");
 
   const tr = (key: string, fallback: string) => {
     const fullKey = `${NS}.${key}`;
@@ -30,8 +33,8 @@ export default function SummaryPanel({ items }: SummaryPanelProps) {
   return (
     <SectionCard
       icon={<IconCircleCheck size={19} />}
-      title={tr("title", "Başvuru özeti")}
-      description={tr("description", "Göndermeden önce bilgilerinizi kontrol edin.")}
+      title={tr("title", "BaÅŸvuru Ã¶zeti")}
+      description={tr("description", "GÃ¶ndermeden Ã¶nce bilgilerinizi kontrol edin.")}
     >
       <Box
         sx={{

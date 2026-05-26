@@ -1,3 +1,4 @@
+﻿// src/modules/management-applications/components/create/ReviewStep.tsx
 "use client";
 
 import { Stack, TextField } from "@mui/material";
@@ -5,9 +6,9 @@ import { IconInfoCircle } from "@tabler/icons-react";
 
 import { useI18nNs } from "@/app/context/i18nContext";
 
+import LegalConsentBox from "./LegalConsentBox";
 import SectionCard from "./shared/SectionCard";
 import SummaryPanel from "./SummaryPanel";
-import LegalConsentBox from "./LegalConsentBox";
 
 import {
   premiumFieldSx,
@@ -31,7 +32,38 @@ type ReviewStepProps = {
   onPatch: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 };
 
-const NS = "property:managementApplication.create.review";
+const I18N_PREFIX = "management-applications";
+
+const KEYS = {
+  noteTitle: "management-applications:create.review.note.title",
+  noteDescription: "management-applications:create.review.note.description",
+  noteField: "management-applications:create.review.note.field",
+  noteHelper: "management-applications:create.review.note.helper",
+
+  summaryStructureType:
+    "management-applications:create.review.summary.structureType",
+  summaryPropertyName:
+    "management-applications:create.review.summary.propertyName",
+  summaryRepresentation:
+    "management-applications:create.review.summary.representation",
+  summaryAuthorizedPerson:
+    "management-applications:create.review.summary.authorizedPerson",
+  summaryAuthorityStart:
+    "management-applications:create.review.summary.authorityStart",
+  summaryAuthorityEnd:
+    "management-applications:create.review.summary.authorityEnd",
+  summaryNoEndDate:
+    "management-applications:create.review.summary.noEndDate",
+  summaryAddress: "management-applications:create.review.summary.address",
+  summaryBlockCount:
+    "management-applications:create.review.summary.blockCount",
+  summaryTotalApartmentCount:
+    "management-applications:create.review.summary.totalApartmentCount",
+  summaryUploadedDocument:
+    "management-applications:create.review.summary.uploadedDocument",
+  summaryDocumentCount:
+    "management-applications:create.review.summary.documentCount",
+} as const;
 
 export default function ReviewStep({
   form,
@@ -42,17 +74,26 @@ export default function ReviewStep({
   uploadedFiles,
   onPatch,
 }: ReviewStepProps) {
-  const { t } = useI18nNs(["property"]);
+  const { t } = useI18nNs(I18N_PREFIX);
 
-  const tr = (key: string, fallback: string) => {
-    const fullKey = `${NS}.${key}`;
+  const tr = (fullKey: string, fallback: string) => {
     const value = t(fullKey);
-    return value && value !== fullKey ? value : fallback;
+
+    if (!value) return fallback;
+    if (value === fullKey) return fallback;
+    if (value === `[${fullKey}]`) return fallback;
+
+    return value;
   };
 
   const trDirect = (key: string, fallback: string) => {
     const value = t(key);
-    return value && value !== key ? value : fallback;
+
+    if (!value) return fallback;
+    if (value === key) return fallback;
+    if (value === `[${key}]`) return fallback;
+
+    return value;
   };
 
   const structure = structureOptions.find(
@@ -75,17 +116,17 @@ export default function ReviewStep({
     <Stack spacing={3}>
       <SectionCard
         icon={<IconInfoCircle size={19} />}
-        title={tr("note.title", "Başvuru açıklaması")}
+        title={tr(KEYS.noteTitle, "Başvuru açıklaması")}
         description={tr(
-          "note.description",
+          KEYS.noteDescription,
           "Eklemek istediğiniz özel bir not varsa yazabilirsiniz.",
         )}
       >
         <TextField
-          label={tr("note.field", "Açıklama")}
+          label={tr(KEYS.noteField, "Açıklama")}
           value={form.note}
           onChange={(event) => onPatch("note", event.target.value)}
-          helperText={tr("note.helper", "Bu alan zorunlu değildir.")}
+          helperText={tr(KEYS.noteHelper, "Bu alan zorunlu değildir.")}
           multiline
           minRows={4}
           fullWidth
@@ -95,26 +136,47 @@ export default function ReviewStep({
 
       <SummaryPanel
         items={[
-          { label: tr("summary.structureType", "Yapı tipi"), value: structureLabel },
-          { label: tr("summary.propertyName", "Yapı adı"), value: form.propertyName || "-" },
-          { label: tr("summary.representation", "Temsil"), value: representationLabel },
-          { label: tr("summary.authorizedPerson", "Yetkili kişi"), value: form.contactFullName || "-" },
-          { label: tr("summary.authorityStart", "Yetki başlangıcı"), value: form.authorityStartDate || "-" },
           {
-            label: tr("summary.authorityEnd", "Yetki bitişi"),
+            label: tr(KEYS.summaryStructureType, "Yapı tipi"),
+            value: structureLabel,
+          },
+          {
+            label: tr(KEYS.summaryPropertyName, "Yapı adı"),
+            value: form.propertyName || "-",
+          },
+          {
+            label: tr(KEYS.summaryRepresentation, "Temsil"),
+            value: representationLabel,
+          },
+          {
+            label: tr(KEYS.summaryAuthorizedPerson, "Yetkili kişi"),
+            value: form.contactFullName || "-",
+          },
+          {
+            label: tr(KEYS.summaryAuthorityStart, "Yetki başlangıcı"),
+            value: form.authorityStartDate || "-",
+          },
+          {
+            label: tr(KEYS.summaryAuthorityEnd, "Yetki bitişi"),
             value:
               form.authorityEndDate ||
-              tr("summary.noEndDate", "Süresiz / belirtilmedi"),
+              tr(KEYS.summaryNoEndDate, "Süresiz / belirtilmedi"),
           },
-          { label: tr("summary.address", "Adres"), value: summaryAddress || "-" },
-          { label: tr("summary.blockCount", "Blok sayısı"), value: `${blockCount}` },
           {
-            label: tr("summary.totalApartmentCount", "Toplam daire sayısı"),
+            label: tr(KEYS.summaryAddress, "Adres"),
+            value: summaryAddress || "-",
+          },
+          {
+            label: tr(KEYS.summaryBlockCount, "Blok sayısı"),
+            value: `${blockCount}`,
+          },
+          {
+            label: tr(KEYS.summaryTotalApartmentCount, "Toplam daire sayısı"),
             value: `${totalApartmentCount}`,
           },
           {
-            label: tr("summary.uploadedDocument", "Eklenen belge"),
-            value: tr("summary.documentCount", "{count} belge").replace(
+            label: tr(KEYS.summaryUploadedDocument, "Eklenen belge"),
+            value: tr(KEYS.summaryDocumentCount, "{count} belge").replace(
               "{count}",
               String(uploadedFiles.length),
             ),
