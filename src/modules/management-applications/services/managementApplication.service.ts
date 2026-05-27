@@ -145,11 +145,12 @@ function isManagedPropertyApplicationDetailDto(
   if (!data || typeof data !== "object") return false;
 
   const record = data as Record<string, unknown>;
+  const property = record.property;
 
   return (
     typeof record.id === "string" &&
-    typeof record.propertyName === "string" &&
-    "residentialUnitCount" in record &&
+    property !== null &&
+    typeof property === "object" &&
     "status" in record
   );
 }
@@ -157,37 +158,40 @@ function isManagedPropertyApplicationDetailDto(
 function mapManagedPropertyDetailToAdminDetail(
   data: ManagedPropertyApplicationDetailDto,
 ): AdminManagementApplicationDetail {
-  const createdAt = formatDateTime(data.createdAt || data.submittedAtUtc);
+  const applicant = data.applicant;
+  const property = data.property;
+  const authority = data.authority;
+
+  const createdAt = formatDateTime(data.submittedAtUtc);
 
   const updatedAt = formatDateTime(
     data.updatedAt ||
-      data.reviewedAtUtc ||
-      data.createdAt ||
-      data.submittedAtUtc,
+    data.reviewedAtUtc ||
+    data.submittedAtUtc,
   );
 
   return {
     applicationId: data.id,
-    applicationNumber: data.id,
+    applicationNumber: data.applicationNumber || data.id,
     status: normalizeAdminApplicationStatus(data.status),
-    riskLevel: "low",
+    riskLevel: normalizeAdminRiskLevel(data.riskLevel),
     createdAt,
     updatedAt,
     applicant: {
-      userId: data.applicantUserId,
-      fullName: data.applicantUserId,
-      email: "-",
-      phone: "-",
-      emailVerified: false,
-      phoneVerified: false,
-      identityNumberMasked: data.applicantUserId,
+      userId: applicant?.userId || authority?.applicantUserId || "-",
+      fullName: applicant?.fullName || "-",
+      email: applicant?.email || "-",
+      phone: applicant?.phoneNumber || "-",
+      emailVerified: Boolean(applicant?.isEmailVerified),
+      phoneVerified: Boolean(applicant?.isPhoneVerified),
+      identityNumberMasked: "-",
     },
     property: {
-      propertyName: data.propertyName || "-",
+      propertyName: property?.propertyName || "-",
       structureType: "-",
-      blockCount: Number(data.blockCount ?? 0),
-      totalApartmentCount: Number(data.residentialUnitCount ?? 0),
-      addressSummary: data.addressId || "-",
+      blockCount: Number(property?.blockCount ?? 0),
+      totalApartmentCount: Number(property?.residentialUnitCount ?? 0),
+      addressSummary: property?.addressText || property?.addressId || "-",
     },
     authority: {
       representationType: "-",
@@ -196,19 +200,43 @@ function mapManagedPropertyDetailToAdminDetail(
       authorityEndDate: data.reviewedAtUtc
         ? formatDateTime(data.reviewedAtUtc)
         : undefined,
-      authorityScope: data.description || data.applicantNote || "-",
+      authorityScope:
+        authority?.applicantNote ||
+        data.applicantNote ||
+        property?.description ||
+        "-",
     },
-    documents: [],
-    systemChecks: [],
-    timeline: [
-      {
-        id: `${data.id}:created`,
-        action: "created",
-        actorName: data.applicantUserId,
-        occurredAt: createdAt,
-        note: data.applicantNote || data.description || undefined,
-      },
-    ],
+    documents: Array.isArray(data.documents)
+      ? data.documents.map((document) => ({
+          id: document.id,
+          documentType: String(document.documentType),
+          fileName: document.fileName || "-",
+          fileSize:
+            typeof document.fileSize === "number"
+              ? `${document.fileSize} B`
+              : "-",
+          uploadedAt: formatDateTime(document.uploadedAtUtc),
+          status: normalizeAdminApplicationDocumentStatus(document.status),
+          adminNote: document.reviewNote || undefined,
+        }))
+      : [],
+    systemChecks: Array.isArray(data.systemChecks)
+      ? data.systemChecks.map((check) => ({
+          id: check.code,
+          label: check.label || check.code,
+          description: check.message || "-",
+          status: normalizeAdminCheckStatus(check.status),
+        }))
+      : [],
+    timeline: Array.isArray(data.timeline)
+      ? data.timeline.map((item, index) => ({
+          id: `${data.id}:timeline:${index}`,
+          action: item.eventType || item.title,
+          actorName: item.actorUserId || "-",
+          occurredAt: formatDateTime(item.occurredAtUtc),
+          note: item.description || item.title || undefined,
+        }))
+      : [],
   };
 }
 
@@ -227,15 +255,15 @@ function normalizeAdminDetail(
     riskLevel: normalizeAdminRiskLevel(data.riskLevel),
     documents: Array.isArray(data.documents)
       ? data.documents.map((document) => ({
-          ...document,
-          status: normalizeAdminApplicationDocumentStatus(document.status),
-        }))
+        ...document,
+        status: normalizeAdminApplicationDocumentStatus(document.status),
+      }))
       : [],
     systemChecks: Array.isArray(data.systemChecks)
       ? data.systemChecks.map((check) => ({
-          ...check,
-          status: normalizeAdminCheckStatus(check.status),
-        }))
+        ...check,
+        status: normalizeAdminCheckStatus(check.status),
+      }))
       : [],
     timeline: Array.isArray(data.timeline) ? data.timeline : [],
   };
@@ -850,28 +878,15 @@ export async function uploadManagementApplicationDocument(
   input: UploadApplicationDocumentInput,
 ): Promise<ApiResponse<ManagedPropertyApplicationDocumentUploadResultDto>> {
   try {
+
     const formData = new FormData();
 
-    const documentTypeMap: Record<string, string> = {
-      signed_contract: "ManagementContract",
-      authority_decision: "AuthorityDocument",
-      power_of_attorney: "AuthorityDocument",
-      assignment_letter: "AuthorityDocument",
-      professional_service_agreement: "ManagementContract",
-      other: "Other",
-    };
-
-    formData.append("applicationId", input.applicationId);
-
-    formData.append(
-      "documentType",
-      documentTypeMap[input.documentType] ?? "Other",
-    );
-
-    formData.append("isRequired", String(input.isRequired));
-    formData.append("isSensitive", String(input.isSensitive));
-    formData.append("sortOrder", String(input.sortOrder));
-    formData.append("file", input.file);
+    formData.append("ApplicationId", input.applicationId);
+    formData.append("File", input.file);
+    formData.append("DocumentType", String(input.documentType));
+    formData.append("IsRequired", String(input.isRequired));
+    formData.append("IsSensitive", String(input.isSensitive));
+    formData.append("SortOrder", String(input.sortOrder));
 
     const res = await fetch(
       "/api/v1.0/property-management/applications/documents/upload-file",

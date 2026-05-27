@@ -7,8 +7,9 @@ import type {
 
 export const createDefaultManagementApplicationAddress =
   (): ManagementApplicationAddressForm => ({
+    addressId: null,
     country: "",
-    countryCode: "CH",
+    countryCode: "TR",
     city: "",
     district: "",
     neighborhood: "",
@@ -63,31 +64,36 @@ function orderManagementApplicationWizardSteps(
       index: index + 1,
     }));
 }
+ 
 
-export const managementApplicationWizardSteps: WizardStep[] =
+  export const managementApplicationWizardSteps: WizardStep[] =
   orderManagementApplicationWizardSteps([
     {
       id: "basic",
       index: 1,
-      title: "Temel Bilgiler",
-      description: "Yapı, temsil ve başvuru sahibi bilgileri",
+      title: "management-applications:create.steps.basic.title",
+      description:
+        "management-applications:create.steps.basic.description",
     },
     {
       id: "address",
       index: 2,
-      title: "Adres Bilgileri",
-      description: "Adres, blok ve bağımsız bölüm bilgileri",
+      title: "management-applications:create.steps.address.title",
+      description:
+        "management-applications:create.steps.address.description",
     },
     {
       id: "documents",
       index: 3,
-      title: "Belgeler",
-      description: "Zorunlu ve destekleyici belgeler",
+      title: "management-applications:create.steps.documents.title",
+      description:
+        "management-applications:create.steps.documents.description",
     },
     {
       id: "review",
       index: 4,
-      title: "Onay",
-      description: "Özet, beyan ve gönderim",
+      title: "management-applications:create.steps.review.title",
+      description:
+        "management-applications:create.steps.review.description",
     },
   ]);

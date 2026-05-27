@@ -9,6 +9,7 @@ import {
   createManagementApplication,
   uploadManagementApplicationDocument,
 } from "../services/managementApplication.service";
+import { createManagementApplicationAddress } from "../services/managementApplicationAddress.service";
 
 import type {
   ManagedPropertyApplicationDetailDto,
@@ -19,6 +20,17 @@ import type {
 import { mapManagementApplicationFormToCreateDto } from "../utils/managementApplication.mapper";
 
 const NS = "management-applications:create";
+
+const DOCUMENT_TYPE_MAP: Record<string, number> = {
+  SignedContract: 1,
+  AuthorityDecision: 2,
+  PowerOfAttorney: 3,
+  AssignmentLetter: 4,
+  ProfessionalServiceAgreement: 5,
+  IdentityDocument: 6,
+  PropertyRegistryDocument: 7,
+  Other: 99,
+};
 
 export type ManagementApplicationSubmitResult = {
   ok?: boolean;
@@ -51,8 +63,8 @@ function isApplicationDetail(
   return (
     "id" in value &&
     "tenantId" in value &&
-    "applicantUserId" in value &&
-    "propertyName" in value
+    "applicationNumber" in value &&
+    "property" in value
   );
 }
 
@@ -109,11 +121,56 @@ export function useManagementApplicationCreate() {
       resetSubmitState();
 
       try {
-        const payload =
-          mapManagementApplicationFormToCreateDto(form);
+        const addressResponse = await createManagementApplicationAddress(
+          form.address,
+        );
 
-        const response =
-          await createManagementApplication(payload);
+        const addressId =
+          addressResponse.data?.addressId ??
+          addressResponse.data?.AddressId ??
+          addressResponse.data?.id ??
+          addressResponse.data?.Id ??
+          null;
+
+
+        if (!addressResponse.ok || !addressId) {
+          const message =
+            addressResponse.userMessage ||
+            addressResponse.message ||
+            t(`${NS}.address.create.error`);
+
+          setSubmitMessage(message);
+
+          return {
+            ok: false,
+            message,
+            data: null,
+            code:
+              addressResponse.message ||
+              "management-applications:create.address.error",
+            existingApplicationId: null,
+            uploadedDocumentCount: 0,
+            failedDocumentCount: uploadedFiles.length,
+          };
+        }
+
+
+
+
+
+
+        const formWithAddressId = {
+          ...form,
+          address: {
+            ...form.address,
+            addressId,
+          },
+        };
+
+
+        const payload =
+          mapManagementApplicationFormToCreateDto(formWithAddressId);
+        const response = await createManagementApplication(payload);
 
         const code = response.message ?? null;
 
@@ -182,7 +239,8 @@ export function useManagementApplicationCreate() {
           const uploadResponse =
             await uploadManagementApplicationDocument({
               applicationId: createdData.id,
-              documentType: item.kind,
+              documentType:
+                DOCUMENT_TYPE_MAP[item.kind] ?? 0,
               file: item.file,
               isRequired: true,
               isSensitive: false,

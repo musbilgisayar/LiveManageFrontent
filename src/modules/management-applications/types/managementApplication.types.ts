@@ -1,5 +1,6 @@
-//src/modules/management-applications/types/managementApplication.types.ts
-//bu dosya, yönetim uygulamalarıyla ilgili tür tanımlarını içerir. Yönetim uygulaması oluşturma sürecinde kullanılan form durumları, hata türleri, belge gereksinimleri ve API yanıt yapıları gibi çeşitli türler tanımlanır. Bu türler, yönetim uygulaması modülünün farklı bileşenlerinde ve işlevlerinde tutarlı bir şekilde kullanılmak üzere merkezi bir konumda toplanır.
+// src/modules/management-applications/types/managementApplication.types.ts
+//bu dosya yönetim başvuruları modülünde kullanılan tür tanımlarını içermektedir. Yönetim başvuruları modülü, kullanıcıların mülk yönetimi için başvuru yapmalarını, başvurularını incelemelerini ve yöneticilerin bu başvurular üzerinde karar vermelerini sağlayan bir dizi özellik sunar. Bu tür tanımları, modülün farklı bileşenleri ve işlevleri arasında tutarlı veri yapıları kullanılmasını sağlar.
+
 export type ManagementStructureType = "site" | "apartment";
 
 export type RepresentationType =
@@ -18,25 +19,22 @@ export type RequiredDocumentKind =
   | "PropertyRegistryDocument"
   | "Other";
 
- export type UploadedFileItem = {
+export type UploadedFileItem = {
   id: string;
   name: string;
   sizeLabel: string;
   kind: RequiredDocumentKind;
   description?: string;
-
   file: File;
-
   backendDocumentId?: string;
   fileDocumentId?: string;
-
   sortOrder?: number;
-
   uploadStatus?: "local" | "uploading" | "uploaded" | "failed";
   errorMessage?: string;
 };
 
 export type ManagementApplicationAddressForm = {
+  addressId?: string | null;
   country: string;
   countryCode: string;
   city: string;
@@ -101,28 +99,91 @@ export type CreateManagedPropertyApplicationRequestDto = {
 };
 
 export type ManagedPropertyApplicationStatus = number;
+export type ManagedPropertyApplicationDocumentType = number;
+export type ManagedPropertyApplicationDocumentStatus = number;
 
-export type ManagedPropertyApplicationDetailDto = {
-  id: string;
-  tenantId: string;
-  applicantUserId: string;
+export type ManagedPropertyApplicationApplicantDto = {
+  userId: string;
+  fullName?: string | null;
+  email?: string | null;
+  phoneNumber?: string | null;
+  isEmailVerified: boolean;
+  isPhoneVerified: boolean;
+};
+
+export type ManagedPropertyApplicationPropertyDto = {
   managedPropertyId?: string | null;
   propertyName: string;
   description?: string | null;
   addressId?: string | null;
+  addressText?: string | null;
   residentialUnitCount: number;
   commercialUnitCount: number;
   blockCount?: number | null;
+};
+
+export type ManagedPropertyApplicationAuthorityDto = {
+  applicantUserId: string;
+  reviewedByUserId?: string | null;
+  reviewedAtUtc?: string | null;
+  reviewNote?: string | null;
+  rejectReason?: string | null;
+  applicantNote?: string | null;
+};
+
+export type ManagedPropertyApplicationDocumentDto = {
+  id: string;
+  fileDocumentId: string;
+  documentType: ManagedPropertyApplicationDocumentType;
+  status: ManagedPropertyApplicationDocumentStatus;
+  fileName?: string | null;
+  contentType?: string | null;
+  fileSize?: number | null;
+  isRequired: boolean;
+  isSensitive: boolean;
+  sortOrder: number;
+  reviewNote?: string | null;
+  reviewedByUserId?: string | null;
+  reviewedAtUtc?: string | null;
+  uploadedAtUtc: string;
+  isEncrypted: boolean;
+  isPublic: boolean;
+};
+
+export type ManagedPropertyApplicationSystemCheckDto = {
+  code: string;
+  label: string;
+  status: string;
+  message?: string | null;
+};
+
+export type ManagedPropertyApplicationTimelineItemDto = {
+  eventType: string;
+  title: string;
+  description?: string | null;
+  occurredAtUtc: string;
+  actorUserId?: string | null;
+};
+
+export type ManagedPropertyApplicationDetailDto = {
+  id: string;
+  tenantId: string;
+  applicationNumber: string;
   status: ManagedPropertyApplicationStatus;
+  riskLevel: string;
   submittedAtUtc: string;
   reviewedAtUtc?: string | null;
-  reviewedByUserId?: string | null;
+  updatedAt?: string | null;
+  applicant: ManagedPropertyApplicationApplicantDto;
+  property: ManagedPropertyApplicationPropertyDto;
+  authority: ManagedPropertyApplicationAuthorityDto;
+  documents: ManagedPropertyApplicationDocumentDto[];
+  systemChecks: ManagedPropertyApplicationSystemCheckDto[];
+  timeline: ManagedPropertyApplicationTimelineItemDto[];
   reviewNote?: string | null;
   rejectReason?: string | null;
   applicantNote?: string | null;
   autoCreateUnitsAfterApproval: boolean;
-  createdAt: string;
-  updatedAt?: string | null;
   isActive: boolean;
 };
 
@@ -132,25 +193,20 @@ export type ApiResponse<T> = {
   userMessage?: string | null;
   data?: T | null;
 };
+
 export type ManagedPropertyApplicationListItemDto = {
   id: string;
-
   applicantUserId: string;
   managedPropertyId?: string | null;
   addressId?: string | null;
-
   propertyName: string;
   description?: string | null;
-
   residentialUnitCount: number;
   commercialUnitCount: number;
   blockCount?: number | null;
-
   status: ManagedPropertyApplicationStatus;
-
   submittedAtUtc: string;
   reviewedAtUtc?: string | null;
-
   autoCreateUnitsAfterApproval: boolean;
   isActive: boolean;
 };
@@ -187,7 +243,6 @@ export type ManagementApplicationListViewItem = {
   description: string;
 };
 
-
 export type ManagedPropertyApplicationDocumentListItemDto = {
   id: string;
   applicationId: string;
@@ -219,7 +274,7 @@ export type ManagedPropertyApplicationDocumentUploadResultDto = {
 
 export type UploadApplicationDocumentInput = {
   applicationId: string;
-  documentType: RequiredDocumentKind;
+  documentType: number;
   file: File;
   isRequired: boolean;
   isSensitive: boolean;

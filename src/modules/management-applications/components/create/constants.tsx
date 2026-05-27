@@ -158,38 +158,47 @@ export const documentCatalog: Record<
     fallbackDescription: string;
   }
 > = {
-  signed_contract: {
-    titleKey: "management-applications:create.documents.signedContract.title",
+  SignedContract: {
+    titleKey:
+      "management-applications:create.documents.signedContract.title",
     descriptionKey:
       "management-applications:create.documents.signedContract.description",
     fallbackTitle: "İmzalı Hizmet Sözleşmesi",
     fallbackDescription:
       "Sistemden indirilen sözleşmenin imzalanmış hali.",
   },
-  authority_decision: {
-    titleKey: "management-applications:create.documents.authorityDecision.title",
+
+  AuthorityDecision: {
+    titleKey:
+      "management-applications:create.documents.authorityDecision.title",
     descriptionKey:
       "management-applications:create.documents.authorityDecision.description",
     fallbackTitle: "Yönetim Kararı / Karar Defteri",
     fallbackDescription:
       "Yönetim veya kurul kararı ile verilen yetki belgesi.",
   },
-  power_of_attorney: {
-    titleKey: "management-applications:create.documents.powerOfAttorney.title",
+
+  PowerOfAttorney: {
+    titleKey:
+      "management-applications:create.documents.powerOfAttorney.title",
     descriptionKey:
       "management-applications:create.documents.powerOfAttorney.description",
     fallbackTitle: "Vekaletname",
-    fallbackDescription: "Temsil yetkisini gösteren resmi vekalet belgesi.",
+    fallbackDescription:
+      "Temsil yetkisini gösteren resmi vekalet belgesi.",
   },
-  assignment_letter: {
-    titleKey: "management-applications:create.documents.assignmentLetter.title",
+
+  AssignmentLetter: {
+    titleKey:
+      "management-applications:create.documents.assignmentLetter.title",
     descriptionKey:
       "management-applications:create.documents.assignmentLetter.description",
     fallbackTitle: "Görevlendirme Yazısı",
     fallbackDescription:
       "Kurul, yönetim veya malikçe verilmiş görevlendirme belgesi.",
   },
-  professional_service_agreement: {
+
+  ProfessionalServiceAgreement: {
     titleKey:
       "management-applications:create.documents.professionalServiceAgreement.title",
     descriptionKey:
@@ -198,12 +207,35 @@ export const documentCatalog: Record<
     fallbackDescription:
       "Profesyonel yönetici ile yapı arasında yapılan hizmet sözleşmesi.",
   },
-  other: {
-    titleKey: "management-applications:create.documents.other.title",
+
+  IdentityDocument: {
+    titleKey:
+      "management-applications:create.documents.identityDocument.title",
+    descriptionKey:
+      "management-applications:create.documents.identityDocument.description",
+    fallbackTitle: "Kimlik Belgesi",
+    fallbackDescription:
+      "Kimlik doğrulaması için yüklenen resmi belge.",
+  },
+
+  PropertyRegistryDocument: {
+    titleKey:
+      "management-applications:create.documents.propertyRegistryDocument.title",
+    descriptionKey:
+      "management-applications:create.documents.propertyRegistryDocument.description",
+    fallbackTitle: "Tapu / Mülkiyet Belgesi",
+    fallbackDescription:
+      "Yapının mülkiyet durumunu gösteren resmi belge.",
+  },
+
+  Other: {
+    titleKey:
+      "management-applications:create.documents.other.title",
     descriptionKey:
       "management-applications:create.documents.other.description",
     fallbackTitle: "Diğer Belge",
-    fallbackDescription: "Başvuruyu destekleyen ek belge.",
+    fallbackDescription:
+      "Başvuruyu destekleyen ek belge.",
   },
 };
 

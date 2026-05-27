@@ -1,3 +1,5 @@
+//src/modules/management-applications/views/ManagementApplicationDetailView.tsx
+//bu dosya AdminManagementApplicationDetailView'dan kopyalanarak oluşturulmuştur. İki dosya benzer yapıya sahip olmakla birlikte, bu dosya yönetici olmayan kullanıcıların kendi başvurularını görüntülemesi için optimize edilmiştir. Yöneticiye özel bilgiler ve işlemler bu dosyada yer almamaktadır.
 "use client";
 
 import React, { useMemo } from "react";

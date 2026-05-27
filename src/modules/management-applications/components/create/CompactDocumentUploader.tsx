@@ -89,10 +89,10 @@ export default function CompactDocumentUploader({
       map.set(item.kind, item);
     });
 
-    map.set("other", {
-      kind: "other",
-      title: documentCatalog.other.fallbackTitle,
-      description: documentCatalog.other.fallbackDescription,
+    map.set("Other", {
+      kind: "Other",
+      title: documentCatalog.Other.fallbackTitle,
+      description: documentCatalog.Other.fallbackDescription,
       required: false,
     });
 
