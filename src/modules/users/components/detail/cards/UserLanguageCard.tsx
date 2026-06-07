@@ -27,6 +27,7 @@ import { useCustomizer } from "@/app/context/customizerContext";
 import { usePathname, useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import { patchWebFetcher } from "@/utils/fetchers.web.client";
+import { refreshWebSession } from "@/utils/webSessionRefresh.client";
 import { API_BASE as CONFIG_API_BASE } from "@/lib/config";
 import { normalizeCultures } from "@/lib/i18n/normalizeCultures";
 
@@ -234,6 +235,19 @@ export default function UserLanguageCard({
 
       setLocaleCookie(nextCulture);
       setIsLanguage(nextCulture);
+
+      const refreshResult = await refreshWebSession("user-language-card", {
+        acceptLanguage: nextCulture,
+      });
+
+      if (!refreshResult.ok) {
+        console.warn(
+          "[UserLanguageCard] Session refresh failed after language change",
+          {
+            status: refreshResult.status,
+          }
+        );
+      }
 
       await mutate("/api/v1.0/account/me");
       await mutate("/api/v1.0/userprofile/me");

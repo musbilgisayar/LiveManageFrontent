@@ -9,6 +9,9 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useCustomizer } from "@/app/context/customizerContext";
 import { useCulture } from "@/app/context/CultureContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { patchWebFetcher } from "@/utils/fetchers.web.client";
+import { refreshWebSession } from "@/utils/webSessionRefresh.client";
 
 interface LanguageItem {
   cultureCode: string;
@@ -54,6 +57,7 @@ export default function LanguageSelector() {
 
   const { isLanguage, setIsLanguage } = useCustomizer();
   const { languages: cultureLanguages } = useCulture();
+  const { isAuthenticated, refreshUser } = useAuth();
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -95,7 +99,7 @@ export default function LanguageSelector() {
   }, [pathname]);
 
   const handleChangeLanguage = useCallback(
-    (cultureCode: string) => {
+    async (cultureCode: string) => {
       const newPrefix = toPrefix(cultureCode);
       const stripped = pathname.replace(LOCALE_PREFIX_RE, "") || "/";
 
@@ -111,9 +115,59 @@ export default function LanguageSelector() {
 
       setLocaleCookie(newPrefix);
       handleClose();
+
+      try {
+        if (isAuthenticated) {
+          const json: any = await patchWebFetcher("/api/v1.0/account/me", {
+            cultureCode,
+          });
+
+          if (json?.ok === false) {
+            throw new Error(
+              json?.userMessage ||
+                json?.message ||
+                json?.error ||
+                "Language update failed"
+            );
+          }
+
+          const refreshResult = await refreshWebSession("language-selector", {
+            acceptLanguage: cultureCode,
+          });
+
+          if (!refreshResult.ok) {
+            console.warn(
+              "[LanguageSelector] Session refresh failed after language change",
+              {
+                status: refreshResult.status,
+              }
+            );
+          } else {
+            await refreshUser();
+          }
+        }
+      } catch (error: any) {
+        console.warn("[LanguageSelector] Language update flow failed", {
+          message: error?.message ?? String(error),
+          status: error?.status,
+          code: error?.code,
+        });
+
+        if (error?.code === "SESSION_EXPIRED") {
+          return;
+        }
+      }
+
       router.push(`${nextPath}${search}${hash}`);
     },
-    [pathname, router, setIsLanguage, isLanguage]
+    [
+      isAuthenticated,
+      isLanguage,
+      pathname,
+      refreshUser,
+      router,
+      setIsLanguage,
+    ]
   );
 
   useEffect(() => {

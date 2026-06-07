@@ -338,17 +338,17 @@ export async function proxyJsonWithWebAuth({
 }: ProxyJsonWithWebAuthOptions) {
   const parsedBody = parseProxyBody(body);
 
-  return proxyJsonWithCentralWebAuth(req, {
-    url: backendPath,
-    method,
-    body: parsedBody,
-    timeoutMs,
-    logLabel,
-    extraHeaders: {
-      "accept-language": resolveAcceptLanguage(req, "tr-TR"),
-    },
-    skipContentTypeInjection: typeof parsedBody === "string",
-  });
+return proxyJsonWithCentralWebAuth(req, {
+  url: backendPath,
+  method,
+  body: parsedBody,
+  timeoutMs,
+  logLabel,
+  headers: {
+    "accept-language": resolveAcceptLanguage(req, "tr-TR"),
+  },
+});
+
 }
 
 export function buildBackendUrl(path: string): string {

@@ -1,29 +1,11 @@
 // src/app/api/i18n/[lang]/dict/route.ts
 export const runtime = "nodejs";
 
-/**
- * 🌍 DICT ROUTE (ANA KAPI)
- * --------------------------------------------------------------------------
- * Bu route i18n sisteminin TEK giriş kapısıdır.
- *
- * Roller:
- * - dict   → ✅ ANA KAPI (frontend burayı çağırır)
- * - bundle → internal provider (backend proxy + cache)
- * - strings→ adapter (opsiyonel)
- *
- * Sorumluluklar:
- * - namespace yönetimi
- * - bundle çağrıları
- * - sonuçları merge etme
- * - tek sözlük döndürme
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import {
   newCorrelationId,
   normalizeLang,
   resolveTenantKey,
-  resolveAcceptLanguage,
   fetchWithTimeout,
 } from "@/app/api/_shared/bff";
 
@@ -41,9 +23,6 @@ function warn(msg: string, data?: unknown) {
   console.warn("⚠️ [DICT]", msg, data ?? "");
 }
 
-/**
- * ns parametresini normalize eder
- */
 function normalizeNamespaces(nsRaw: string): string[] {
   return Array.from(
     new Set(
@@ -109,13 +88,18 @@ async function fetchNamespaceBundle(params: {
 }) {
   const { ns, lang, corrId, tenantKey, acceptLanguage, baseUrl, cookieHeader } = params;
 
-const url =
-  `${baseUrl}/api/v1.0/localization/bundle` +
-  `?ns=${encodeURIComponent(ns)}` +
-  `&format=full` +
-  `&culture=${encodeURIComponent(acceptLanguage)}`;
+  const url =
+    `${baseUrl}/api/v1.0/localization/bundle` +
+    `?ns=${encodeURIComponent(ns)}` +
+    `&format=full` +
+    `&culture=${encodeURIComponent(acceptLanguage)}`;
 
-  log("➡️ NS FETCH", { ns, url });
+  log("➡️ NS FETCH", {
+    ns,
+    lang,
+    acceptLanguage,
+    url,
+  });
 
   const res = await fetchWithTimeout(
     url,
@@ -180,7 +164,16 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   const corrId = newCorrelationId(req.headers);
   const { tenantKey } = resolveTenantKey(req);
-  const acceptLanguage = resolveAcceptLanguage(req, culture);
+
+  /**
+   * LFOS:
+   * Route locale authoritative.
+   *
+   * /api/i18n/de/dict çağrıldıysa culture kesin de-DE olmalıdır.
+   * Cookie veya Accept-Language route locale'i override etmemelidir.
+   */
+  const acceptLanguage = culture;
+
   const cookieHeader = req.headers.get("cookie") || "";
 
   const host =
@@ -195,7 +188,10 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? `${proto}://${host}`;
 
   log("🚀 DICT START", {
+    rawLang,
     lang,
+    culture,
+    acceptLanguage,
     nsList,
     tenantKey,
     corrId,

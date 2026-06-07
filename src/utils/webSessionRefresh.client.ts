@@ -10,7 +10,7 @@ type RefreshResult = {
   status?: number;
 };
 
-let refreshInFlight: Promise<RefreshResult> | null = null;
+const refreshInFlightByLanguage = new Map<string, Promise<RefreshResult>>();
 
 const isBrowser = (): boolean => typeof window !== "undefined";
 
@@ -51,7 +51,22 @@ const LOCALE_TO_CULTURE: Record<string, string> = {
   tr: "tr-TR",
 };
 
-const getCurrentLanguage = (): string => {
+const normalizeLanguage = (value?: string | null): string | null => {
+  const clean = value?.trim();
+  if (!clean) return null;
+
+  const prefix = clean.split("-")[0]?.toLowerCase();
+  if (prefix && LOCALE_TO_CULTURE[prefix]) {
+    return LOCALE_TO_CULTURE[prefix];
+  }
+
+  return clean;
+};
+
+const getCurrentLanguage = (override?: string): string => {
+  const normalizedOverride = normalizeLanguage(override);
+  if (normalizedOverride) return normalizedOverride;
+
   if (!isBrowser()) return "tr-TR";
 
   const firstSegment = window.location.pathname.split("/").filter(Boolean)[0];
@@ -87,21 +102,26 @@ function isRefreshResponseSuccessful(payload: any): boolean {
   return false;
 }
 
-async function executeRefreshWebSession(reqId?: string): Promise<RefreshResult> {
+async function executeRefreshWebSession(
+  reqId?: string,
+  acceptLanguage?: string
+): Promise<RefreshResult> {
   const tenantKey = getTenantKey();
+  const language = getCurrentLanguage(acceptLanguage);
 
   try {
     if (CLIENT_LOG_ON()) {
       console.info("[WEB REFRESH][REQ] Oturum yenileniyor", {
         reqId,
         tenantKey,
+        acceptLanguage: language,
         endpoint: REFRESH_ENDPOINT,
       });
     }
 
     const headers: Record<string, string> = {
       accept: "application/json",
-      "accept-language": getCurrentLanguage(),
+      "accept-language": language,
       "Content-Type": "application/json",
     };
 
@@ -143,6 +163,7 @@ async function executeRefreshWebSession(reqId?: string): Promise<RefreshResult> 
       console.info("[WEB REFRESH][RES] Refresh basarili", {
         reqId,
         tenantKey,
+        acceptLanguage: language,
         status: res.status,
       });
     }
@@ -168,16 +189,29 @@ async function executeRefreshWebSession(reqId?: string): Promise<RefreshResult> 
   }
 }
 
-export function refreshWebSession(reqId?: string): Promise<RefreshResult> {
-  if (!refreshInFlight) {
-    refreshInFlight = executeRefreshWebSession(reqId).finally(() => {
-      refreshInFlight = null;
-    });
-  } else if (CLIENT_LOG_ON()) {
-    console.info("[WEB REFRESH][JOIN] Devam eden refresh bekleniyor", {
-      reqId,
-    });
+export function refreshWebSession(
+  reqId?: string,
+  options?: { acceptLanguage?: string }
+): Promise<RefreshResult> {
+  const language = getCurrentLanguage(options?.acceptLanguage);
+  const existing = refreshInFlightByLanguage.get(language);
+
+  if (existing) {
+    if (CLIENT_LOG_ON()) {
+      console.info("[WEB REFRESH][JOIN] Devam eden refresh bekleniyor", {
+        reqId,
+        acceptLanguage: language,
+      });
+    }
+
+    return existing;
   }
 
-  return refreshInFlight;
+  const promise = executeRefreshWebSession(reqId, language).finally(() => {
+    refreshInFlightByLanguage.delete(language);
+  });
+
+  refreshInFlightByLanguage.set(language, promise);
+
+  return promise;
 }

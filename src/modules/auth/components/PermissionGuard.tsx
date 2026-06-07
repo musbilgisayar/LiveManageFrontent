@@ -1,12 +1,24 @@
-//src/modules/auth/components/PermissionGuard.tsx
-//bu dosya, belirli izinlere sahip olmayan kullanıcıların erişimini engellemek için kullanılan bir bileşendir. Kullanıcının kimlik doğrulama durumunu ve gerekli izinlere sahip olup olmadığını kontrol eder. Eğer kullanıcı doğrulanmamışsa, giriş sayfasına yönlendirilir. Eğer kullanıcı gerekli izinlere sahip değilse, yetkisiz erişim sayfasına yönlendirilir. İzinler kontrol edilirken, yükleniyor durumunda bir yükleme göstergesi ve mesajı görüntülenir.
+//bu dosya, belirli izinlere sahip kullanıcıların erişebileceği bir bileşen olan PermissionGuard'ı tanımlar. Bu bileşen, çocuk bileşenlerini sarmalayarak, kullanıcının gerekli izinlere sahip olup olmadığını kontrol eder ve uygun şekilde yönlendirir veya mesaj gösterir.
+// src/modules/auth/components/PermissionGuard.tsx
+
 "use client";
 
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Box, CircularProgress, Stack, Typography } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CircularProgress,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { IconArrowBackUp, IconLockAccess } from "@tabler/icons-react";
 
 import { useAuth } from "@/app/context/AuthContext";
+import { useI18nNs } from "@/app/context/i18nContext";
 import {
   buildLoginUrlWithReturnUrl,
   getCurrentReturnUrl,
@@ -16,6 +28,8 @@ type PermissionGuardProps = {
   children: React.ReactNode;
   requiredAnyPermissions: string[];
 };
+
+const REDIRECT_DELAY_MS = 3000;
 
 function resolveLocale(params: Record<string, string | string[] | undefined>) {
   const raw = params.locale;
@@ -34,77 +48,128 @@ export default function PermissionGuard({
   const router = useRouter();
   const params = useParams();
 
+  const { t } = useI18nNs("auth");
+
   const locale = resolveLocale(
-    params as Record<string, string | string[] | undefined>
+    params as Record<string, string | string[] | undefined>,
   );
 
   const { loading, isAuthenticated, hasAnyPermission } = useAuth();
 
   const allowed = hasAnyPermission(requiredAnyPermissions);
 
-useEffect(() => {
-  if (loading) return;
+  useEffect(() => {
+    if (loading) return;
 
-  if (!isAuthenticated) {
-    router.replace(buildLoginUrlWithReturnUrl(locale, getCurrentReturnUrl()));
-    return;
+    if (!isAuthenticated) {
+      router.replace(
+        buildLoginUrlWithReturnUrl(locale, getCurrentReturnUrl()),
+      );
+      return;
+    }
+
+    if (!allowed) {
+      const timer = window.setTimeout(() => {
+        router.replace(`/${locale}/dashboard`);
+      }, REDIRECT_DELAY_MS);
+
+      return () => window.clearTimeout(timer);
+    }
+  }, [loading, isAuthenticated, allowed, locale, router]);
+
+  if (loading || !isAuthenticated) {
+    return (
+      <Box
+        sx={{
+          minHeight: "60vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          px: 2,
+        }}
+      >
+        <Stack spacing={2} alignItems="center" textAlign="center">
+          <CircularProgress size={30} />
+
+          <Typography variant="body2" color="text.secondary">
+            {t("permissionGuard.checking")}
+          </Typography>
+        </Stack>
+      </Box>
+    );
   }
 
   if (!allowed) {
-    const timer = window.setTimeout(() => {
-      router.replace(`/${locale}/dashboard`);
-    }, 3000);
+    return (
+      <Box
+        sx={{
+          minHeight: "60vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          px: 2,
+        }}
+      >
+        <Card
+          elevation={0}
+          sx={{
+            width: "100%",
+            maxWidth: 520,
+            borderRadius: 4,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.paper",
+          }}
+        >
+          <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
+            <Stack spacing={3} alignItems="center" textAlign="center">
+              <Box
+                sx={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  bgcolor: "warning.light",
+                  color: "warning.contrastText",
+                }}
+              >
+                <IconLockAccess size={36} />
+              </Box>
 
-    return () => window.clearTimeout(timer);
+              <Stack spacing={1}>
+                <Typography variant="h5" fontWeight={800}>
+                  {t("permissionGuard.deniedTitle")}
+                </Typography>
+
+                <Typography variant="body2" color="text.secondary">
+                  {t("permissionGuard.deniedDescription")}
+                </Typography>
+              </Stack>
+
+              <Alert severity="info" sx={{ width: "100%", textAlign: "left" }}>
+                {t("permissionGuard.redirecting")}
+              </Alert>
+
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <CircularProgress size={22} />
+
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<IconArrowBackUp size={18} />}
+                  onClick={() => router.replace(`/${locale}/dashboard`)}
+                >
+                  {t("permissionGuard.goDashboard")}
+                </Button>
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
+    );
   }
-}, [loading, isAuthenticated, allowed, locale, router]);
-
-if (loading || !isAuthenticated) {
-  return (
-    <Box
-      sx={{
-        minHeight: "60vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Stack spacing={2} alignItems="center">
-        <CircularProgress size={28} />
-        <Typography variant="body2" color="text.secondary">
-          Yetki kontrol ediliyor...
-        </Typography>
-      </Stack>
-    </Box>
-  );
-}
-
-if (!allowed) {
-  return (
-    <Box
-      sx={{
-        minHeight: "60vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        px: 2,
-      }}
-    >
-      <Stack spacing={2} alignItems="center" textAlign="center">
-        <Typography variant="h6" fontWeight={700}>
-          Bu sayfaya erişim yetkiniz yok.
-        </Typography>
-
-        <Typography variant="body2" color="text.secondary">
-          Birkaç saniye içinde ana panele yönlendirileceksiniz.
-        </Typography>
-
-        <CircularProgress size={24} />
-      </Stack>
-    </Box>
-  );
-}
-
 
   return <>{children}</>;
 }
