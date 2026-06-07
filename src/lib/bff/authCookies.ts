@@ -1,3 +1,4 @@
+//src/lib/bff/authCookies.ts
 export const ACCESS_TOKEN_COOKIE_NAMES = [
   process.env.BFF_ACCESS_TOKEN_COOKIE_NAME || "accessToken",
   "accessToken",
@@ -14,6 +15,20 @@ export const REFRESH_TOKEN_COOKIE_NAMES = [
   "lm.rt",
 ] as const;
 
+export const SESSION_MARKER_COOKIE_NAMES = [
+  process.env.BFF_SESSION_MARKER_COOKIE_NAME || "lm.sid",
+  "lm.sid",
+  "logged_in",
+] as const;
+
+export const AUTH_STATE_COOKIE_NAMES = [
+  process.env.BFF_AUTH_STATE_COOKIE_NAME || "lm.auth",
+  "lm.auth",
+  "auth_state",
+] as const;
+
+export const DEVICE_ID_COOKIE_NAMES = ["lm.did"] as const;
+
 export type AuthTokenPayload = {
   accessToken?: string | null;
   refreshToken?: string | null;
@@ -29,7 +44,7 @@ type CookieRequestLike = {
 
 export function readFirstCookieValue(
   req: CookieRequestLike,
-  names: readonly string[]
+  names: readonly string[],
 ): string | null {
   for (const name of names) {
     const value = req.cookies.get(name)?.value?.trim();
@@ -45,9 +60,24 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function readString(record: Record<string, unknown> | null, key: string): string | null {
+function readString(
+  record: Record<string, unknown> | null,
+  key: string,
+): string | null {
   const value = record?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readFirstString(
+  record: Record<string, unknown> | null,
+  keys: readonly string[],
+): string | null {
+  for (const key of keys) {
+    const value = readString(record, key);
+    if (value) return value;
+  }
+
+  return null;
 }
 
 export function extractAuthTokenPayload(payload: unknown): AuthTokenPayload {
@@ -61,44 +91,47 @@ export function extractAuthTokenPayload(payload: unknown): AuthTokenPayload {
 
   return {
     accessToken:
-      readString(data, "accessToken") ??
-      readString(innerData, "accessToken") ??
-      readString(tokens, "accessToken") ??
-      readString(innerTokens, "accessToken") ??
-      readString(auth, "accessToken") ??
-      readString(innerAuth, "accessToken") ??
-      readString(root, "accessToken"),
+      readFirstString(data, ["accessToken", "AccessToken"]) ??
+      readFirstString(innerData, ["accessToken", "AccessToken"]) ??
+      readFirstString(tokens, ["accessToken", "AccessToken"]) ??
+      readFirstString(innerTokens, ["accessToken", "AccessToken"]) ??
+      readFirstString(auth, ["accessToken", "AccessToken"]) ??
+      readFirstString(innerAuth, ["accessToken", "AccessToken"]) ??
+      readFirstString(root, ["accessToken", "AccessToken"]),
+
     refreshToken:
-      readString(data, "refreshToken") ??
-      readString(innerData, "refreshToken") ??
-      readString(tokens, "refreshToken") ??
-      readString(innerTokens, "refreshToken") ??
-      readString(auth, "refreshToken") ??
-      readString(innerAuth, "refreshToken") ??
-      readString(root, "refreshToken"),
+      readFirstString(data, ["refreshToken", "RefreshToken"]) ??
+      readFirstString(innerData, ["refreshToken", "RefreshToken"]) ??
+      readFirstString(tokens, ["refreshToken", "RefreshToken"]) ??
+      readFirstString(innerTokens, ["refreshToken", "RefreshToken"]) ??
+      readFirstString(auth, ["refreshToken", "RefreshToken"]) ??
+      readFirstString(innerAuth, ["refreshToken", "RefreshToken"]) ??
+      readFirstString(root, ["refreshToken", "RefreshToken"]),
+
     accessTokenExpiresAt:
-      readString(data, "accessTokenExpiresAt") ??
-      readString(innerData, "accessTokenExpiresAt") ??
-      readString(tokens, "accessTokenExpiresAt") ??
-      readString(innerTokens, "accessTokenExpiresAt") ??
-      readString(auth, "accessTokenExpiresAt") ??
-      readString(innerAuth, "accessTokenExpiresAt") ??
-      readString(root, "accessTokenExpiresAt"),
+      readFirstString(data, ["accessTokenExpiresAt", "AccessTokenExpiresAt"]) ??
+      readFirstString(innerData, ["accessTokenExpiresAt", "AccessTokenExpiresAt"]) ??
+      readFirstString(tokens, ["accessTokenExpiresAt", "AccessTokenExpiresAt"]) ??
+      readFirstString(innerTokens, ["accessTokenExpiresAt", "AccessTokenExpiresAt"]) ??
+      readFirstString(auth, ["accessTokenExpiresAt", "AccessTokenExpiresAt"]) ??
+      readFirstString(innerAuth, ["accessTokenExpiresAt", "AccessTokenExpiresAt"]) ??
+      readFirstString(root, ["accessTokenExpiresAt", "AccessTokenExpiresAt"]),
+
     refreshTokenExpiresAt:
-      readString(data, "refreshTokenExpiresAt") ??
-      readString(innerData, "refreshTokenExpiresAt") ??
-      readString(tokens, "refreshTokenExpiresAt") ??
-      readString(innerTokens, "refreshTokenExpiresAt") ??
-      readString(auth, "refreshTokenExpiresAt") ??
-      readString(innerAuth, "refreshTokenExpiresAt") ??
-      readString(root, "refreshTokenExpiresAt"),
+      readFirstString(data, ["refreshTokenExpiresAt", "RefreshTokenExpiresAt"]) ??
+      readFirstString(innerData, ["refreshTokenExpiresAt", "RefreshTokenExpiresAt"]) ??
+      readFirstString(tokens, ["refreshTokenExpiresAt", "RefreshTokenExpiresAt"]) ??
+      readFirstString(innerTokens, ["refreshTokenExpiresAt", "RefreshTokenExpiresAt"]) ??
+      readFirstString(auth, ["refreshTokenExpiresAt", "RefreshTokenExpiresAt"]) ??
+      readFirstString(innerAuth, ["refreshTokenExpiresAt", "RefreshTokenExpiresAt"]) ??
+      readFirstString(root, ["refreshTokenExpiresAt", "RefreshTokenExpiresAt"]),
   };
 }
 
 export function createHttpOnlyCookie(
   name: string,
   value: string,
-  expiresAt?: string | null
+  expiresAt?: string | null,
 ): string {
   const parts = [
     `${name}=${value}`,
@@ -133,17 +166,48 @@ export function createExpiredHttpOnlyCookie(name: string): string {
     .join("; ");
 }
 
-export function appendExpiredAuthCookies(headers: Headers): number {
-  const names = new Set<string>([
-    ...ACCESS_TOKEN_COOKIE_NAMES,
-    ...REFRESH_TOKEN_COOKIE_NAMES,
-  ]);
+function uniqueCookieNames(names: readonly string[]): string[] {
+  return Array.from(new Set(names.filter(Boolean)));
+}
 
-  for (const name of names) {
+function appendExpiredCookies(
+  headers: Headers,
+  names: readonly string[],
+): number {
+  const uniqueNames = uniqueCookieNames(names);
+
+  for (const name of uniqueNames) {
     headers.append("set-cookie", createExpiredHttpOnlyCookie(name));
   }
 
-  return names.size;
+  return uniqueNames.length;
+}
+
+export function appendExpiredAuthCookies(headers: Headers): number {
+  return appendExpiredCookies(headers, [
+    ...ACCESS_TOKEN_COOKIE_NAMES,
+    ...REFRESH_TOKEN_COOKIE_NAMES,
+    ...SESSION_MARKER_COOKIE_NAMES,
+    ...AUTH_STATE_COOKIE_NAMES,
+  ]);
+}
+
+export function appendExpiredLegacyAuthCookies(headers: Headers): number {
+  const canonicalNames = new Set<string>([
+    ACCESS_TOKEN_COOKIE_NAMES[0],
+    REFRESH_TOKEN_COOKIE_NAMES[0],
+    SESSION_MARKER_COOKIE_NAMES[0],
+    AUTH_STATE_COOKIE_NAMES[0],
+  ]);
+
+  const legacyNames = [
+    ...ACCESS_TOKEN_COOKIE_NAMES,
+    ...REFRESH_TOKEN_COOKIE_NAMES,
+    ...SESSION_MARKER_COOKIE_NAMES,
+    ...AUTH_STATE_COOKIE_NAMES,
+  ].filter((name) => !canonicalNames.has(name));
+
+  return appendExpiredCookies(headers, legacyNames);
 }
 
 export function normalizeSetCookieForBrowser(cookie: string): string {
@@ -158,7 +222,7 @@ export function normalizeSetCookieForBrowser(cookie: string): string {
 
 export function appendAuthCookiesFromPayload(
   payload: unknown,
-  headers: Headers
+  headers: Headers,
 ): number {
   const tokens = extractAuthTokenPayload(payload);
   let count = 0;
@@ -169,9 +233,10 @@ export function appendAuthCookiesFromPayload(
       createHttpOnlyCookie(
         ACCESS_TOKEN_COOKIE_NAMES[0],
         tokens.accessToken,
-        null
-      )
+        tokens.accessTokenExpiresAt,
+      ),
     );
+
     count += 1;
   }
 
@@ -181,10 +246,15 @@ export function appendAuthCookiesFromPayload(
       createHttpOnlyCookie(
         REFRESH_TOKEN_COOKIE_NAMES[0],
         tokens.refreshToken,
-        tokens.refreshTokenExpiresAt
-      )
+        tokens.refreshTokenExpiresAt,
+      ),
     );
+
     count += 1;
+  }
+
+  if (count > 0) {
+    count += appendExpiredLegacyAuthCookies(headers);
   }
 
   return count;

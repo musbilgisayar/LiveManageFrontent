@@ -1,362 +1,268 @@
-export const runtime = "nodejs";
-export const preferredRegion = "auto";
-export const maxDuration = 10;
-
+//src/app/api/v1.0/account/refresh/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { resolveTenantDetailed } from "@/lib/bff/resolveTenant";
+
 import {
-  buildWebAuthHeaders,
-  extractSetCookies,
-  filterProxyResponseHeaders,
-  isAbortLikeError,
+  ACCESS_TOKEN_COOKIE_NAMES,
+  DEVICE_ID_COOKIE_NAMES,
+  REFRESH_TOKEN_COOKIE_NAMES,
+  appendAuthCookiesFromPayload,
+  appendExpiredAuthCookies,
+  appendExpiredLegacyAuthCookies,
+  normalizeSetCookieForBrowser,
+  readFirstCookieValue,
+} from "@/lib/bff/authCookies";
+import {
+  DEFAULT_JSON_TIMEOUT_MS,
   resolveBackendUrl,
   resolveCorrelationId,
   withTimeout,
 } from "@/lib/bff/webAuthProxyCore";
-import { createLogger } from "@/lib/bff/logger";
-import {
-  ACCESS_TOKEN_COOKIE_NAMES,
-  REFRESH_TOKEN_COOKIE_NAMES,
-  appendExpiredAuthCookies,
-  createHttpOnlyCookie,
-  extractAuthTokenPayload,
-  normalizeSetCookieForBrowser,
-  readFirstCookieValue,
-} from "@/lib/bff/authCookies";
+import { resolveTenant } from "@/lib/bff/resolveTenant";
 
-const REFRESH_TIMEOUT_MS = parseInt(
-  process.env.BFF_REFRESH_TIMEOUT_MS || "10000",
-  10
-);
+function readSetCookieHeaders(response: Response): string[] {
+  const getSetCookie = (
+    response.headers as Headers & {
+      getSetCookie?: () => string[];
+    }
+  ).getSetCookie;
 
-const DEVICE_ID_COOKIE_NAME = "lm.did";
+  if (typeof getSetCookie === "function") {
+    return getSetCookie.call(response.headers);
+  }
 
-interface RefreshResponseData {
-  accessToken?: string | null;
-  refreshToken?: string | null;
-  accessTokenExpiresAt?: string | null;
-  refreshTokenExpiresAt?: string | null;
+  const single = response.headers.get("set-cookie");
+
+  if (!single) return [];
+
+  return single
+    .split(/,(?=\s*[^;,]+=)/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-interface RefreshApiResponse {
-  ok?: boolean;
-  success?: boolean;
-  isSuccess?: boolean;
-  message?: string;
-  userMessage?: string;
-  data?: RefreshResponseData | Record<string, unknown> | null;
-}
+async function readBodySafely(response: Response): Promise<unknown> {
+  const text = await response.text().catch(() => "");
 
-interface ErrorResponse {
-  ok: false;
-  error: string;
-  correlationId: string;
-  message?: string;
-  userMessage?: string;
-}
-
-interface SuccessResponse {
-  ok: true;
-  message?: string;
-  userMessage?: string;
-  data: {
-    accessTokenExpiresAt?: string | null;
-    refreshTokenExpiresAt?: string | null;
-  };
-  correlationId: string;
-}
-
-function safeJsonParse<T>(text: string): T | null {
   if (!text) return null;
 
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(text);
   } catch {
-    return null;
+    return text;
   }
 }
 
-function validateRefreshResponse(body: unknown): body is RefreshApiResponse {
-  if (!body || typeof body !== "object") return false;
-
-  const value = body as Record<string, unknown>;
-  const data =
-    value.data && typeof value.data === "object"
-      ? (value.data as Record<string, unknown>)
-      : null;
-
+function isExplicitRefreshFailure(body: unknown): boolean {
   return (
-    typeof value.ok === "boolean" ||
-    typeof value.success === "boolean" ||
-    typeof value.isSuccess === "boolean" ||
-    typeof data?.ok === "boolean" ||
-    typeof data?.success === "boolean" ||
-    typeof data?.isSuccess === "boolean"
+    !!body &&
+    typeof body === "object" &&
+    (body as Record<string, unknown>).ok === false
   );
 }
 
-function isRefreshBodySuccessful(body: RefreshApiResponse | null): boolean {
-  if (!body) return false;
-  if (body.ok === true) return true;
-  if (body.success === true) return true;
-  if (body.isSuccess === true) return true;
-
-  const data =
-    body.data && typeof body.data === "object"
-      ? (body.data as Record<string, unknown>)
-      : null;
-
+function isExplicitRefreshSuccess(body: unknown): boolean {
   return (
-    data?.ok === true ||
-    data?.success === true ||
-    data?.isSuccess === true
+    !!body &&
+    typeof body === "object" &&
+    (body as Record<string, unknown>).ok === true
   );
 }
 
-function appendNormalizedSetCookies(
-  headers: Headers,
-  cookies: string[]
-): number {
-  let count = 0;
+function isHardRefreshStatus(status: number): boolean {
+  return status === 401 || status === 403;
+}
 
-  for (const cookie of cookies) {
-    if (!cookie) continue;
-    headers.append("set-cookie", normalizeSetCookieForBrowser(cookie));
-    count += 1;
+function resolveFailureReason(
+  body: unknown,
+  upstreamStatus: number,
+): string {
+  if (isHardRefreshStatus(upstreamStatus)) {
+    return upstreamStatus === 403 ? "FORBIDDEN" : "UNAUTHORIZED";
   }
 
-  return count;
+  if (upstreamStatus >= 500) {
+    return "REFRESH_UPSTREAM_ERROR";
+  }
+
+  if (isExplicitRefreshFailure(body)) {
+    return "REFRESH_SOFT_FAILED";
+  }
+
+  return "REFRESH_FAILED";
 }
 
-function hasAuthCookie(cookies: string[], names: readonly string[]): boolean {
-  const expected = new Set(names.map((name) => name.toLowerCase()));
+function createRefreshFailureResponse(
+  body: unknown,
+  upstreamStatus: number,
+  correlationId: string,
+): NextResponse {
+  const hardFailure = isHardRefreshStatus(upstreamStatus);
+  const reason = resolveFailureReason(body, upstreamStatus);
 
-  return cookies.some((cookie) => {
-    const name = cookie.split("=")[0]?.trim().toLowerCase();
-    return !!name && expected.has(name);
-  });
+  const existingPayload =
+    body && typeof body === "object"
+      ? (body as Record<string, unknown>)
+      : {};
+
+  const messageKey = "auth.sessionExpired";
+  const redirectTo = "/login";
+
+  const response = NextResponse.json(
+    {
+      ...existingPayload,
+      ok: false,
+      code: "SESSION_EXPIRED",
+      error: "SESSION_EXPIRED",
+      message: messageKey,
+      userMessage:
+        typeof existingPayload.userMessage === "string" &&
+        existingPayload.userMessage.trim().length > 0
+          ? existingPayload.userMessage
+          : "Oturum süreniz doldu. Lütfen tekrar giriş yapın.",
+      userMessageKey: messageKey,
+      reason,
+      redirectTo,
+      correlationId,
+      data: {
+        ...(existingPayload.data &&
+        typeof existingPayload.data === "object"
+          ? (existingPayload.data as Record<string, unknown>)
+          : {}),
+        code: "SESSION_EXPIRED",
+        reason,
+        redirectTo,
+        messageKey,
+        fallbackUserMessage: "Oturum süreniz doldu. Lütfen tekrar giriş yapın.",
+      },
+    },
+    {
+      status: hardFailure ? 401 : 401,
+    },
+  );
+
+  const expiredCookieCount = appendExpiredAuthCookies(response.headers);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.warn("[BFF][BFF-REFRESH] Refresh session expired", {
+      upstreamStatus,
+      hardFailure,
+      reason,
+      expiredCookieCount,
+      correlationId,
+    });
+  }
+
+  return response;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const correlationId = resolveCorrelationId(req);
-  const logger = createLogger("BFF-REFRESH", correlationId);
-  const tenantResolution = resolveTenantDetailed(req);
+  const tenantKey = resolveTenant(req);
   const upstreamUrl = resolveBackendUrl("/api/v1.0/account/refresh");
 
-  const currentAccessToken = readFirstCookieValue(req, ACCESS_TOKEN_COOKIE_NAMES);
+  const accessToken = readFirstCookieValue(req, ACCESS_TOKEN_COOKIE_NAMES);
+  const refreshToken = readFirstCookieValue(req, REFRESH_TOKEN_COOKIE_NAMES);
+  const deviceId = readFirstCookieValue(req, DEVICE_ID_COOKIE_NAMES);
 
-  const currentRefreshToken = readFirstCookieValue(req, REFRESH_TOKEN_COOKIE_NAMES);
-
-  const currentDeviceId = req.cookies.get(DEVICE_ID_COOKIE_NAME)?.value ?? null;
-
-  logger.debug("Refresh request received", {
-    upstreamUrl,
-    tenantKey: tenantResolution.tenantKey,
-    tenantSource: tenantResolution.source,
-    hasAccessToken: !!currentAccessToken,
-    hasRefreshToken: !!currentRefreshToken,
-    hasDeviceId: !!currentDeviceId,
-    accessTokenLength: currentAccessToken?.length ?? 0,
-    refreshTokenLength: currentRefreshToken?.length ?? 0,
-  });
-
-  if (!currentRefreshToken) {
-    logger.warn("RefreshToken cookie missing");
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        ok: false,
-        error: "BFF_REFRESH_TOKEN_MISSING",
-        correlationId,
-      },
-      { status: 401 }
-    );
-  }
-
-  const headers = buildWebAuthHeaders(req, correlationId, {
-    defaultAccept: "application/json",
-    includeAuthorization: false,
-  });
-
-  headers.set("content-type", "application/json");
-
-  const { signal, cleanup } = withTimeout(REFRESH_TIMEOUT_MS);
+  const { signal, cleanup } = withTimeout(DEFAULT_JSON_TIMEOUT_MS);
 
   try {
     const upstream = await fetch(upstreamUrl, {
       method: "POST",
-      headers,
-      body: JSON.stringify({
-        accessToken: currentAccessToken,
-        refreshToken: currentRefreshToken,
-        clientType: "web",
-        deviceId: currentDeviceId,
-      }),
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "x-correlation-id": correlationId,
+        "x-tenant-key": tenantKey,
+        "accept-language": req.headers.get("accept-language") ?? "tr-TR",
+        cookie: req.headers.get("cookie") ?? "",
+      },
       cache: "no-store",
       signal,
+      body: JSON.stringify({
+        accessToken,
+        refreshToken,
+        deviceId,
+        clientType: "web",
+      }),
     });
 
-    const responseText = await upstream.text();
-    const upstreamSetCookies = extractSetCookies(upstream.headers);
-    const responseHeaders = filterProxyResponseHeaders(upstream, []);
+    const body = await readBodySafely(upstream);
 
-    const parsedBody = safeJsonParse<RefreshApiResponse>(responseText);
-    const body = validateRefreshResponse(parsedBody) ? parsedBody : null;
+    const upstreamCookies = readSetCookieHeaders(upstream)
+      .map(normalizeSetCookieForBrowser)
+      .filter(Boolean);
 
-    logger.debug("Refresh body debug", {
-      upstreamStatus: upstream.status,
-      upstreamOk: upstream.ok,
-      contentType: upstream.headers.get("content-type"),
-      hasResponseText: !!responseText,
-      responseTextLength: responseText.length,
-      responseTextPreview:
-        process.env.NODE_ENV === "production"
-          ? undefined
-          : responseText.slice(0, 1000),
-      parsedBodyType: typeof parsedBody,
-      parsedBodyKeys:
-        parsedBody && typeof parsedBody === "object"
-          ? Object.keys(parsedBody)
-          : [],
-      parsedDataKeys:
-        parsedBody?.data && typeof parsedBody.data === "object"
-          ? Object.keys(parsedBody.data)
-          : [],
-      parsedOk: parsedBody?.ok,
-      validated: !!body,
-      upstreamSetCookieCount: upstreamSetCookies.length,
-    });
+    const responseHeaders = new Headers();
 
-    const tokenPayload = extractAuthTokenPayload(parsedBody);
-    const newAccessToken = tokenPayload.accessToken ?? null;
-    const newRefreshToken = tokenPayload.refreshToken ?? null;
-    const accessTokenExpiresAt = tokenPayload.accessTokenExpiresAt ?? null;
-    const refreshTokenExpiresAt = tokenPayload.refreshTokenExpiresAt ?? null;
-    const forwardedCookieCount = appendNormalizedSetCookies(
-      responseHeaders,
-      upstreamSetCookies
-    );
-    const upstreamHasAccessTokenCookie = hasAuthCookie(
-      upstreamSetCookies,
-      ACCESS_TOKEN_COOKIE_NAMES
-    );
-    const upstreamHasRefreshTokenCookie = hasAuthCookie(
-      upstreamSetCookies,
-      REFRESH_TOKEN_COOKIE_NAMES
-    );
-
-    if (!upstreamHasAccessTokenCookie && newAccessToken) {
-      responseHeaders.append(
-        "set-cookie",
-        createHttpOnlyCookie(
-          ACCESS_TOKEN_COOKIE_NAMES[0],
-          newAccessToken,
-          null
-        )
-      );
+    for (const cookie of upstreamCookies) {
+      responseHeaders.append("set-cookie", cookie);
     }
 
-    if (!upstreamHasRefreshTokenCookie && newRefreshToken) {
-      responseHeaders.append(
-        "set-cookie",
-        createHttpOnlyCookie(
-          REFRESH_TOKEN_COOKIE_NAMES[0],
-          newRefreshToken,
-          refreshTokenExpiresAt
-        )
-      );
+    let payloadCookieCount = 0;
+
+    if (upstreamCookies.length === 0) {
+      payloadCookieCount = appendAuthCookiesFromPayload(body, responseHeaders);
+    } else {
+      appendExpiredLegacyAuthCookies(responseHeaders);
     }
 
-    const hasAccessTokenCookie =
-      !!newAccessToken ||
-      upstreamHasAccessTokenCookie;
+    const bodyFailure = isExplicitRefreshFailure(body);
+    const bodySuccess = isExplicitRefreshSuccess(body);
 
-    const hasRefreshTokenCookie =
-      !!newRefreshToken ||
-      upstreamHasRefreshTokenCookie;
-
-    const isSuccess =
+    const effectiveOk =
       upstream.ok &&
-      isRefreshBodySuccessful(body) &&
-      hasAccessTokenCookie &&
-      hasRefreshTokenCookie;
+      !bodyFailure &&
+      (upstreamCookies.length > 0 || payloadCookieCount > 0 || bodySuccess);
 
-    if (!isSuccess) {
-      const expiredCookieCount = appendExpiredAuthCookies(responseHeaders);
-
-      logger.warn("Refresh failed", {
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[BFF][BFF-REFRESH] Refresh body debug", {
         upstreamStatus: upstream.status,
-        bodyOk: isRefreshBodySuccessful(body),
-        hasAccessToken: !!newAccessToken,
-        hasRefreshToken: !!newRefreshToken,
-        hasAccessTokenCookie,
-        hasRefreshTokenCookie,
-        hasDeviceId: !!currentDeviceId,
-        forwardedCookieCount,
-        expiredCookieCount,
+        upstreamOk: upstream.ok,
+        bodyFailure,
+        bodySuccess,
+        effectiveOk,
+        upstreamSetCookieCount: upstreamCookies.length,
+        payloadCookieCount,
+        correlationId,
       });
-
-      return NextResponse.json<ErrorResponse>(
-        {
-          ok: false,
-          error: "BFF_REFRESH_FAILED",
-          message: body?.message ?? "Refresh failed.",
-          userMessage:
-            body?.userMessage ?? body?.message ?? "Oturum yenilenemedi.",
-          correlationId,
-        },
-        {
-          status: upstream.status === 200 ? 401 : upstream.status,
-          headers: responseHeaders,
-        }
-      );
     }
 
-    logger.info("Refresh successful", {
-      hasAccessToken: !!newAccessToken,
-      hasRefreshToken: !!newRefreshToken,
-      generatedSetCookieCount:
-        Number(!upstreamHasAccessTokenCookie && !!newAccessToken) +
-        Number(!upstreamHasRefreshTokenCookie && !!newRefreshToken),
-      upstreamSetCookieCount: upstreamSetCookies.length,
-      forwardedCookieCount,
-    });
+    if (!effectiveOk) {
+      return createRefreshFailureResponse(body, upstream.status, correlationId);
+    }
 
-    const successBody: SuccessResponse = {
-      ok: true,
-      message: body?.message,
-      userMessage: body?.userMessage ?? body?.message,
-      data: {
-        accessTokenExpiresAt,
-        refreshTokenExpiresAt,
-      },
-      correlationId,
-    };
-
-    responseHeaders.set("content-type", "application/json; charset=utf-8");
-
-    return new NextResponse(JSON.stringify(successBody), {
-      status: upstream.status,
-      headers: responseHeaders,
-    });
-  } catch (error: unknown) {
-    const isTimeout = isAbortLikeError(error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-
-    logger.error("Refresh error", {
-      error: errorMessage,
-      isTimeout,
-      upstreamUrl,
-    });
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        ok: false,
-        error: isTimeout ? "BFF_REFRESH_TIMEOUT" : "BFF_REFRESH_ERROR",
+    return NextResponse.json(
+      body ?? {
+        ok: true,
+        message: "Token yenilendi.",
+        userMessage: "Token yenilendi.",
         correlationId,
       },
-      { status: isTimeout ? 504 : 500 }
+      {
+        status: 200,
+        headers: responseHeaders,
+      },
+    );
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[BFF][BFF-REFRESH] Refresh proxy error", {
+        correlationId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Token yenileme isteği başarısız oldu.",
+        userMessage: "Oturum kontrolü sırasında geçici bir sorun oluştu.",
+        reason: "NETWORK_ERROR",
+        correlationId,
+      },
+      {
+        status: 503,
+      },
     );
   } finally {
     cleanup();

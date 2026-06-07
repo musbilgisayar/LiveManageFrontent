@@ -22,7 +22,7 @@ import EmailIcon from "@mui/icons-material/Email";
 import LockIcon from "@mui/icons-material/Lock";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { setTenantKey } from "@/utils/tenant.client";
 import { textFieldStyle } from "@/app/components/shared/styles";
 import { useAuth } from "@/app/context/AuthContext";
@@ -40,6 +40,7 @@ const LOGIN_TENANT_OPTIONS = [
 export default function AuthLoginForm() {
   const { t } = useI18nNs(["auth"]);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { locale } = useParams() as { locale: string };
   const { refreshUser } = useAuth();
 
@@ -60,6 +61,7 @@ export default function AuthLoginForm() {
   } = useAuthLoginForm({
     t,
     locale,
+    returnUrl: searchParams.get("returnUrl"),
     onSuccess: async (redirectTo) => {
       await refreshUser();
       router.replace(redirectTo);

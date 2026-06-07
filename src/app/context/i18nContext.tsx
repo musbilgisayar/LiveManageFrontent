@@ -11,6 +11,10 @@ import React, {
   useState,
 } from "react";
 import { useParams } from "next/navigation";
+import {
+  isSessionExpiredPayload,
+  redirectToLoginForSessionExpired,
+} from "@/utils/sessionExpiredRedirect.client";
 
 type Dict = Record<string, string>;
 
@@ -493,6 +497,10 @@ const hasNamespaces = useCallback(
           });
 
           if (!response.ok || json?.ok === false) {
+            if (isSessionExpiredPayload(json, response.status)) {
+              redirectToLoginForSessionExpired();
+            }
+
             warn("Namespace fetch başarısız", {
               lang: effectiveLang,
               ns,

@@ -3,8 +3,9 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
+
 import { cacheGet, cacheSet, getServiceToken } from "@/app/api/_shared/bff";
-import { resolveTenant } from "./resolveTenant";
+
 import { ensureBackendTlsReady } from "./backendTls";
 import {
   applyCacheHeaders,
@@ -12,17 +13,20 @@ import {
   buildWeakEtag,
   shouldReturnNotModified,
 } from "./httpCache";
+import { resolveTenant } from "./resolveTenant";
 import {
   DEFAULT_JSON_TIMEOUT_MS,
+  type RefreshResult,
   type WebProxyMethod,
-  resolveBackendUrl,
-  resolveCorrelationId,
-  withTimeout,
+  appendSessionExpiredCookies,
+  buildMergedRetryHeaders,
   buildWebAuthHeaders,
-  tryRefreshWebSession,
   filterProxyResponseHeaders,
   isAbortLikeError,
-  buildMergedRetryHeaders,
+  resolveBackendUrl,
+  resolveCorrelationId,
+  tryRefreshWebSession,
+  withTimeout,
 } from "./webAuthProxyCore";
 
 const DEBUG_BFF_PROXY =
@@ -78,7 +82,7 @@ type ProxyCachedOptions = {
   disableTenantHeader?: boolean;
   transformResponse?: (
     payload: unknown,
-    context: CachedTransformContext
+    context: CachedTransformContext,
   ) => CachedTransformResult | Promise<CachedTransformResult>;
 };
 
@@ -88,7 +92,7 @@ type ReadPayloadResult =
   | { kind: "empty"; value: null };
 
 function isCacheEnabled(
-  cache: CachePolicy | undefined
+  cache: CachePolicy | undefined,
 ): cache is EnabledCachePolicy {
   return cache !== false && cache !== undefined;
 }
@@ -113,7 +117,7 @@ function applyJsonContentTypeIfNeeded(headers: Headers, body: unknown): void {
     "content-type",
     typeof body === "string"
       ? "text/plain; charset=utf-8"
-      : "application/json"
+      : "application/json",
   );
 }
 
@@ -137,35 +141,86 @@ async function readResponsePayload(res: Response): Promise<ReadPayloadResult> {
   }
 }
 
+function isHardRefreshFailure(refresh: RefreshResult): boolean {
+  const reason = refresh.reason?.toUpperCase() ?? "";
+
+  return (
+    refresh.status === 401 ||
+    refresh.status === 403 ||
+    reason.includes("UNAUTHORIZED") ||
+    reason.includes("FORBIDDEN") ||
+    reason.includes("INVALID_REFRESH") ||
+    reason.includes("BLACKLIST") ||
+    reason.includes("REUSE") ||
+    reason.includes("DEVICE_MISMATCH")
+  );
+}
+
 function buildSessionExpiredResponse(
   upstream: Response,
   correlationId: string,
-  logLabel: string
+  logLabel: string,
+  refresh: RefreshResult,
+  req: NextRequest,
 ): NextResponse {
+  const headers = filterProxyResponseHeaders(upstream, []);
+
+  const shouldExpireCookies = isHardRefreshFailure(refresh);
+
+  const expiredCookieCount = shouldExpireCookies
+    ? appendSessionExpiredCookies(headers)
+    : 0;
+
+  const locale = req.nextUrl.pathname.split("/").filter(Boolean)[0] || "";
+
+  const redirectTo = /^[a-z]{2}(?:-[A-Za-z]{2})?$/i.test(locale)
+    ? `/${locale}/auth/login`
+    : "/auth/login";
+
   if (process.env.NODE_ENV !== "production") {
     console.warn(`[BFF][${logLabel}][SESSION_EXPIRED]`, {
       correlationId,
       reason: "RefreshFailed",
       upstreamStatus: upstream.status,
+      refreshStatus: refresh.status,
+      refreshReason: refresh.reason,
+      shouldExpireCookies,
+      expiredCookieCount,
     });
   }
 
   return NextResponse.json(
     {
       ok: false,
-      message: "auth.session_expired",
+      status: 401,
+      code: "SESSION_EXPIRED",
+      error: "SESSION_EXPIRED",
+      message: "auth.sessionExpired",
       userMessage: "Oturum süreniz doldu. Lütfen tekrar giriş yapın.",
       correlationId,
       data: {
+        code: "SESSION_EXPIRED",
         reason: "SessionExpired",
-        redirectTo: "/login",
+        redirectTo,
       },
     },
     {
       status: 401,
-      headers: filterProxyResponseHeaders(upstream, []),
-    }
+      headers,
+    },
   );
+}
+
+function applyAuthorizationFromRequest(
+  req: NextRequest,
+  headers: Headers,
+): void {
+  const auth =
+    req.headers.get("authorization") ?? req.headers.get("Authorization");
+
+  if (auth?.trim()) {
+    headers.set("authorization", auth.trim());
+  }
 }
 
 async function buildRequestHeaders(
@@ -177,29 +232,31 @@ async function buildRequestHeaders(
     authMode: "web-auth-only" | "client-or-service-token";
     requestIfNoneMatch?: string | null;
     disableTenantHeader?: boolean;
-  }
+  },
 ): Promise<Headers> {
   const headers = buildWebAuthHeaders(req, correlationId, {
     extraHeaders: options.extraHeaders,
     defaultAccept: "application/json",
-    includeAuthorization: true,
     includeTenantHeader: !options.disableTenantHeader,
   });
 
   applyJsonContentTypeIfNeeded(headers, options.body);
 
   const ifNoneMatch = options.requestIfNoneMatch?.trim();
+
   if (ifNoneMatch) {
     headers.set("if-none-match", ifNoneMatch);
   }
 
-  if (
-    options.authMode === "client-or-service-token" &&
-    !headers.get("authorization")
-  ) {
-    const serviceToken = await getServiceToken();
-    if (serviceToken?.trim()) {
-      headers.set("authorization", `Bearer ${serviceToken.trim()}`);
+  if (options.authMode === "client-or-service-token") {
+    applyAuthorizationFromRequest(req, headers);
+
+    if (!headers.get("authorization")) {
+      const serviceToken = await getServiceToken();
+
+      if (serviceToken?.trim()) {
+        headers.set("authorization", `Bearer ${serviceToken.trim()}`);
+      }
     }
   }
 
@@ -208,13 +265,14 @@ async function buildRequestHeaders(
 
 function applyResultHeaders(
   responseHeaders: Headers,
-  transformedHeaders?: HeadersInit
+  transformedHeaders?: HeadersInit,
 ): Headers {
   if (!transformedHeaders) {
     return responseHeaders;
   }
 
   const extra = new Headers(transformedHeaders);
+
   extra.forEach((value, key) => {
     responseHeaders.set(key, value);
   });
@@ -224,13 +282,14 @@ function applyResultHeaders(
 
 function applyResponseHeaders(
   responseHeaders: Headers,
-  extraHeaders?: HeadersInit
+  extraHeaders?: HeadersInit,
 ): Headers {
   if (!extraHeaders) {
     return responseHeaders;
   }
 
   const extra = new Headers(extraHeaders);
+
   extra.forEach((value, key) => {
     responseHeaders.set(key, value);
   });
@@ -240,7 +299,7 @@ function applyResponseHeaders(
 
 export async function proxyJsonWithWebAuthCached(
   req: NextRequest,
-  options: ProxyCachedOptions
+  options: ProxyCachedOptions,
 ) {
   await ensureBackendTlsReady();
 
@@ -251,6 +310,7 @@ export async function proxyJsonWithWebAuthCached(
   const correlationId = resolveCorrelationId(req);
   const authMode = options.authMode ?? "web-auth-only";
   const cachePolicy = options.cache;
+
   const requestIfNoneMatch = isCacheEnabled(cachePolicy)
     ? cachePolicy.requestIfNoneMatch?.trim() ||
       req.headers.get("if-none-match") ||
@@ -319,7 +379,7 @@ export async function proxyJsonWithWebAuthCached(
         {
           status: 200,
           headers,
-        }
+        },
       );
     }
   }
@@ -366,11 +426,17 @@ export async function proxyJsonWithWebAuthCached(
         req,
         timeoutMs,
         correlationId,
-        logLabel
+        logLabel,
       );
 
       if (!refresh.ok) {
-        return buildSessionExpiredResponse(upstream, correlationId, logLabel);
+        return buildSessionExpiredResponse(
+          upstream,
+          correlationId,
+          logLabel,
+          refresh,
+          req,
+        );
       }
 
       refreshCookies = refresh.cookies;
@@ -409,6 +475,16 @@ export async function proxyJsonWithWebAuthCached(
           refreshCookieCount: refreshCookies.length,
         });
       }
+
+      if (upstream.status === 401) {
+        return buildSessionExpiredResponse(
+          upstream,
+          correlationId,
+          logLabel,
+          refresh,
+          req,
+        );
+      }
     }
 
     if (
@@ -426,6 +502,7 @@ export async function proxyJsonWithWebAuthCached(
       });
 
       applyResponseHeaders(response.headers, options.responseHeaders);
+
       return response;
     }
 
@@ -484,7 +561,7 @@ export async function proxyJsonWithWebAuthCached(
 
       const mergedHeaders = applyResultHeaders(
         responseHeaders,
-        transformed.headers
+        transformed.headers,
       );
 
       applyResponseHeaders(mergedHeaders, options.responseHeaders);
@@ -503,13 +580,13 @@ export async function proxyJsonWithWebAuthCached(
         cacheSet(
           cachePolicy.key,
           cacheValue,
-          transformed.cache?.ttlSeconds ?? cachePolicy.ttlSeconds
+          transformed.cache?.ttlSeconds ?? cachePolicy.ttlSeconds,
         );
 
         const etag = buildWeakEtag(
           transformed.cache?.etagSource !== undefined
             ? transformed.cache.etagSource
-            : cacheValue
+            : cacheValue,
         );
 
         applyCacheHeaders(mergedHeaders, {
@@ -587,7 +664,9 @@ export async function proxyJsonWithWebAuthCached(
           : "Beklenmeyen bir hata oluştu.",
         correlationId,
       },
-      { status: isTimeout ? 504 : 500 }
+      {
+        status: isTimeout ? 504 : 500,
+      },
     );
   }
 }

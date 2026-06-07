@@ -1,18 +1,19 @@
-//src/utils/fetchers.web.client.ts
+// src/utils/fetchers.web.client.ts
 "use client";
 
 /**
  * Web fetchers
- * - HttpOnly cookie tabanlı çalışır
- * - access token localStorage'dan okunmaz
- * - 401 → BFF refresh → retry
- * - accept-language + correlation-id ekler
- * - tenant key sadece varsa eklenir
+ * - Uses HttpOnly cookie auth through the BFF.
+ * - Does not read access tokens from localStorage.
+ * - Leaves 401 refresh/retry decisions to BFF proxy helpers.
+ * - Adds accept-language, correlation-id and tenant headers.
  */
 
 import { getTenantKey } from "@/utils/tenant.client";
-
-const REFRESH_ENDPOINT = "/api/v1.0/account/refresh";
+import {
+  isSessionExpiredPayload,
+  redirectToLoginForSessionExpired,
+} from "@/utils/sessionExpiredRedirect.client";
 
 const isBrowser = (): boolean => typeof window !== "undefined";
 
@@ -58,111 +59,38 @@ const safeJson = async (res: Response) => {
   }
 };
 
+const LOCALE_TO_CULTURE: Record<string, string> = {
+  ar: "ar-SA",
+  de: "de-DE",
+  en: "en-US",
+  fr: "fr-FR",
+  it: "it-IT",
+  tr: "tr-TR",
+};
+
+const getLocaleFromPathname = (): string | null => {
+  if (!isBrowser()) return null;
+
+  const firstSegment = window.location.pathname.split("/").filter(Boolean)[0];
+  const locale = firstSegment?.split("-")[0]?.toLowerCase();
+
+  return locale && LOCALE_TO_CULTURE[locale] ? locale : null;
+};
+
 const getCurrentLanguage = (): string => {
   if (!isBrowser()) return "tr-TR";
 
-  return (
-    localStorage.getItem("lang") ||
-    localStorage.getItem("i18nextLng") ||
-    navigator.language ||
-    "tr-TR"
-  );
-};
+  const pathLocale = getLocaleFromPathname();
+  if (pathLocale) return LOCALE_TO_CULTURE[pathLocale];
 
-function isRefreshResponseSuccessful(payload: any): boolean {
-  if (!payload || typeof payload !== "object") return false;
-
-  if (payload.ok === true) return true;
-  if (payload.isSuccess === true) return true;
-  if (payload.success === true) return true;
-
-  if (payload.data && typeof payload.data === "object") {
-    if (payload.data.isSuccess === true) return true;
-    if (payload.data.success === true) return true;
+  const stored =
+    localStorage.getItem("lang") || localStorage.getItem("i18nextLng");
+  const storedLocale = stored?.split("-")[0]?.toLowerCase();
+  if (storedLocale && LOCALE_TO_CULTURE[storedLocale]) {
+    return LOCALE_TO_CULTURE[storedLocale];
   }
 
-  return false;
-}
-
-const refreshWebSession = async (
-  reqId: string
-): Promise<{ ok: boolean; payload?: any; status?: number }> => {
-  const tenantKey = getTenantKey();
-
-  try {
-    if (CLIENT_LOG_ON()) {
-      console.info("🟡 [WEB FETCH][REFRESH][REQ] Oturum yenileniyor", {
-        reqId,
-        tenantKey,
-        endpoint: REFRESH_ENDPOINT,
-      });
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
-    if (tenantKey) {
-      headers["X-Tenant-Key"] = tenantKey;
-    }
-
-    const res = await fetch(REFRESH_ENDPOINT, {
-      method: "POST",
-      credentials: "include",
-      cache: "no-store",
-      headers,
-    });
-
-    const payload = await safeJson(res);
-    const bodyOk = isRefreshResponseSuccessful(payload);
-    const finalOk = res.ok && bodyOk;
-
-    if (!finalOk) {
-      if (CLIENT_LOG_ON()) {
-        console.warn("🟠 [WEB FETCH][REFRESH][RES] Refresh başarısız", {
-          reqId,
-          tenantKey,
-          status: res.status,
-          responseOk: res.ok,
-          bodyOk,
-          payload,
-        });
-      }
-
-      return {
-        ok: false,
-        payload,
-        status: res.status,
-      };
-    }
-
-    if (CLIENT_LOG_ON()) {
-      console.info("🟢 [WEB FETCH][REFRESH][RES] Refresh başarılı", {
-        reqId,
-        tenantKey,
-        status: res.status,
-      });
-    }
-
-    return {
-      ok: true,
-      payload,
-      status: res.status,
-    };
-  } catch (error: any) {
-    if (CLIENT_LOG_ON()) {
-      console.error("🔴 [WEB FETCH][REFRESH][EX] Refresh hatası", {
-        reqId,
-        tenantKey,
-        message: error?.message ?? String(error),
-      });
-    }
-
-    return {
-      ok: false,
-      status: 0,
-    };
-  }
+  return "tr-TR";
 };
 
 type FetchJsonOptions = Omit<RequestInit, "headers"> & {
@@ -197,7 +125,7 @@ const fetchJsonWithWebAuth = async (
   }
 
   if (CLIENT_LOG_ON()) {
-    console.info("🔵 [WEB FETCH][REQ] İstek gönderiliyor", {
+    console.info("[WEB FETCH][REQ] Sending request", {
       reqId,
       method,
       url,
@@ -207,51 +135,37 @@ const fetchJsonWithWebAuth = async (
     });
   }
 
-  let res = await fetch(url, {
+  const res = await fetch(url, {
     ...options,
     headers,
     credentials: "include",
     cache: "no-store",
   });
 
-  if (res.status === 401) {
-    if (CLIENT_LOG_ON()) {
-      console.warn("🟠 [WEB FETCH][401] 401 alındı, refresh denenecek", {
-        reqId,
-        method,
-        url,
-        tenantKey,
-      });
-    }
-
-    const refreshResult = await refreshWebSession(reqId);
-
-    if (refreshResult.ok) {
-      res = await fetch(url, {
-        ...options,
-        headers,
-        credentials: "include",
-        cache: "no-store",
-      });
-    } else {
-      if (CLIENT_LOG_ON()) {
-        console.warn("🔴 [WEB FETCH][401] Refresh başarısız, retry yapılmadı", {
-          reqId,
-          method,
-          url,
-          tenantKey,
-          refreshStatus: refreshResult.status,
-          refreshPayload: refreshResult.payload,
-        });
-      }
-    }
-  }
-
   const json = await safeJson(res);
   const elapsedMs = Math.round(nowMs() - startedAt);
 
+const sessionExpired = isSessionExpiredPayload(json, res.status);
+
+if (sessionExpired) {
+  if (isBrowser()) {
+    window.dispatchEvent(
+      new CustomEvent("livemanage:session-expired", {
+        detail: {
+          source: "fetchers.web.client",
+          url,
+          status: res.status,
+          payload: json,
+        },
+      }),
+    );
+  }
+
+  redirectToLoginForSessionExpired();
+}
+
   if (CLIENT_LOG_ON()) {
-    console.info("🟣 [WEB FETCH][RES] Yanıt alındı", {
+    console.info("[WEB FETCH][RES] Response received", {
       reqId,
       method,
       url,
@@ -273,7 +187,7 @@ const fetchJsonWithWebAuth = async (
       `Request failed (${res.status})`;
 
     if (CLIENT_LOG_ON()) {
-      console.error("🔴 [WEB FETCH][ERR] Başarısız yanıt", {
+      console.error("[WEB FETCH][ERR] Failed response", {
         reqId,
         method,
         url,
@@ -287,11 +201,13 @@ const fetchJsonWithWebAuth = async (
       status?: number;
       payload?: any;
       reqId?: string;
+      code?: string;
     };
 
     err.status = res.status;
     err.payload = json;
     err.reqId = reqId;
+    err.code = sessionExpired ? "SESSION_EXPIRED" : undefined;
     throw err;
   }
 
@@ -324,3 +240,7 @@ export const deleteWebFetcher = (url: string, arg?: any) =>
     method: "DELETE",
     ...(arg ? { body: JSON.stringify(arg) } : {}),
   });
+
+export const putFetcher = putWebFetcher;
+export const patchFetcher = patchWebFetcher;
+export const deleteFetcher = deleteWebFetcher;

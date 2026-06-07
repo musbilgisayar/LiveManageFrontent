@@ -4,20 +4,18 @@
 import {
   alpha,
   Box,
+  Checkbox,
   Chip,
+  FormControlLabel,
   MenuItem,
   Stack,
   TextField,
   Typography,
   useTheme,
 } from "@mui/material";
-
 import type { Theme } from "@mui/material/styles";
-
 import {
-  IconBuildingCommunity,
   IconCheck,
-  IconFileDescription,
   IconId,
   IconMail,
   IconPhone,
@@ -27,8 +25,8 @@ import {
 import { useI18nNs } from "@/app/context/i18nContext";
 
 import type {
-  ManagementApplicationFormErrors as FormErrors,
-  ManagementApplicationFormState as FormState,
+  ManagementApplicantType,
+  ManagementApplicationFormState,
   ManagementStructureType,
   RepresentationType,
 } from "../../types/managementApplication.types";
@@ -37,6 +35,12 @@ import {
   representationOptions,
   structureOptions,
 } from "./constants";
+
+type FormState = ManagementApplicationFormState;
+
+type FormErrors = Partial<
+  Record<keyof FormState, string>
+>;
 
 type BasicStepProps = {
   form: FormState;
@@ -53,74 +57,59 @@ type BasicStepProps = {
 };
 
 const KEYS = {
-  title:
-    "management-applications:create.basic.title",
-
+  title: "management-applications:create.basic.title",
   description:
     "management-applications:create.basic.description",
-
   verifiedSource:
     "management-applications:create.basic.verifiedSource",
-
   applicant:
     "management-applications:create.basic.applicant",
-
   contactEmail:
     "management-applications:create.basic.contact.email",
-
   contactPhone:
     "management-applications:create.basic.contact.phone",
-
   verified:
     "management-applications:create.basic.verified",
-
   notVerified:
     "management-applications:create.basic.notVerified",
-
-  structureTitle:
-    "management-applications:create.basic.structure.title",
-
-  structureDescription:
-    "management-applications:create.basic.structure.description",
-
   structureSelectLabel:
     "management-applications:create.basic.structure.selectLabel",
-
   representationTitle:
     "management-applications:create.basic.representation.title",
-
-  representationDescription:
-    "management-applications:create.basic.representation.description",
-
+  applicantType:
+    "management-applications:create.basic.fields.applicantType",
+  applicantTypeIndividual:
+    "management-applications:create.basic.fields.applicantType.individual",
+  applicantTypeCompany:
+    "management-applications:create.basic.fields.applicantType.company",
   propertyName:
     "management-applications:create.basic.fields.propertyName",
-
   propertyNameDescription:
     "management-applications:create.basic.fields.propertyNameDescription",
-
   propertyNameHint:
     "management-applications:create.basic.fields.propertyNameHint",
-
-  authorityTitle:
-    "management-applications:create.basic.authority.title",
-
-  authorityDescription:
-    "management-applications:create.basic.authority.description",
-
   identityNumber:
     "management-applications:create.basic.fields.identityNumber",
-
   identityNumberHint:
     "management-applications:create.basic.fields.identityNumberHint",
-
+  companyTaxNumber:
+    "management-applications:create.basic.fields.companyTaxNumber",
+  companyTaxNumberHint:
+    "management-applications:create.basic.fields.companyTaxNumberHint",
+  mersisNumber:
+    "management-applications:create.basic.fields.mersisNumber",
+  mersisNumberHint:
+    "management-applications:create.basic.fields.mersisNumberHint",
   authorityStartDate:
     "management-applications:create.basic.fields.authorityStartDate",
-
   authorityEndDate:
     "management-applications:create.basic.fields.authorityEndDate",
-
   authorityEndDateHint:
     "management-applications:create.basic.fields.authorityEndDateHint",
+  authorityIndefinite:
+    "management-applications:create.basic.fields.authorityIndefinite",
+  authorityIndefiniteHint:
+    "management-applications:create.basic.fields.authorityIndefiniteHint",
 } as const;
 
 export default function BasicStep({
@@ -134,13 +123,9 @@ export default function BasicStep({
   onPatch,
 }: BasicStepProps) {
   const theme = useTheme<Theme>();
-
   const { t } = useI18nNs("management-applications");
 
-  const tr = (
-    fullKey: string,
-    fallback: string,
-  ) => {
+  const tr = (fullKey: string, fallback: string) => {
     const value = t(fullKey);
 
     if (!value) return fallback;
@@ -150,10 +135,7 @@ export default function BasicStep({
     return value;
   };
 
-  const trDirect = (
-    key: string,
-    fallback: string,
-  ) => {
+  const trDirect = (key: string, fallback: string) => {
     const value = t(key);
 
     if (!value) return fallback;
@@ -169,17 +151,12 @@ export default function BasicStep({
       bgcolor: "background.paper",
       boxShadow: `0 12px 28px ${alpha(
         theme.palette.common.black,
-        theme.palette.mode === "dark"
-          ? 0.22
-          : 0.04,
+        theme.palette.mode === "dark" ? 0.22 : 0.04,
       )}`,
       transition: "all 180ms ease",
 
       "& input::placeholder": {
-        color: alpha(
-          theme.palette.text.secondary,
-          0.42,
-        ),
+        color: alpha(theme.palette.text.secondary, 0.42),
         opacity: 1,
         fontWeight: 400,
       },
@@ -187,9 +164,7 @@ export default function BasicStep({
       "&:hover": {
         boxShadow: `0 16px 36px ${alpha(
           theme.palette.common.black,
-          theme.palette.mode === "dark"
-            ? 0.28
-            : 0.06,
+          theme.palette.mode === "dark" ? 0.28 : 0.06,
         )}`,
       },
 
@@ -202,10 +177,7 @@ export default function BasicStep({
     },
 
     "& .MuiInputLabel-root": {
-      color: alpha(
-        theme.palette.text.secondary,
-        0.72,
-      ),
+      color: alpha(theme.palette.text.secondary, 0.72),
       fontWeight: 700,
     },
   };
@@ -213,37 +185,22 @@ export default function BasicStep({
   const identityItems = [
     {
       icon: <IconId size={18} />,
-      label: tr(
-        KEYS.applicant,
-        "Başvuran kişi",
-      ),
+      label: tr(KEYS.applicant, "Başvuran kişi"),
       value: applicantFullName || "-",
       verificationState: "none" as const,
     },
     {
       icon: <IconMail size={18} />,
-      label: tr(
-        KEYS.contactEmail,
-        "E-posta",
-      ),
-      value:
-        applicantEmail ||
-        form.contactEmail ||
-        "-",
+      label: tr(KEYS.contactEmail, "E-posta"),
+      value: applicantEmail || form.contactEmail || "-",
       verificationState: isEmailVerified
         ? ("verified" as const)
         : ("unverified" as const),
     },
     {
       icon: <IconPhone size={18} />,
-      label: tr(
-        KEYS.contactPhone,
-        "Telefon",
-      ),
-      value:
-        applicantPhone ||
-        form.contactPhone ||
-        "-",
+      label: tr(KEYS.contactPhone, "Telefon"),
+      value: applicantPhone || form.contactPhone || "-",
       verificationState: isPhoneVerified
         ? ("verified" as const)
         : ("unverified" as const),
@@ -254,16 +211,10 @@ export default function BasicStep({
     <Stack spacing={2.5}>
       <Box
         sx={{
-          p: {
-            xs: 2,
-            md: 2.5,
-          },
+          p: { xs: 2, md: 2.5 },
           borderRadius: 5,
           border: "1px solid",
-          borderColor: alpha(
-            theme.palette.primary.main,
-            0.14,
-          ),
+          borderColor: alpha(theme.palette.primary.main, 0.14),
           bgcolor: "background.paper",
           background: `
             radial-gradient(circle at top right, ${alpha(
@@ -280,51 +231,34 @@ export default function BasicStep({
           `,
           boxShadow: `0 22px 64px ${alpha(
             theme.palette.common.black,
-            theme.palette.mode === "dark"
-              ? 0.3
-              : 0.07,
+            theme.palette.mode === "dark" ? 0.3 : 0.07,
           )}`,
         }}
       >
         <Stack spacing={2.2}>
           <Stack
-            direction={{
-              xs: "column",
-              md: "row",
-            }}
+            direction={{ xs: "column", md: "row" }}
             spacing={1.5}
             justifyContent="space-between"
-            alignItems={{
-              xs: "flex-start",
-              md: "center",
-            }}
+            alignItems={{ xs: "flex-start", md: "center" }}
           >
             <Box>
               <Typography
                 fontWeight={950}
                 sx={{
-                  fontSize: {
-                    xs: 21,
-                    md: 25,
-                  },
+                  fontSize: { xs: 21, md: 25 },
                   letterSpacing: "-0.04em",
                   lineHeight: 1.12,
                 }}
               >
-                {tr(
-                  KEYS.title,
-                  "Temel başvuru bilgileri",
-                )}
+                {tr(KEYS.title, "Temel başvuru bilgileri")}
               </Typography>
 
               <Typography
                 sx={{
                   mt: 0.7,
                   maxWidth: 760,
-                  color: alpha(
-                    theme.palette.text.secondary,
-                    0.82,
-                  ),
+                  color: alpha(theme.palette.text.secondary, 0.82),
                   fontSize: 14.5,
                   lineHeight: 1.7,
                   fontWeight: 500,
@@ -338,9 +272,7 @@ export default function BasicStep({
             </Box>
 
             <Chip
-              icon={
-                <IconShieldCheck size={15} />
-              }
+              icon={<IconShieldCheck size={15} />}
               label={tr(
                 KEYS.verifiedSource,
                 "Kimlik bilgileri hesaptan alınır",
@@ -357,10 +289,7 @@ export default function BasicStep({
                   p: 1.25,
                   borderRadius: 3,
                   border: "1px solid",
-                  borderColor: alpha(
-                    theme.palette.divider,
-                    0.68,
-                  ),
+                  borderColor: alpha(theme.palette.divider, 0.68),
                 }}
               >
                 <Stack
@@ -369,55 +298,33 @@ export default function BasicStep({
                   alignItems="center"
                   justifyContent="space-between"
                 >
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    alignItems="center"
-                  >
+                  <Stack direction="row" spacing={1} alignItems="center">
                     {item.icon}
 
                     <Box>
-                      <Typography
-                        sx={{
-                          fontWeight: 900,
-                          fontSize: 13,
-                        }}
-                      >
+                      <Typography sx={{ fontWeight: 900, fontSize: 13 }}>
                         {item.label}
                       </Typography>
 
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                      >
+                      <Typography variant="body2" color="text.secondary">
                         {item.value}
                       </Typography>
                     </Box>
                   </Stack>
 
-                  {item.verificationState ===
-                    "verified" && (
+                  {item.verificationState === "verified" && (
                     <Chip
-                      icon={
-                        <IconCheck size={13} />
-                      }
-                      label={tr(
-                        KEYS.verified,
-                        "Doğrulandı",
-                      )}
+                      icon={<IconCheck size={13} />}
+                      label={tr(KEYS.verified, "Doğrulandı")}
                       size="small"
                       color="success"
                       variant="outlined"
                     />
                   )}
 
-                  {item.verificationState ===
-                    "unverified" && (
+                  {item.verificationState === "unverified" && (
                     <Chip
-                      label={tr(
-                        KEYS.notVerified,
-                        "Doğrulanmadı",
-                      )}
+                      label={tr(KEYS.notVerified, "Doğrulanmadı")}
                       size="small"
                       color="warning"
                       variant="outlined"
@@ -442,10 +349,7 @@ export default function BasicStep({
       >
         <TextField
           select
-          label={tr(
-            KEYS.structureSelectLabel,
-            "Yapı türü",
-          )}
+          label={tr(KEYS.structureSelectLabel, "Yapı türü")}
           value={form.structureType || ""}
           onChange={(event) =>
             onPatch(
@@ -459,24 +363,15 @@ export default function BasicStep({
           sx={fieldSx}
         >
           {structureOptions.map((item) => (
-            <MenuItem
-              key={item.value}
-              value={item.value}
-            >
-              {trDirect(
-                item.labelKey,
-                item.fallbackLabel,
-              )}
+            <MenuItem key={item.value} value={item.value}>
+              {trDirect(item.labelKey, item.fallbackLabel)}
             </MenuItem>
           ))}
         </TextField>
 
         <TextField
           select
-          label={tr(
-            KEYS.representationTitle,
-            "Temsil şekli",
-          )}
+          label={tr(KEYS.representationTitle, "Temsil şekli")}
           value={form.representationType || ""}
           onChange={(event) =>
             onPatch(
@@ -486,43 +381,25 @@ export default function BasicStep({
           }
           fullWidth
           error={!!errors.representationType}
-          helperText={
-            errors.representationType
-          }
+          helperText={errors.representationType}
           sx={fieldSx}
         >
-          {representationOptions.map(
-            (item) => (
-              <MenuItem
-                key={item.value}
-                value={item.value}
-              >
-                {trDirect(
-                  item.labelKey,
-                  item.fallbackLabel,
-                )}
-              </MenuItem>
-            ),
-          )}
+          {representationOptions.map((item) => (
+            <MenuItem key={item.value} value={item.value}>
+              {trDirect(item.labelKey, item.fallbackLabel)}
+            </MenuItem>
+          ))}
         </TextField>
+
+
+        
       </Box>
 
       <TextField
-        label={tr(
-          KEYS.propertyName,
-          "Yapı adı",
-        )}
-        placeholder={tr(
-          KEYS.propertyNameHint,
-          "Örn: Green Park Sitesi",
-        )}
+        label={tr(KEYS.propertyName, "Yapı adı")}
+        placeholder={tr(KEYS.propertyNameHint, "Örn: Green Park Sitesi")}
         value={form.propertyName}
-        onChange={(event) =>
-          onPatch(
-            "propertyName",
-            event.target.value,
-          )
-        }
+        onChange={(event) => onPatch("propertyName", event.target.value)}
         fullWidth
         error={!!errors.propertyName}
         helperText={
@@ -540,91 +417,158 @@ export default function BasicStep({
           display: "grid",
           gridTemplateColumns: {
             xs: "1fr",
-            md: "1fr 1fr 1fr",
+            md: "1fr 1fr 1fr 1fr",
           },
           gap: 2,
         }}
       >
         <TextField
+          select
+          label={tr(KEYS.applicantType, "Başvuru sahibi türü")}
+          value={form.applicantType || "individual"}
+          onChange={(event) =>
+            onPatch(
+              "applicantType",
+              event.target.value as ManagementApplicantType,
+            )
+          }
+          fullWidth
+          error={!!errors.applicantType}
+          helperText={errors.applicantType}
+          sx={fieldSx}
+        >
+          <MenuItem value="individual">
+            {tr(KEYS.applicantTypeIndividual, "Bireysel")}
+          </MenuItem>
+
+          <MenuItem value="company">
+            {tr(KEYS.applicantTypeCompany, "Şirket")}
+          </MenuItem>
+        </TextField>
+
+        <TextField
           label={tr(
-            KEYS.identityNumber,
-            "Kimlik / vergi numarası",
+            form.applicantType === "company"
+              ? KEYS.companyTaxNumber
+              : KEYS.identityNumber,
+            form.applicantType === "company"
+              ? "Vergi numarası"
+              : "Kimlik numarası",
           )}
           placeholder={tr(
-            KEYS.identityNumberHint,
-            "TCKN, VKN veya kayıt no",
+            form.applicantType === "company"
+              ? KEYS.companyTaxNumberHint
+              : KEYS.identityNumberHint,
+            form.applicantType === "company" ? "VKN" : "TCKN",
           )}
           value={form.taxOrIdentityNumber}
           onChange={(event) =>
-            onPatch(
-              "taxOrIdentityNumber",
-              event.target.value,
-            )
+            onPatch("taxOrIdentityNumber", event.target.value)
           }
           fullWidth
-          error={
-            !!errors.taxOrIdentityNumber
-          }
-          helperText={
-            errors.taxOrIdentityNumber
-          }
+          error={!!errors.taxOrIdentityNumber}
+          helperText={errors.taxOrIdentityNumber}
           sx={fieldSx}
         />
 
+        {form.applicantType === "company" && (
+          <TextField
+            label={tr(KEYS.mersisNumber, "MERSİS numarası")}
+            placeholder={tr(KEYS.mersisNumberHint, "Varsa MERSIS no")}
+            value={form.mersisNumber ?? ""}
+            onChange={(event) => onPatch("mersisNumber", event.target.value)}
+            fullWidth
+            error={!!errors.mersisNumber}
+            helperText={
+              errors.mersisNumber ||
+              tr(KEYS.mersisNumberHint, "Bu alan zorunlu değildir.")
+            }
+            sx={fieldSx}
+          />
+        )}
+
         <TextField
           type="date"
-          label={tr(
-            KEYS.authorityStartDate,
-            "Yetki başlangıç tarihi",
-          )}
+          label={tr(KEYS.authorityStartDate, "Yetki başlangıç tarihi")}
           value={form.authorityStartDate}
           onChange={(event) =>
-            onPatch(
-              "authorityStartDate",
-              event.target.value,
-            )
+            onPatch("authorityStartDate", event.target.value)
           }
           fullWidth
-          error={
-            !!errors.authorityStartDate
-          }
-          helperText={
-            errors.authorityStartDate
-          }
-          InputLabelProps={{
-            shrink: true,
-          }}
+          error={!!errors.authorityStartDate}
+          helperText={errors.authorityStartDate}
+          InputLabelProps={{ shrink: true }}
           sx={fieldSx}
         />
 
         <TextField
           type="date"
-          label={tr(
-            KEYS.authorityEndDate,
-            "Yetki bitiş tarihi",
-          )}
+          label={tr(KEYS.authorityEndDate, "Yetki bitiş tarihi")}
           value={form.authorityEndDate}
           onChange={(event) =>
-            onPatch(
-              "authorityEndDate",
-              event.target.value,
-            )
+            onPatch("authorityEndDate", event.target.value)
           }
           fullWidth
-          error={
-            !!errors.authorityEndDate
-          }
+          disabled={form.isAuthorityIndefinite}
+          error={!form.isAuthorityIndefinite && !!errors.authorityEndDate}
           helperText={
-            errors.authorityEndDate ||
-            tr(
-              KEYS.authorityEndDateHint,
-              "Süreli yetki yoksa boş bırakın",
-            )
+            form.isAuthorityIndefinite
+              ? tr(
+                  KEYS.authorityIndefiniteHint,
+                  "Seçilirse bitiş tarihi zorunlu kabul edilmez.",
+                )
+              : errors.authorityEndDate ||
+                tr(
+                  KEYS.authorityEndDateHint,
+                  "Süreli yetki yoksa boş bırakın",
+                )
           }
-          InputLabelProps={{
-            shrink: true,
-          }}
+          InputLabelProps={{ shrink: true }}
           sx={fieldSx}
+        />
+
+        <FormControlLabel
+          sx={{
+            alignItems: "flex-start",
+            m: 0,
+            p: 1.25,
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: alpha(theme.palette.divider, 0.68),
+            bgcolor: "background.paper",
+          }}
+          control={
+            <Checkbox
+              checked={Boolean(form.isAuthorityIndefinite)}
+              onChange={(event) => {
+                const checked = event.target.checked;
+
+                onPatch("isAuthorityIndefinite", checked);
+
+                if (checked) {
+                  onPatch("authorityEndDate", "");
+                }
+              }}
+            />
+          }
+          label={
+            <Box>
+              <Typography fontWeight={850} fontSize={13.5}>
+                {tr(KEYS.authorityIndefinite, "Yetki süresizdir")}
+              </Typography>
+
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.35 }}
+              >
+                {tr(
+                  KEYS.authorityIndefiniteHint,
+                  "Seçilirse bitiş tarihi zorunlu kabul edilmez.",
+                )}
+              </Typography>
+            </Box>
+          }
         />
       </Box>
     </Stack>

@@ -79,6 +79,22 @@ function unwrapBundle(raw: any): Record<string, string> {
   return out;
 }
 
+function isSessionExpiredPayload(payload: any, status: number): boolean {
+  const code =
+    payload?.code ??
+    payload?.error ??
+    payload?.data?.code ??
+    payload?.data?.error ??
+    payload?.data?.reason;
+
+  return (
+    status === 401 &&
+    (code === "SESSION_EXPIRED" ||
+      code === "SessionExpired" ||
+      payload?.message === "auth.sessionExpired")
+  );
+}
+
 /**
  * TEK namespace bundle fetch
  */
@@ -89,8 +105,9 @@ async function fetchNamespaceBundle(params: {
   tenantKey: string;
   acceptLanguage: string;
   baseUrl: string;
+  cookieHeader: string;
 }) {
-  const { ns, lang, corrId, tenantKey, acceptLanguage, baseUrl } = params;
+  const { ns, lang, corrId, tenantKey, acceptLanguage, baseUrl, cookieHeader } = params;
 
 const url =
   `${baseUrl}/api/v1.0/localization/bundle` +
@@ -109,6 +126,7 @@ const url =
         "x-correlation-id": corrId,
         "accept-language": acceptLanguage,
         "x-tenant-key": tenantKey,
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
       },
       cache: "no-store",
     },
@@ -116,6 +134,7 @@ const url =
   );
 
   const json = await res.json().catch(() => null);
+  const setCookie = res.headers.get("set-cookie");
 
   if (!res.ok) {
     warn("NS FAIL", { ns, status: res.status });
@@ -124,6 +143,8 @@ const url =
       ns,
       data: {},
       status: res.status,
+      payload: json,
+      setCookie,
     };
   }
 
@@ -139,6 +160,8 @@ const url =
     ns,
     data: normalized,
     status: res.status,
+    payload: json,
+    setCookie,
   };
 }
 
@@ -158,6 +181,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const corrId = newCorrelationId(req.headers);
   const { tenantKey } = resolveTenantKey(req);
   const acceptLanguage = resolveAcceptLanguage(req, culture);
+  const cookieHeader = req.headers.get("cookie") || "";
 
   const host =
     req.headers.get("x-forwarded-host") ??
@@ -187,6 +211,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
           tenantKey,
           acceptLanguage,
           baseUrl,
+          cookieHeader,
         })
       )
     );
@@ -200,6 +225,41 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
     if (failed.length > 0) {
       warn("⚠️ PARTIAL FAIL", failed);
+    }
+
+    const sessionExpired = failed.find((item) =>
+      isSessionExpiredPayload((item as any).payload, item.status)
+    );
+
+    if (sessionExpired) {
+      const headers = new Headers({
+        "x-correlation-id": corrId,
+      });
+
+      for (const result of results) {
+        const cookie = (result as any).setCookie;
+        if (cookie) {
+          headers.append("set-cookie", cookie);
+        }
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          status: 401,
+          code: "SESSION_EXPIRED",
+          error: "SESSION_EXPIRED",
+          message: "auth.sessionExpired",
+          lang,
+          ns: nsList,
+          data: merged,
+          failed,
+        },
+        {
+          status: 401,
+          headers,
+        }
+      );
     }
 
     log("📦 DICT READY", {

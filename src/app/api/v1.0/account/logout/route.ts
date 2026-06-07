@@ -31,6 +31,13 @@ import {
   resolveAcceptLanguage,
   resolveTenantKey,
 } from "@/app/api/_shared/bff";
+import {
+  ACCESS_TOKEN_COOKIE_NAMES,
+  AUTH_STATE_COOKIE_NAMES,
+  DEVICE_ID_COOKIE_NAMES,
+  REFRESH_TOKEN_COOKIE_NAMES,
+  SESSION_MARKER_COOKIE_NAMES,
+} from "@/lib/bff/authCookies";
 
 /**
  * Web tarafında temizlenecek auth/session cookie'leri.
@@ -40,23 +47,22 @@ import {
  * - tenant / lang / tema cookie'lerine dokunulmuyor
  */
 const AUTH_COOKIE_NAMES = [
-  "accessToken",
-  "access_token",
-  "lm_at",
-  "lm.at",
-  "refreshToken",
-  "RefreshToken",
-  "lm.rt",
-  "lm.sid",
-  "logged_in",
+  ...ACCESS_TOKEN_COOKIE_NAMES,
+  ...REFRESH_TOKEN_COOKIE_NAMES,
+  ...SESSION_MARKER_COOKIE_NAMES,
+  ...AUTH_STATE_COOKIE_NAMES,
 ] as const;
 
 /**
  * Request cookie'lerinden device id çöz.
  */
 function resolveDeviceId(req: NextRequest): string | null {
-  const value = req.cookies.get("lm.did")?.value?.trim();
-  return value || null;
+  for (const name of DEVICE_ID_COOKIE_NAMES) {
+    const value = req.cookies.get(name)?.value?.trim();
+    if (value) return value;
+  }
+
+  return null;
 }
 
 /**
@@ -66,14 +72,8 @@ function resolveDeviceId(req: NextRequest): string | null {
  * Backend logout endpoint body desteklediği için elimizde varsa gönderiyoruz.
  */
 function resolveRefreshToken(req: NextRequest): string | null {
-  const candidates = [
-    req.cookies.get("refreshToken")?.value,
-    req.cookies.get("RefreshToken")?.value,
-    req.cookies.get("lm.rt")?.value,
-  ];
-
-  for (const value of candidates) {
-    const clean = value?.trim();
+  for (const name of REFRESH_TOKEN_COOKIE_NAMES) {
+    const clean = req.cookies.get(name)?.value?.trim();
     if (clean) return clean;
   }
 

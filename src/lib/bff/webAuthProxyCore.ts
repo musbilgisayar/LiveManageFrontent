@@ -1,21 +1,15 @@
-// ============================================================
-// File: src/lib/bff/webAuthProxyCore.ts
-// ============================================================
-
+import { createHash, randomUUID } from "crypto";
 import { NextRequest } from "next/server";
-import { createHash } from "crypto";
+
+import {
+  ACCESS_TOKEN_COOKIE_NAMES,
+  DEVICE_ID_COOKIE_NAMES,
+  REFRESH_TOKEN_COOKIE_NAMES,
+  appendExpiredAuthCookies,
+  normalizeSetCookieForBrowser,
+  readFirstCookieValue,
+} from "@/lib/bff/authCookies";
 import { resolveTenant } from "@/lib/bff/resolveTenant";
-import { normalizeSetCookieForBrowser } from "@/lib/bff/authCookies";
-
-export const WEB_AUTH_BACKEND_BASE =
-  process.env.BACKEND_BASE ??
-  process.env.BACKEND_URL ??
-  "https://localhost:5002";
-
-export const DEFAULT_JSON_TIMEOUT_MS = 15_000;
-export const DEFAULT_RAW_TIMEOUT_MS = 30_000;
-export const ACCESS_REFRESH_SKEW_SECONDS =
-  process.env.NODE_ENV === "production" ? 120 : 14 * 60;
 
 export type WebProxyMethod =
   | "GET"
@@ -30,12 +24,37 @@ export type RefreshResult = {
   ok: boolean;
   status: number;
   cookies: string[];
+  reason?: string;
 };
+
+export const DEFAULT_JSON_TIMEOUT_MS = 20_000;
+
+/**
+ * Türkçe not:
+ * Development ortamında 14 dakika çok agresifti.
+ * Access token 15 dakikaysa 1 dakika sonra refresh başlıyordu.
+ */
+export const ACCESS_REFRESH_SKEW_SECONDS =
+  process.env.NODE_ENV === "production" ? 120 : 60;
+
+const RECENT_REFRESH_RESULT_TTL_MS = 5_000;
 
 const refreshInFlight = new Map<string, Promise<RefreshResult>>();
 
+const recentRefreshResults = new Map<
+  string,
+  {
+    expiresAt: number;
+    result: RefreshResult;
+  }
+>();
+
 export function resolveCorrelationId(req: NextRequest): string {
-  return req.headers.get("x-correlation-id") ?? crypto.randomUUID();
+  return (
+    req.headers.get("x-correlation-id") ||
+    req.headers.get("correlation-id") ||
+    randomUUID()
+  );
 }
 
 export function resolveBackendUrl(url: string): string {
@@ -43,239 +62,201 @@ export function resolveBackendUrl(url: string): string {
     return url;
   }
 
-  return new URL(
-    url.startsWith("/") ? url : `/${url}`,
-    WEB_AUTH_BACKEND_BASE
-  ).toString();
+  const baseUrl =
+    process.env.BACKEND_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL ||
+    "https://localhost:5002";
+
+  return `${baseUrl.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
 }
 
-export function withTimeout(timeoutMs: number) {
+export function withTimeout(timeoutMs: number): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
 
   return {
     signal: controller.signal,
-    cleanup: () => clearTimeout(id),
+    cleanup: () => clearTimeout(timer),
   };
 }
 
-export function applyHeaders(target: Headers, source?: HeadersInit): void {
-  if (!source) return;
+export function isAbortLikeError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
 
-  if (source instanceof Headers) {
-    source.forEach((value, key) => {
-      target.set(key, value);
-    });
+function hashValue(value: string | null | undefined): string {
+  return createHash("sha256")
+    .update(value ?? "")
+    .digest("hex")
+    .slice(0, 24);
+}
+
+function getCanonicalCookieValue(
+  req: NextRequest,
+  names: readonly string[],
+): string | null {
+  return readFirstCookieValue(req, names);
+}
+
+/**
+ * Türkçe not:
+ * Refresh lock artık tüm cookie header hash'ine bağlı değil.
+ * Tenant + device + refresh token hash kullanılır.
+ */
+function getRefreshKey(req: NextRequest): string {
+  const tenant = resolveTenant(req);
+  const deviceId =
+    getCanonicalCookieValue(req, DEVICE_ID_COOKIE_NAMES) ?? "no-device";
+
+  const refreshToken =
+    getCanonicalCookieValue(req, REFRESH_TOKEN_COOKIE_NAMES) ?? "no-refresh";
+
+  return [tenant || "no-tenant", deviceId, hashValue(refreshToken)].join("::");
+}
+
+function cleanupRecentRefreshResults(): void {
+  const now = Date.now();
+
+  for (const [key, entry] of recentRefreshResults.entries()) {
+    if (entry.expiresAt <= now) {
+      recentRefreshResults.delete(key);
+    }
+  }
+}
+
+function getRecentRefreshResult(key: string): RefreshResult | null {
+  cleanupRecentRefreshResults();
+
+  const cached = recentRefreshResults.get(key);
+
+  if (!cached || cached.expiresAt <= Date.now()) {
+    recentRefreshResults.delete(key);
+    return null;
+  }
+
+  return cached.result;
+}
+
+function rememberRecentRefreshResult(
+  key: string,
+  result: RefreshResult,
+): void {
+  if (!result.ok || result.cookies.length === 0) {
     return;
   }
 
-  if (Array.isArray(source)) {
-    for (const [key, value] of source) {
-      target.set(key, value);
-    }
-    return;
-  }
-
-  Object.entries(source).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      target.set(key, String(value));
-    }
+  recentRefreshResults.set(key, {
+    expiresAt: Date.now() + RECENT_REFRESH_RESULT_TTL_MS,
+    result,
   });
 }
 
-function splitCombinedSetCookie(headerValue: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inExpires = false;
+function decodeJwtPayload(token: string | null): Record<string, unknown> | null {
+  if (!token) return null;
 
-  for (let i = 0; i < headerValue.length; i += 1) {
-    const char = headerValue[i];
-    const remaining = headerValue.slice(i);
-
-    if (!inExpires && remaining.toLowerCase().startsWith("expires=")) {
-      inExpires = true;
-    }
-
-    if (inExpires && char === ";") {
-      inExpires = false;
-    }
-
-    if (!inExpires && char === ",") {
-      const rest = headerValue.slice(i + 1);
-      const cookieStartMatch = rest.match(
-        /^\s*([!#$%&'*+\-.^_`|~0-9A-Za-z]+)=/
-      );
-
-      if (cookieStartMatch) {
-        if (current.trim()) {
-          result.push(current.trim());
-        }
-        current = "";
-        continue;
-      }
-    }
-
-    current += char;
-  }
-
-  if (current.trim()) {
-    result.push(current.trim());
-  }
-
-  return result;
-}
-
-export function extractSetCookies(headers: Headers): string[] {
-  const withGetSetCookie = headers as Headers & {
-    getSetCookie?: () => string[];
-  };
-
-  if (typeof withGetSetCookie.getSetCookie === "function") {
-    try {
-      const cookies = withGetSetCookie.getSetCookie();
-      if (Array.isArray(cookies) && cookies.length > 0) {
-        return cookies.filter(Boolean);
-      }
-    } catch {
-      // Fallback below.
-    }
-  }
-
-  const raw = headers.get("set-cookie");
-  if (!raw) {
-    return [];
-  }
-
-  return splitCombinedSetCookie(raw).filter(Boolean);
-}
-
-export function mergeCookie(
-  original: string | null,
-  setCookies: string[]
-): string {
-  const map = new Map<string, string>();
-
-  if (original) {
-    original.split(";").forEach((part) => {
-      const trimmed = part.trim();
-      if (!trimmed) return;
-
-      const idx = trimmed.indexOf("=");
-      if (idx <= 0) return;
-
-      const name = trimmed.slice(0, idx).trim();
-      const value = trimmed.slice(idx + 1).trim();
-
-      if (name) {
-        map.set(name, value);
-      }
-    });
-  }
-
-  for (const setCookie of setCookies) {
-    const firstPart = setCookie.split(";")[0]?.trim();
-    if (!firstPart) continue;
-
-    const idx = firstPart.indexOf("=");
-    if (idx <= 0) continue;
-
-    const name = firstPart.slice(0, idx).trim();
-    const value = firstPart.slice(idx + 1).trim();
-
-    if (name) {
-      map.set(name, value);
-    }
-  }
-
-  return Array.from(map.entries())
-    .map(([key, value]) => `${key}=${value}`)
-    .join("; ");
-}
-
-function base64UrlDecode(input: string): string {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized.padEnd(
-    normalized.length + ((4 - (normalized.length % 4)) % 4),
-    "="
-  );
-
-  return Buffer.from(padded, "base64").toString("utf8");
-}
-
-function readCookieValue(cookieHeader: string | null, name: string): string | null {
-  if (!cookieHeader) return null;
-
-  const parts = cookieHeader.split(";");
-
-  for (const part of parts) {
-    const trimmed = part.trim();
-    const index = trimmed.indexOf("=");
-
-    if (index <= 0) continue;
-
-    const cookieName = trimmed.slice(0, index).trim();
-    const cookieValue = trimmed.slice(index + 1).trim();
-
-    if (cookieName === name) {
-      return decodeURIComponent(cookieValue);
-    }
-  }
-
-  return null;
-}
-
-function getJwtExpUnixSeconds(token: string): number | null {
   const parts = token.split(".");
-
   if (parts.length < 2) return null;
 
   try {
-    const payload = JSON.parse(base64UrlDecode(parts[1])) as {
-      exp?: unknown;
-    };
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload =
+      payload + "=".repeat((4 - (payload.length % 4)) % 4);
 
-    return typeof payload.exp === "number" ? payload.exp : null;
+    const json = Buffer.from(paddedPayload, "base64").toString("utf8");
+
+    return JSON.parse(json) as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
-export function shouldProactivelyRefreshAccessToken(
-  req: NextRequest,
-  skewSeconds: number = ACCESS_REFRESH_SKEW_SECONDS
-): boolean {
-  const accessToken = readCookieValue(req.headers.get("cookie"), "accessToken");
+function readJwtExpSeconds(token: string | null): number | null {
+  const payload = decodeJwtPayload(token);
+  const exp = payload?.exp;
+
+  return typeof exp === "number" ? exp : null;
+}
+
+export function shouldProactivelyRefreshAccessToken(req: NextRequest): boolean {
+  const accessToken = getCanonicalCookieValue(req, ACCESS_TOKEN_COOKIE_NAMES);
 
   if (!accessToken) {
     return false;
   }
 
-  const exp = getJwtExpUnixSeconds(accessToken);
+  const expSeconds = readJwtExpSeconds(accessToken);
 
-  if (!exp) {
+  if (!expSeconds) {
     return false;
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const remainingSeconds = exp - now;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const remainingSeconds = expSeconds - nowSeconds;
 
-  return remainingSeconds > 0 && remainingSeconds <= skewSeconds;
+  return (
+    remainingSeconds > 0 &&
+    remainingSeconds <= ACCESS_REFRESH_SKEW_SECONDS
+  );
 }
+
+function appendForwardedHeader(
+  headers: Headers,
+  name: string,
+  value: string | null,
+): void {
+  if (value && value.trim()) {
+    headers.set(name, value);
+  }
+}
+
+function appendExtraHeaders(
+  headers: Headers,
+  extraHeaders?: HeadersInit,
+): void {
+  if (!extraHeaders) return;
+
+  const extra = new Headers(extraHeaders);
+
+  extra.forEach((value, key) => {
+    headers.set(key, value);
+  });
+}
+
 export function buildWebAuthHeaders(
   req: NextRequest,
   correlationId: string,
   options?: {
     extraHeaders?: HeadersInit;
     defaultAccept?: string;
-    includeAuthorization?: boolean;
     includeTenantHeader?: boolean;
-  }
+  },
 ): Headers {
   const headers = new Headers();
 
-  headers.set(
-    "accept",
-    req.headers.get("accept") || options?.defaultAccept || "application/json"
+  headers.set("accept", options?.defaultAccept ?? "application/json");
+  headers.set("x-correlation-id", correlationId);
+
+  appendForwardedHeader(
+    headers,
+    "accept-language",
+    req.headers.get("accept-language"),
+  );
+
+  appendForwardedHeader(headers, "user-agent", req.headers.get("user-agent"));
+
+  appendForwardedHeader(
+    headers,
+    "x-forwarded-for",
+    req.headers.get("x-forwarded-for"),
   );
 
   const cookie = req.headers.get("cookie");
@@ -283,190 +264,91 @@ export function buildWebAuthHeaders(
     headers.set("cookie", cookie);
   }
 
-  const includeAuthorization = options?.includeAuthorization ?? true;
-
-  if (includeAuthorization) {
-    const auth =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization");
-
-    if (auth) {
-      headers.set("authorization", auth);
-    }
-  }
-
-  const lang = req.headers.get("accept-language");
-  if (lang) {
-    headers.set("accept-language", lang);
-  }
-
   if (options?.includeTenantHeader !== false) {
-    headers.set("x-tenant-key", resolveTenant(req));
-  }
-  headers.set("x-correlation-id", correlationId);
+    const tenantKey = resolveTenant(req);
 
-  applyHeaders(headers, options?.extraHeaders);
+    if (tenantKey) {
+      headers.set("x-tenant-key", tenantKey);
+    }
+  }
+
+  appendExtraHeaders(headers, options?.extraHeaders);
 
   return headers;
 }
 
-function getRefreshKey(req: NextRequest): string {
-  const tenant = resolveTenant(req);
-  const cookie = req.headers.get("cookie") ?? "";
-  const cookieHash = createHash("sha256").update(cookie).digest("hex");
-  return `${tenant}::${cookieHash}`;
-}
-
-export async function tryRefreshWebSession(
-  req: NextRequest,
-  timeoutMs: number,
-  correlationId: string,
-  logLabel: string
-): Promise<RefreshResult> {
-  const key = getRefreshKey(req);
-  const existing = refreshInFlight.get(key);
-
-  if (existing) {
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`[BFF][${logLabel}][REFRESH_REUSE]`, {
-        correlationId,
-        refreshKey: key,
-      });
+function readSetCookieHeaders(response: Response): string[] {
+  const getSetCookie = (
+    response.headers as Headers & {
+      getSetCookie?: () => string[];
     }
-    return existing;
+  ).getSetCookie;
+
+  if (typeof getSetCookie === "function") {
+    return getSetCookie.call(response.headers);
   }
 
-  const promise = (async (): Promise<RefreshResult> => {
-    const { signal, cleanup } = withTimeout(timeoutMs);
-    const refreshUrl = `${req.nextUrl.origin}/api/v1.0/account/refresh`;
+  const single = response.headers.get("set-cookie");
 
-    try {
-      const res = await fetch(refreshUrl, {
-        method: "POST",
-        headers: {
-          cookie: req.headers.get("cookie") || "",
-          "x-tenant-key": resolveTenant(req),
-          "x-correlation-id": correlationId,
-          ...(req.headers.get("accept-language")
-            ? { "accept-language": req.headers.get("accept-language")! }
-            : {}),
-          accept: "application/json",
-        },
-        cache: "no-store",
-        signal,
-      });
-      const cookies = extractSetCookies(res.headers);
+  if (!single) return [];
 
-      let bodyOk = false;
+  return splitCombinedSetCookie(single);
+}
 
-      try {
-        const payload = await res.clone().json().catch(() => null);
-        bodyOk = payload?.ok === true;
-      } catch {
-        bodyOk = false;
-      }
+function splitCombinedSetCookie(value: string): string[] {
+  return value
+    .split(/,(?=\s*[^;,]+=)/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
-      const ok = res.ok && (cookies.length > 0 || bodyOk);
+function readCookieNameValueFromSetCookie(
+  cookie: string,
+): { name: string; value: string } | null {
+  const firstPart = cookie.split(";")[0];
+  const separatorIndex = firstPart.indexOf("=");
 
-      if (process.env.NODE_ENV !== "production") {
-        console.info(`[BFF][${logLabel}][REFRESH]`, {
-          correlationId,
-          refreshUrl,
-          status: res.status,
-          ok: res.ok,
-          bodyOk,
-          effectiveOk: ok,
-          refreshCookieCount: cookies.length,
-          refreshCookieNames: cookies.map((c) => c.split("=")[0]),
-          rawSetCookieHeader: res.headers.get("set-cookie") ?? "(yok)",
-        });
-      }
+  if (separatorIndex <= 0) {
+    return null;
+  }
 
-      return {
-        ok,
-        status: res.status,
-        cookies,
-      };
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.error(`[BFF][${logLabel}][REFRESH_ERROR]`, {
-          correlationId,
-          refreshUrl,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
+  return {
+    name: firstPart.slice(0, separatorIndex).trim(),
+    value: firstPart.slice(separatorIndex + 1).trim(),
+  };
+}
 
-      return {
-        ok: false,
-        status: 0,
-        cookies: [],
-      };
-    } finally {
-      cleanup();
+function mergeCookieHeader(
+  originalCookieHeader: string,
+  setCookies: string[],
+): string {
+  const jar = new Map<string, string>();
+
+  for (const part of originalCookieHeader.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    const index = trimmed.indexOf("=");
+    if (index <= 0) continue;
+
+    jar.set(trimmed.slice(0, index).trim(), trimmed.slice(index + 1).trim());
+  }
+
+  for (const cookie of setCookies) {
+    const parsed = readCookieNameValueFromSetCookie(cookie);
+
+    if (!parsed) continue;
+
+    if (parsed.value) {
+      jar.set(parsed.name, parsed.value);
+    } else {
+      jar.delete(parsed.name);
     }
-  })();
-
-  refreshInFlight.set(key, promise);
-
-  try {
-    return await promise;
-  } finally {
-    refreshInFlight.delete(key);
-  }
-}
-
-export function shouldSkipResponseHeader(key: string): boolean {
-  const lower = key.toLowerCase();
-
-  return [
-    "content-length",
-    "connection",
-    "transfer-encoding",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailer",
-    "upgrade",
-    "set-cookie",
-  ].includes(lower);
-}
-
-export function filterProxyResponseHeaders(
-  upstream: Response,
-  refreshCookies: string[]
-): Headers {
-  const headers = new Headers();
-
-  upstream.headers.forEach((value, key) => {
-    if (shouldSkipResponseHeader(key)) return;
-    headers.set(key, value);
-  });
-
-  const cookieMap = new Map<string, string>();
-
-  for (const cookie of extractSetCookies(upstream.headers)) {
-    const name = cookie.split("=")[0]?.trim();
-    if (name) cookieMap.set(name, normalizeSetCookieForBrowser(cookie));
   }
 
-  for (const cookie of refreshCookies) {
-    const name = cookie.split("=")[0]?.trim();
-    if (name) cookieMap.set(name, normalizeSetCookieForBrowser(cookie));
-  }
-
-  for (const cookie of cookieMap.values()) {
-    headers.append("set-cookie", cookie);
-  }
-
-  return headers;
-}
-
-export function isAbortLikeError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-
-  const message = err.message.toLowerCase();
-  return err.name === "AbortError" || message.includes("abort");
+  return Array.from(jar.entries())
+    .map(([name, value]) => `${name}=${value}`)
+    .join("; ");
 }
 
 export function buildMergedRetryHeaders(
@@ -477,28 +359,234 @@ export function buildMergedRetryHeaders(
     extraHeaders?: HeadersInit;
     defaultAccept?: string;
     includeTenantHeader?: boolean;
-  }
+  },
 ): Headers {
-  const headers = buildWebAuthHeaders(req, correlationId, {
-    ...options,
-    includeAuthorization: false,
-  });
+  const headers = buildWebAuthHeaders(req, correlationId, options);
 
-  const mergedCookie = mergeCookie(req.headers.get("cookie"), refreshCookies);
+  const originalCookieHeader = req.headers.get("cookie") ?? "";
+  const mergedCookieHeader = mergeCookieHeader(originalCookieHeader, refreshCookies);
 
-  if (process.env.NODE_ENV !== "production") {
-    console.info("[BFF][RETRY_COOKIE]", {
-      correlationId,
-      originalCookieLength: req.headers.get("cookie")?.length ?? 0,
-      refreshCookieCount: refreshCookies.length,
-      mergedCookieLength: mergedCookie.length,
-      refreshCookieNames: refreshCookies.map((c) => c.split("=")[0]),
-    });
-  }
-
-  if (mergedCookie) {
-    headers.set("cookie", mergedCookie);
+  if (mergedCookieHeader) {
+    headers.set("cookie", mergedCookieHeader);
   }
 
   return headers;
+}
+
+export function filterProxyResponseHeaders(
+  upstream: Response,
+  refreshCookies: string[] = [],
+): Headers {
+  const headers = new Headers();
+
+  const contentType = upstream.headers.get("content-type");
+
+  if (contentType) {
+    headers.set("content-type", contentType);
+  }
+
+  for (const cookie of refreshCookies) {
+    headers.append("set-cookie", normalizeSetCookieForBrowser(cookie));
+  }
+
+  return headers;
+}
+
+export function appendSessionExpiredCookies(headers: Headers): number {
+  return appendExpiredAuthCookies(headers);
+}
+
+async function readRefreshBody(response: Response): Promise<unknown> {
+  const text = await response.text().catch(() => "");
+
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function isRefreshBodyFailure(body: unknown): boolean {
+  return (
+    !!body &&
+    typeof body === "object" &&
+    (body as Record<string, unknown>).ok === false
+  );
+}
+
+function isRefreshBodyOk(body: unknown): boolean {
+  return (
+    !!body &&
+    typeof body === "object" &&
+    (body as Record<string, unknown>).ok === true
+  );
+}
+
+function extractRefreshFailureReason(status: number, body: unknown): string {
+  if (status === 0) return "NETWORK_ERROR";
+  if (status === 408 || status === 504) return "TIMEOUT";
+
+  if (body && typeof body === "object") {
+    const record = body as Record<string, unknown>;
+    const reason = record.reason ?? record.code;
+
+    if (typeof reason === "string" && reason.trim()) {
+      return reason.trim();
+    }
+  }
+
+  if (status === 401) return "UNAUTHORIZED";
+  if (status === 403) return "FORBIDDEN";
+
+  return "REFRESH_FAILED";
+}
+
+async function executeRefreshRequest(
+  req: NextRequest,
+  timeoutMs: number,
+  correlationId: string,
+  logLabel: string,
+): Promise<RefreshResult> {
+  const refreshUrl = new URL(
+    "/api/v1.0/account/refresh",
+    req.nextUrl.origin,
+  ).toString();
+
+  const { signal, cleanup } = withTimeout(timeoutMs);
+
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[BFF][${logLabel}][REFRESH_REQUEST_STARTED]`, {
+        correlationId,
+        refreshUrl,
+      });
+    }
+
+    const response = await fetch(refreshUrl, {
+      method: "POST",
+      headers: buildWebAuthHeaders(req, correlationId, {
+        includeTenantHeader: true,
+      }),
+      cache: "no-store",
+      signal,
+    });
+
+    const cookies = readSetCookieHeaders(response)
+      .map(normalizeSetCookieForBrowser)
+      .filter(Boolean);
+
+    const body = await readRefreshBody(response);
+    const bodyFailure = isRefreshBodyFailure(body);
+    const bodyOk = isRefreshBodyOk(body);
+
+    const ok = response.ok && !bodyFailure && (cookies.length > 0 || bodyOk);
+
+    const result: RefreshResult = {
+      ok,
+      status: response.status,
+      cookies,
+      reason: ok
+        ? undefined
+        : extractRefreshFailureReason(response.status, body),
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[BFF][${logLabel}][REFRESH_RESPONSE]`, {
+        correlationId,
+        status: response.status,
+        ok: result.ok,
+        reason: result.reason,
+        cookieCount: cookies.length,
+        bodyOk,
+        bodyFailure,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    const aborted = isAbortLikeError(error);
+
+    const result: RefreshResult = {
+      ok: false,
+      status: aborted ? 504 : 0,
+      cookies: [],
+      reason: aborted ? "TIMEOUT" : "NETWORK_ERROR",
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[BFF][${logLabel}][REFRESH_ERROR]`, {
+        correlationId,
+        reason: result.reason,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+
+    return result;
+  } finally {
+    cleanup();
+  }
+}
+
+export async function tryRefreshWebSession(
+  req: NextRequest,
+  timeoutMs: number,
+  correlationId: string,
+  logLabel: string,
+): Promise<RefreshResult> {
+  const key = getRefreshKey(req);
+
+  const recent = getRecentRefreshResult(key);
+  if (recent) {
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[BFF][${logLabel}][RECENT_REFRESH_REUSED]`, {
+        correlationId,
+        keyHash: hashValue(key),
+        cookieCount: recent.cookies.length,
+      });
+    }
+
+    return recent;
+  }
+
+  const existing = refreshInFlight.get(key);
+  if (existing) {
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[BFF][${logLabel}][REFRESH_COORDINATOR_JOINED]`, {
+        correlationId,
+        keyHash: hashValue(key),
+      });
+    }
+
+    return existing;
+  }
+
+  const promise = executeRefreshRequest(req, timeoutMs, correlationId, logLabel);
+
+  refreshInFlight.set(key, promise);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info(`[BFF][${logLabel}][REFRESH_COORDINATOR_ACQUIRED]`, {
+      correlationId,
+      keyHash: hashValue(key),
+    });
+  }
+
+  try {
+    const result = await promise;
+
+    rememberRecentRefreshResult(key, result);
+
+    return result;
+  } finally {
+    refreshInFlight.delete(key);
+
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[BFF][${logLabel}][REFRESH_COORDINATOR_RELEASED]`, {
+        correlationId,
+        keyHash: hashValue(key),
+      });
+    }
+  }
 }

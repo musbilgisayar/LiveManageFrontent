@@ -93,6 +93,7 @@ export default async function LocaleLayout({
 
   const h = await headers();
   const c = await cookies();
+  const cookieHeader = buildCookieHeader(c);
 
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto =
@@ -133,6 +134,13 @@ export default async function LocaleLayout({
       headers: {
         accept: "application/json",
         "accept-language": lang,
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+        ...(h.get("x-tenant-key")
+          ? { "x-tenant-key": h.get("x-tenant-key")! }
+          : {}),
+        ...(h.get("x-correlation-id")
+          ? { "x-correlation-id": h.get("x-correlation-id")! }
+          : {}),
       },
       cache: "no-store",
       next: { revalidate: 0 },
@@ -144,7 +152,7 @@ export default async function LocaleLayout({
       console.warn(
         `⚠️ [LocaleLayout] Çeviri isteği başarısız. status=${res.status}`
       );
-      dict = {};
+      dict = ensureDict(json?.data);
     } else {
       dict = res.ok && json?.ok ? ensureDict(json?.data) : {};
 
@@ -165,7 +173,6 @@ export default async function LocaleLayout({
 
   try {
     const languageUrl = `${baseUrl}/api/v1.0/localization/languages`;
-    const cookieHeader = buildCookieHeader(c);
     const languageRes = await fetch(languageUrl, {
       method: "GET",
       headers: {

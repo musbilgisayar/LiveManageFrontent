@@ -1,0 +1,441 @@
+# LiveManage – Managed Property Yetkilendirme ve Onay Akışı Stratejisi
+
+## Amaç
+
+Managed Property (Site/Apartman) başvuru onay sürecinde kullanıcı yetkilendirmesini profesyonel, ölçeklenebilir, idempotent ve güvenli şekilde yönetmek.
+
+Bu doküman, Role, Permission ve ManagedPropertyAuthority ilişkilerinin nasıl çalışacağını ve gelecekteki geliştirmelerde hangi mimari kuralların uygulanacağını tanımlar.
+
+---
+
+# 1. Temel Yetkilendirme Modeli
+
+Sistemde üç ayrı kavram vardır:
+
+## Permission
+
+Permission kullanıcının ne yapabileceğini belirler.
+
+Örnek:
+
+* property.management.view.tenant
+* property.units.manage.tenant
+* property.accounting.view.tenant
+
+Permission bir kayda erişim vermez.
+
+Sadece işlem yapabilme hakkını tanımlar.
+
+---
+
+## Role
+
+Role bir permission paketidir.
+
+Role doğrudan erişim kontrolü değildir.
+
+Örnek:
+
+PropertyManager rolü aşağıdaki permissionları içerebilir:
+
+* property.management.view.tenant
+* property.units.manage.tenant
+* property.accounting.view.tenant
+
+Role kullanıcının hangi siteyi yöneteceğini belirlemez.
+
+---
+
+## ManagedPropertyAuthority
+
+ManagedPropertyAuthority kullanıcının hangi siteyi yönetebileceğini belirler.
+
+Örnek:
+
+UserId = A
+
+Authority kayıtları:
+
+* Site A
+* Site B
+
+Bu kullanıcı yalnızca Site A ve Site B üzerinde işlem yapabilir.
+
+Aynı tenant içindeki diğer siteleri göremez.
+
+---
+
+# 2. Erişim Kararı
+
+Bir kullanıcı bir site üzerinde işlem yapabilmek için iki şartı da sağlamalıdır.
+
+## Şart 1
+
+Gerekli permission mevcut olmalıdır.
+
+Örnek:
+
+property.management.view.tenant
+
+---
+
+## Şart 2
+
+Aktif ManagedPropertyAuthority kaydı bulunmalıdır.
+
+Örnek:
+
+TenantId
+ManagedPropertyId
+AuthorityUserId
+IsActive = true
+
+---
+
+## Sonuç
+
+Permission VAR + Authority VAR
+
+→ Erişim ver.
+
+Permission YOK
+
+→ Erişim verme.
+
+Authority YOK
+
+→ Erişim verme.
+
+---
+
+# 3. Başvuru Onay Akışı
+
+Approve işlemi idempotent çalışmalıdır.
+
+Aynı işlem ikinci kez çalıştığında duplicate kayıt üretmemelidir.
+
+## Akış
+
+ApproveAsync
+
+↓
+
+EnsureManagedProperty
+
+↓
+
+EnsureManagedPropertyAuthority
+
+↓
+
+EnsureRequiredRoleOrPermission
+
+↓
+
+AuditLog
+
+↓
+
+UnitOfWork.SaveChangesAsync
+
+↓
+
+Cache Invalidation
+
+---
+
+# 4. EnsureManagedProperty
+
+Amaç:
+
+ManagedProperty kaydının mevcut olduğundan emin olmak.
+
+Kurallar:
+
+* ManagedProperty zaten varsa tekrar oluşturma.
+* Application.ManagedPropertyId varsa mevcut kaydı kullan.
+* Yoksa yeni ManagedProperty oluştur.
+
+---
+
+# 5. EnsureManagedPropertyAuthority
+
+Amaç:
+
+Kullanıcı ile site arasındaki yönetim ilişkisini oluşturmak.
+
+Kurallar:
+
+* Aynı authority zaten varsa tekrar oluşturma.
+* Authority yoksa oluştur.
+* Her site için ayrı authority kaydı bulunabilir.
+
+Örnek:
+
+User A
+
+Site 1 → Authority
+
+Site 2 → Authority
+
+Site 3 → Authority
+
+---
+
+# 6. EnsureRequiredRoleOrPermission
+
+Amaç:
+
+Kullanıcının gerekli role veya permission setine sahip olduğundan emin olmak.
+
+Kurallar:
+
+* Gerekli role zaten sahipse tekrar rol atama.
+* Rol yoksa ilk kez ata.
+* İkinci ve sonraki site onaylarında tekrar rol verme.
+
+Örnek:
+
+İlk site:
+
+PropertyManager rolü atanır.
+
+İkinci site:
+
+Rol atanmaz.
+
+Sadece Authority oluşturulur.
+
+Üçüncü site:
+
+Rol atanmaz.
+
+Sadece Authority oluşturulur.
+
+---
+
+# 7. ManagedPropertyAccessService
+
+Sistemde ayrı bir erişim servisi kullanılmalıdır.
+
+## Önerilen Interface
+
+IManagedPropertyAccessService
+
+Metotlar:
+
+GetAccessiblePropertyIdsAsync
+
+CanAccessPropertyAsync
+
+EnsureCanManagePropertyAsync
+
+---
+
+## Amaç
+
+Tüm erişim kararlarının merkezi noktadan verilmesi.
+
+Controller veya repository içerisinde dağınık erişim kontrolleri yapılmamalıdır.
+
+---
+
+# 8. Listeleme Kuralları
+
+Normal PropertyManager kullanıcıları:
+
+Sadece authority sahibi oldukları siteleri görebilir.
+
+Örnek sorgu mantığı:
+
+TenantId = currentTenant
+
+AND
+
+AuthorityUserId = currentUser
+
+AND
+
+Authority.IsActive = true
+
+---
+
+## Göremeyecekleri
+
+* Tenant içindeki diğer siteler
+* Başka yöneticilere ait siteler
+* Başka tenant verileri
+
+---
+
+# 9. SuperAdmin İstisnası
+
+Global yetkiye sahip kullanıcılar authority filtresinden muaf olabilir.
+
+Bu karar permission bazlı verilmelidir.
+
+Örnek:
+
+property.management.view.global
+
+---
+
+# 10. Transaction Stratejisi
+
+Repository katmanı SaveChanges çağırmamalıdır.
+
+Doğru yapı:
+
+Repository
+
+↓
+
+Service
+
+↓
+
+UnitOfWork
+
+↓
+
+SaveChanges
+
+---
+
+## Kural
+
+Tek transaction otoritesi UnitOfWork olmalıdır.
+
+---
+
+# 11. Cache Stratejisi
+
+Doğru sıra:
+
+Veritabanı değişiklikleri hazırlanır
+
+↓
+
+UnitOfWork.SaveChangesAsync
+
+↓
+
+Cache Invalidation
+
+---
+
+## Kural
+
+Cache başarısız olursa:
+
+* Veritabanı rollback yapılmaz.
+* Hata loglanır.
+* İşlem başarılı kabul edilir.
+
+---
+
+# 12. Audit ve Security Log Stratejisi
+
+Approve akışı aşağıdaki olayları üretmelidir.
+
+ApplicationApproved
+
+ManagedPropertyCreated
+
+ManagedPropertyAuthorityCreated
+
+RoleAssigned
+
+RoleAssignSkippedAlreadyHasRole
+
+---
+
+## Amaç
+
+Tüm güvenlik ve yönetim işlemlerinin izlenebilir olması.
+
+---
+
+# 13. İdempotentlik Kuralları
+
+Aynı approve işlemi tekrar çalıştırıldığında:
+
+ManagedProperty duplicate oluşmamalıdır.
+
+ManagedPropertyAuthority duplicate oluşmamalıdır.
+
+Role duplicate oluşmamalıdır.
+
+Permission duplicate oluşmamalıdır.
+
+---
+
+# 14. Test Senaryoları
+
+## Senaryo 1
+
+İlk site onayı
+
+Beklenen:
+
+* ManagedProperty oluşur
+* Authority oluşur
+* Role atanır
+
+---
+
+## Senaryo 2
+
+İkinci site onayı
+
+Beklenen:
+
+* ManagedProperty oluşur
+* Authority oluşur
+* Role tekrar atanmaz
+
+---
+
+## Senaryo 3
+
+Aynı approve işlemi tekrar çalışır
+
+Beklenen:
+
+* Duplicate kayıt oluşmaz
+
+---
+
+## Senaryo 4
+
+Kullanıcı listeleme yapar
+
+Beklenen:
+
+* Sadece authority sahibi olduğu siteleri görür
+
+---
+
+## Senaryo 5
+
+Kullanıcı başka siteye erişmeye çalışır
+
+Beklenen:
+
+* 403 Forbidden
+
+---
+
+# Nihai Karar
+
+Role ve Permission kullanıcıya modül erişimi sağlar.
+
+ManagedPropertyAuthority kullanıcının hangi siteyi yönetebileceğini belirler.
+
+Bir kullanıcı yalnızca:
+
+Permission + Authority
+
+birlikte mevcutsa ilgili site üzerinde işlem yapabilir.
+
+Bu mimari LiveManage için standart yaklaşım olarak kabul edilmiştir.

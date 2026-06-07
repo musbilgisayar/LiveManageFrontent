@@ -1,10 +1,25 @@
-// 📁 src/utils/apiClient.ts
+import {
+  isSessionExpiredPayload,
+  redirectToLoginForSessionExpired,
+} from "@/utils/sessionExpiredRedirect.client";
+
 /**
- * 🌐 apiClient
- * - Next.js BFF (3000) katmanına yönlendirilmiş istekler için hafif client
- * - Her çağrı 200 {ok,data,error} yapısına uygun döner
- * - JWT, locale ve correlation header'ları BFF tarafında otomatik eklenir
+ * apiClient
+ * - Lightweight client for Next.js BFF requests.
+ * - Uses HttpOnly cookie auth through the BFF.
+ * - Centrally redirects on SESSION_EXPIRED responses.
  */
+
+async function readJson(res: Response): Promise<any> {
+  return res.json().catch(() => ({}));
+}
+
+function handleSessionExpired(json: unknown, status: number): void {
+  if (isSessionExpiredPayload(json, status)) {
+    redirectToLoginForSessionExpired();
+  }
+}
+
 export const apiClient = {
   async get<T = any>(url: string, init?: RequestInit): Promise<{ data: T }> {
     const res = await fetch(url, {
@@ -16,12 +31,17 @@ export const apiClient = {
       },
       ...init,
     });
-    if (!res.ok) throw new Error(`[GET] ${url} → ${res.status}`);
-    const json = await res.json().catch(() => ({}));
+    const json = await readJson(res);
+    handleSessionExpired(json, res.status);
+    if (!res.ok) throw new Error(`[GET] ${url} -> ${res.status}`);
     return { data: json };
   },
 
-  async post<T = any>(url: string, body?: any, init?: RequestInit): Promise<{ data: T }> {
+  async post<T = any>(
+    url: string,
+    body?: any,
+    init?: RequestInit
+  ): Promise<{ data: T }> {
     const res = await fetch(url, {
       method: "POST",
       credentials: "include",
@@ -33,12 +53,17 @@ export const apiClient = {
       body: body ? JSON.stringify(body) : undefined,
       ...init,
     });
-    if (!res.ok) throw new Error(`[POST] ${url} → ${res.status}`);
-    const json = await res.json().catch(() => ({}));
+    const json = await readJson(res);
+    handleSessionExpired(json, res.status);
+    if (!res.ok) throw new Error(`[POST] ${url} -> ${res.status}`);
     return { data: json };
   },
 
-  async put<T = any>(url: string, body?: any, init?: RequestInit): Promise<{ data: T }> {
+  async put<T = any>(
+    url: string,
+    body?: any,
+    init?: RequestInit
+  ): Promise<{ data: T }> {
     const res = await fetch(url, {
       method: "PUT",
       credentials: "include",
@@ -50,8 +75,9 @@ export const apiClient = {
       body: body ? JSON.stringify(body) : undefined,
       ...init,
     });
-    if (!res.ok) throw new Error(`[PUT] ${url} → ${res.status}`);
-    const json = await res.json().catch(() => ({}));
+    const json = await readJson(res);
+    handleSessionExpired(json, res.status);
+    if (!res.ok) throw new Error(`[PUT] ${url} -> ${res.status}`);
     return { data: json };
   },
 
@@ -65,8 +91,9 @@ export const apiClient = {
       },
       ...init,
     });
-    if (!res.ok) throw new Error(`[DELETE] ${url} → ${res.status}`);
-    const json = await res.json().catch(() => ({}));
+    const json = await readJson(res);
+    handleSessionExpired(json, res.status);
+    if (!res.ok) throw new Error(`[DELETE] ${url} -> ${res.status}`);
     return { data: json };
   },
 };

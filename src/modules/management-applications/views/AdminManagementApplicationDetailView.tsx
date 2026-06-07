@@ -1,5 +1,6 @@
 //src/modules/management-applications/views/AdminManagementApplicationDetailView.tsx
-//bu dosya yönetici kullanıcıların başvuruları üzerinde inceleme yapabilmesi, onaylama veya reddetme işlemlerini gerçekleştirebilmesi için optimize edilmiştir. Yönetici olmayan kullanıcıların kendi başvurularını görüntülemesi için optimize edilmiş versiyonu ManagementApplicationDetailView.tsx dosyasında yer almaktadır.
+
+
 "use client";
 
 import React, { useMemo } from "react";
@@ -220,6 +221,10 @@ export default function AdminManagementApplicationDetailView({
         >
           <ApplicantInfoCard
             applicant={data.applicant}
+            applicantType={data.applicantType}
+            identityNumberMasked={data.identityNumberMasked}
+            taxNumberMasked={data.taxNumberMasked}
+            mersisNumberMasked={data.mersisNumberMasked}
           />
 
           <PropertyInfoCard

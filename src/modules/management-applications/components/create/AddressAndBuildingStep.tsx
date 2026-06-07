@@ -22,7 +22,9 @@ type AddressAndBuildingStepProps = {
   form: FormState;
   errors: FormErrors;
   blockCount: number;
-  totalApartmentCount: number;
+  residentialUnitCount: number;
+  commercialUnitCount: number;
+  totalUnitCount: number;
   onPatch: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
   onAddressChange: (next: AddressForm) => void;
 };
@@ -41,22 +43,34 @@ const KEYS = {
   blockCountHint:
     "management-applications:create.address.fields.blockCountHint",
 
-  totalApartmentCount:
-    "management-applications:create.address.fields.totalApartmentCount",
-  totalApartmentCountHint:
-    "management-applications:create.address.fields.totalApartmentCountHint",
+  residentialUnitCount:
+    "management-applications:create.address.fields.residentialUnitCount",
+  residentialUnitCountHint:
+    "management-applications:create.address.fields.residentialUnitCountHint",
+
+  commercialUnitCount:
+    "management-applications:create.address.fields.commercialUnitCount",
+  commercialUnitCountHint:
+    "management-applications:create.address.fields.commercialUnitCountHint",
 
   noPropertyName:
     "management-applications:create.address.summary.noPropertyName",
   blocks: "management-applications:create.address.summary.blocks",
-  apartments: "management-applications:create.address.summary.apartments",
+  residentialUnits:
+    "management-applications:create.address.summary.residentialUnits",
+  commercialUnits:
+    "management-applications:create.address.summary.commercialUnits",
+  totalUnits:
+    "management-applications:create.address.summary.totalUnits",
 } as const;
 
 export default function AddressAndBuildingStep({
   form,
   errors,
   blockCount,
-  totalApartmentCount,
+  residentialUnitCount,
+  commercialUnitCount,
+  totalUnitCount,
   onPatch,
   onAddressChange,
 }: AddressAndBuildingStepProps) {
@@ -112,7 +126,7 @@ export default function AddressAndBuildingStep({
         title={tr(KEYS.scaleTitle, "Yapı ölçeği")}
         description={tr(
           KEYS.scaleDescription,
-          "Başvuru yapılan yapının blok ve daire bilgisini girin.",
+          "Başvuru yapılan yapının konut, ticari bölüm ve blok bilgisini girin.",
         )}
       >
         <Stack spacing={2}>
@@ -121,7 +135,7 @@ export default function AddressAndBuildingStep({
               display: "grid",
               gridTemplateColumns: {
                 xs: "1fr",
-                md: "1fr 1fr",
+                md: "1fr 1fr 1fr",
               },
               gap: 2,
             }}
@@ -142,18 +156,37 @@ export default function AddressAndBuildingStep({
 
             <TextField
               type="number"
-              label={tr(KEYS.totalApartmentCount, "Toplam daire sayısı")}
-              value={form.totalApartmentCount}
+              label={tr(
+                KEYS.residentialUnitCount,
+                "Konut bağımsız bölüm sayısı",
+              )}
+              value={form.residentialUnitCount}
               onChange={(event) =>
-                onPatch("totalApartmentCount", event.target.value)
+                onPatch("residentialUnitCount", event.target.value)
               }
-              error={!!errors.totalApartmentCount}
+              error={!!errors.residentialUnitCount}
               helperText={
-                errors.totalApartmentCount ||
-                tr(
-                  KEYS.totalApartmentCountHint,
-                  "Yapıdaki toplam daire sayısı",
-                )
+                errors.residentialUnitCount ||
+                tr(KEYS.residentialUnitCountHint, "Konut sayısını girin")
+              }
+              fullWidth
+              sx={premiumFieldSx}
+            />
+
+            <TextField
+              type="number"
+              label={tr(
+                KEYS.commercialUnitCount,
+                "Ticari bağımsız bölüm sayısı",
+              )}
+              value={form.commercialUnitCount}
+              onChange={(event) =>
+                onPatch("commercialUnitCount", event.target.value)
+              }
+              error={!!errors.commercialUnitCount}
+              helperText={
+                errors.commercialUnitCount ||
+                tr(KEYS.commercialUnitCountHint, "Ticari bölüm sayısını girin")
               }
               fullWidth
               sx={premiumFieldSx}
@@ -165,7 +198,11 @@ export default function AddressAndBuildingStep({
             {form.propertyName ||
               tr(KEYS.noPropertyName, "Yapı adı girilmedi")}{" "}
             · {blockCount || 0} {tr(KEYS.blocks, "blok")} ·{" "}
-            {totalApartmentCount || 0} {tr(KEYS.apartments, "daire")}
+            {residentialUnitCount || 0}{" "}
+            {tr(KEYS.residentialUnits, "konut")} ·{" "}
+            {commercialUnitCount || 0}{" "}
+            {tr(KEYS.commercialUnits, "ticari")} ·{" "}
+            {totalUnitCount || 0} {tr(KEYS.totalUnits, "toplam bölüm")}
           </InlineNotice>
         </Stack>
       </SectionCard>

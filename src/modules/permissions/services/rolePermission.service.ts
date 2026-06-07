@@ -183,7 +183,7 @@ export async function syncTenantPermissionCatalog(
   const normalizedTenantId = normalizeTenantId(targetTenantId);
 
   const response = await fetch(
-    `/api/v1.0/admin/permissions/tenants/${normalizedTenantId}/sync`,
+    `/api/v1.0/permissions/tenants/${normalizedTenantId}/sync`,
     {
       method: "POST",
       credentials: "include",

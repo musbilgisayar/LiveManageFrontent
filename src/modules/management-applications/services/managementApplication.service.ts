@@ -17,11 +17,19 @@ import type {
 } from "../types/managementApplication.types";
 
 import {
+  formatAdminDocumentFileSize,
   normalizeAdminApplicationDocumentStatus,
   normalizeAdminApplicationStatus,
   normalizeAdminCheckStatus,
+  normalizeAdminDocumentTypeLabel,
   normalizeAdminRiskLevel,
 } from "../utils/adminManagementApplication.utils";
+
+export {
+  downloadAdminApplicationDocument,
+  getAdminManagementApplicationDetail,
+  getGlobalAdminManagementApplicationDetail,
+} from "./adminManagementApplication.service";
 
 const CREATE_ERROR_KEY = "management-applications:create.submit.error";
 const CREATE_UNEXPECTED_ERROR_KEY =
@@ -30,11 +38,6 @@ const CREATE_UNEXPECTED_ERROR_KEY =
 const LIST_ERROR_KEY = "management-applications:myList.load.error";
 const LIST_UNEXPECTED_ERROR_KEY =
   "management-applications:myList.load.unexpectedError";
-
-const DOWNLOAD_ERROR_KEY =
-  "management-applications:admin.document.download.error";
-const DOWNLOAD_UNEXPECTED_ERROR_KEY =
-  "management-applications:admin.document.download.unexpectedError";
 
 const DOCUMENT_UPLOAD_ERROR_KEY =
   "management-applications:document.upload.error";
@@ -70,10 +73,6 @@ const ADMIN_REVISION_ERROR_KEY =
 const ADMIN_REVISION_UNEXPECTED_ERROR_KEY =
   "management-applications:admin.decision.revision.unexpectedError";
 
-const ADMIN_DETAIL_ERROR_KEY = "management-applications:admin.detail.error";
-const ADMIN_DETAIL_UNEXPECTED_ERROR_KEY =
-  "management-applications:admin.detail.unexpectedError";
-
 const GLOBAL_PENDING_LIST_ERROR_KEY =
   "management-applications:superadmin.pendingList.error";
 const GLOBAL_PENDING_LIST_UNEXPECTED_ERROR_KEY =
@@ -83,6 +82,36 @@ const managementApplicationListRequests = new Map<
   string,
   Promise<ApiResponse<ManagedPropertyApplicationListItemDto[]>>
 >();
+
+const LOCALE_TO_CULTURE: Record<string, string> = {
+  ar: "ar-SA",
+  de: "de-DE",
+  en: "en-US",
+  fr: "fr-FR",
+  it: "it-IT",
+  tr: "tr-TR",
+};
+
+function getClientAcceptLanguage(): string {
+  if (typeof window === "undefined") return "tr-TR";
+
+  const pathLocale = window.location.pathname.split("/")[1]?.toLowerCase();
+  const locale = pathLocale || "tr";
+  const prefix = locale.split("-")[0];
+
+  return LOCALE_TO_CULTURE[prefix] ?? locale;
+}
+
+function jsonHeaders(extra?: HeadersInit): Headers {
+  const headers = new Headers(extra);
+
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+  headers.set("accept-language", getClientAcceptLanguage());
+
+  return headers;
+}
 
 async function parseJsonSafe<T>(res: Response): Promise<ApiResponse<T> | null> {
   try {
@@ -139,6 +168,83 @@ function formatDateTime(value: unknown): string {
   return date.toLocaleString();
 }
 
+function normalizeText(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text.length > 0 ? text : "-";
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return "-";
+}
+
+function readStringPath(source: unknown, path: string): string {
+  if (!source || typeof source !== "object") return "";
+
+  let current: unknown = source;
+
+  for (const segment of path.split(".")) {
+    if (!current || typeof current !== "object") return "";
+
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  if (typeof current === "string" || typeof current === "number") {
+    return String(current).trim();
+  }
+
+  return "";
+}
+
+function firstNonEmptyString(...values: string[]): string {
+  return values.find((value) => value && value !== "-") ?? "";
+}
+
+function maskIdentityNumber(value: string): string {
+  const text = value.trim();
+
+  if (!text || text === "-") return "-";
+  if (text.includes("*") || text.includes("•")) return text;
+
+  const digits = text.replace(/\D/g, "");
+
+  if (digits.length >= 10) {
+    return `${digits.slice(0, 3)}******${digits.slice(-2)}`;
+  }
+
+  if (digits.length >= 6) {
+    return `${digits.slice(0, 2)}****${digits.slice(-2)}`;
+  }
+
+  return text.length > 4 ? `${text.slice(0, 2)}****${text.slice(-2)}` : text;
+}
+
+function resolveIdentityNumberFromDetail(
+  data: ManagedPropertyApplicationDetailDto,
+): string {
+  const rawValue = firstNonEmptyString(
+    readStringPath(data, "applicant.identityNumberMasked"),
+    readStringPath(data, "applicant.identityNumber"),
+    readStringPath(data, "applicant.nationalIdentityNumber"),
+    readStringPath(data, "applicant.nationalId"),
+    readStringPath(data, "applicant.taxOrIdentityNumber"),
+    readStringPath(data, "authority.identityNumber"),
+    readStringPath(data, "authority.taxOrIdentityNumber"),
+    readStringPath(data, "identityNumberMasked"),
+    readStringPath(data, "identityNumber"),
+    readStringPath(data, "nationalIdentityNumber"),
+    readStringPath(data, "nationalId"),
+    readStringPath(data, "taxOrIdentityNumber"),
+  );
+
+  return rawValue ? maskIdentityNumber(rawValue) : "-";
+}
+
 function isManagedPropertyApplicationDetailDto(
   data: unknown,
 ): data is ManagedPropertyApplicationDetailDto {
@@ -161,14 +267,19 @@ function mapManagedPropertyDetailToAdminDetail(
   const applicant = data.applicant;
   const property = data.property;
   const authority = data.authority;
+  const review = data.review;
 
   const createdAt = formatDateTime(data.submittedAtUtc);
 
   const updatedAt = formatDateTime(
     data.updatedAt ||
+    review?.reviewedAtUtc ||
     data.reviewedAtUtc ||
     data.submittedAtUtc,
   );
+
+  const residentialCount = Number(property?.residentialUnitCount ?? 0);
+  const commercialCount = Number(property?.commercialUnitCount ?? 0);
 
   return {
     applicationId: data.id,
@@ -177,65 +288,87 @@ function mapManagedPropertyDetailToAdminDetail(
     riskLevel: normalizeAdminRiskLevel(data.riskLevel),
     createdAt,
     updatedAt,
+
     applicant: {
       userId: applicant?.userId || authority?.applicantUserId || "-",
-      fullName: applicant?.fullName || "-",
-      email: applicant?.email || "-",
-      phone: applicant?.phoneNumber || "-",
-      emailVerified: Boolean(applicant?.isEmailVerified),
-      phoneVerified: Boolean(applicant?.isPhoneVerified),
-      identityNumberMasked: "-",
+      fullName: normalizeText(applicant?.fullName),
+      email: normalizeText(applicant?.email),
+      phone: normalizeText(applicant?.phone ?? applicant?.phoneNumber),
+      isEmailVerified: Boolean(applicant?.isEmailVerified),
+      isPhoneVerified: Boolean(applicant?.isPhoneVerified),
+      identityNumberMasked: resolveIdentityNumberFromDetail(data),
     },
+
     property: {
-      propertyName: property?.propertyName || "-",
+      propertyName: normalizeText(property?.propertyName),
       structureType: "-",
       blockCount: Number(property?.blockCount ?? 0),
-      totalApartmentCount: Number(property?.residentialUnitCount ?? 0),
-      addressSummary: property?.addressText || property?.addressId || "-",
+      residentialUnitCount: Number(property?.residentialUnitCount ?? 0),
+      commercialUnitCount: Number(property?.commercialUnitCount ?? 0),
+      totalApartmentCount: Number(
+        property?.totalApartmentCount ??
+        Number(property?.residentialUnitCount ?? 0) +
+        Number(property?.commercialUnitCount ?? 0),
+      ),
+      addressSummary: normalizeText(property?.addressSummary),
     },
+
     authority: {
-      representationType: "-",
-      requestedRole: "-",
-      authorityStartDate: formatDateTime(data.submittedAtUtc),
-      authorityEndDate: data.reviewedAtUtc
-        ? formatDateTime(data.reviewedAtUtc)
-        : undefined,
-      authorityScope:
-        authority?.applicantNote ||
-        data.applicantNote ||
-        property?.description ||
-        "-",
+      applicantUserId: authority?.applicantUserId || applicant?.userId || "-",
+      representationType: normalizeText(authority?.representationType),
+      requestedRole: normalizeText(authority?.requestedRoleName),
+      authorityStartDate: authority?.authorityStartDateUtc
+        ? formatDateTime(authority.authorityStartDateUtc)
+        : "-",
+      authorityEndDate: authority?.isAuthorityIndefinite
+        ? undefined
+        : authority?.authorityEndDateUtc
+          ? formatDateTime(authority.authorityEndDateUtc)
+          : undefined,
+      authorityScope: normalizeText(authority?.authorityScope),
     },
+
+
     documents: Array.isArray(data.documents)
       ? data.documents.map((document) => ({
-          id: document.id,
-          documentType: String(document.documentType),
-          fileName: document.fileName || "-",
-          fileSize:
-            typeof document.fileSize === "number"
-              ? `${document.fileSize} B`
-              : "-",
-          uploadedAt: formatDateTime(document.uploadedAtUtc),
-          status: normalizeAdminApplicationDocumentStatus(document.status),
-          adminNote: document.reviewNote || undefined,
-        }))
+        id: document.id,
+        fileDocumentId: document.fileDocumentId,
+        documentType: String(document.documentType),
+        fileName: normalizeText(document.fileName),
+        fileSize:
+          typeof document.fileSize === "number"
+            ? `${document.fileSize} B`
+            : "-",
+        uploadedAt: formatDateTime(document.uploadedAtUtc),
+        status: normalizeAdminApplicationDocumentStatus(document.status),
+        adminNote: document.reviewNote || undefined,
+
+        isRequired: Boolean(document.isRequired),
+        isSensitive: Boolean(document.isSensitive),
+        isEncrypted: Boolean(document.isEncrypted),
+        isPublic: Boolean(document.isPublic),
+        sortOrder: Number(document.sortOrder ?? 0),
+      }))
       : [],
+
     systemChecks: Array.isArray(data.systemChecks)
       ? data.systemChecks.map((check) => ({
-          id: check.code,
-          label: check.label || check.code,
-          description: check.message || "-",
-          status: normalizeAdminCheckStatus(check.status),
-        }))
+        id: check.code,
+        label: check.label || check.code || "-",
+        description: check.message || "-",
+        status: normalizeAdminCheckStatus(check.status),
+      }))
       : [],
+
     timeline: Array.isArray(data.timeline)
       ? data.timeline.map((item, index) => ({
-          id: `${data.id}:timeline:${index}`,
-          action: item.eventType || item.title,
-          actorName: item.actorUserId || "-",
-          occurredAt: formatDateTime(item.occurredAtUtc),
-          note: item.description || item.title || undefined,
-        }))
+        id: `${data.id}:timeline:${index}`,
+        eventType: item.eventType || null,
+        action: item.title || item.eventType || "-",
+        actorName: item.actorName || "-",
+        occurredAt: formatDateTime(item.occurredAtUtc),
+        note: item.description || "-",
+      }))
       : [],
   };
 }
@@ -269,43 +402,6 @@ function normalizeAdminDetail(
   };
 }
 
-function resolveDownloadFileName(res: Response): string {
-  const disposition = res.headers.get("content-disposition");
-
-  if (!disposition) {
-    return "application-document";
-  }
-
-  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
-
-  if (utf8Match?.[1]) {
-    try {
-      return decodeURIComponent(utf8Match[1]);
-    } catch {
-      return utf8Match[1];
-    }
-  }
-
-  const normalMatch = /filename="?([^"]+)"?/i.exec(disposition);
-
-  return normalMatch?.[1] ?? "application-document";
-}
-
-function triggerBrowserDownload(blob: Blob, fileName: string) {
-  const url = window.URL.createObjectURL(blob);
-
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.style.display = "none";
-
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-
-  window.URL.revokeObjectURL(url);
-}
-
 export async function createManagementApplication(
   payload: CreateManagedPropertyApplicationRequestDto,
 ): Promise<ApiResponse<CreateManagementApplicationResponseData>> {
@@ -314,10 +410,7 @@ export async function createManagementApplication(
       method: "POST",
       credentials: "include",
       cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
+      headers: jsonHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     });
 
@@ -348,7 +441,7 @@ export async function createManagementApplication(
 export async function getMyManagementApplications(): Promise<
   ApiResponse<ManagedPropertyApplicationListItemDto[]>
 > {
-  const requestKey = "my";
+  const requestKey = `my:${getClientAcceptLanguage()}`;
   const existingRequest = managementApplicationListRequests.get(requestKey);
 
   if (existingRequest) {
@@ -373,9 +466,7 @@ async function getMyManagementApplicationsUncached(): Promise<
       method: "GET",
       credentials: "include",
       cache: "no-store",
-      headers: {
-        Accept: "application/json",
-      },
+      headers: jsonHeaders(),
     });
 
     const json =
@@ -411,9 +502,7 @@ export async function getMyManagementApplicationDetail(
         method: "GET",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
+        headers: jsonHeaders(),
       },
     );
 
@@ -444,49 +533,6 @@ export async function getMyManagementApplicationDetail(
   }
 }
 
-export async function downloadAdminApplicationDocument(
-  documentId: string,
-): Promise<ApiResponse<null>> {
-  try {
-    const res = await fetch(
-      `/api/v1.0/admin/property-management/applications/documents/${documentId}/download`,
-      {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          Accept: "*/*",
-        },
-      },
-    );
-
-    if (!res.ok) {
-      const json = await parseJsonSafe<null>(res);
-
-      return normalizeErrorResponse(json, DOWNLOAD_ERROR_KEY, null);
-    }
-
-    const blob = await res.blob();
-    const fileName = resolveDownloadFileName(res);
-
-    triggerBrowserDownload(blob, fileName);
-
-    return {
-      ok: true,
-      message: null,
-      userMessage: null,
-      data: null,
-    };
-  } catch (error) {
-    console.error(
-      "[managementApplication.service][downloadAdminDocument] failed",
-      error,
-    );
-
-    return buildErrorResult<null>(DOWNLOAD_UNEXPECTED_ERROR_KEY, null);
-  }
-}
-
 export type AdminApplicationDecisionRequest = {
   reviewNote?: string | null;
   rejectReason?: string | null;
@@ -505,10 +551,7 @@ export async function approveAdminManagementApplication(
         method: "POST",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+        headers: jsonHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       },
     );
@@ -546,10 +589,7 @@ export async function rejectAdminManagementApplication(
         method: "POST",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+        headers: jsonHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       },
     );
@@ -584,10 +624,7 @@ export async function requestRevisionForAdminManagementApplication(
         method: "POST",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+        headers: jsonHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       },
     );
@@ -617,99 +654,6 @@ export async function requestRevisionForAdminManagementApplication(
   }
 }
 
-export async function getAdminManagementApplicationDetail(
-  applicationId: string,
-): Promise<ApiResponse<AdminManagementApplicationDetail | null>> {
-  try {
-    const res = await fetch(
-      `/api/v1.0/admin/property-management/applications/${applicationId}`,
-      {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      },
-    );
-
-    const json = await parseJsonSafe<
-      AdminManagementApplicationDetail | ManagedPropertyApplicationDetailDto
-    >(res);
-
-    if (!res.ok) {
-      return {
-        ok: false,
-        message: json?.message ?? ADMIN_DETAIL_ERROR_KEY,
-        userMessage: json?.userMessage ?? null,
-        data: null,
-      };
-    }
-
-    return {
-      ok: json?.ok ?? true,
-      message: json?.message ?? null,
-      userMessage: json?.userMessage ?? null,
-      data: normalizeAdminDetail(json?.data ?? null),
-    };
-  } catch (error) {
-    console.error("[managementApplication.service][getAdminDetail] failed", error);
-
-    return buildErrorResult<AdminManagementApplicationDetail | null>(
-      ADMIN_DETAIL_UNEXPECTED_ERROR_KEY,
-      null,
-    );
-  }
-}
-
-export async function getGlobalAdminManagementApplicationDetail(
-  applicationId: string,
-): Promise<ApiResponse<AdminManagementApplicationDetail | null>> {
-  try {
-    const res = await fetch(
-      `/api/v1.0/superadmin/property-management/applications/${applicationId}`,
-      {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      },
-    );
-
-    const json = await parseJsonSafe<
-      AdminManagementApplicationDetail | ManagedPropertyApplicationDetailDto
-    >(res);
-
-    if (!res.ok) {
-      return {
-        ok: false,
-        message: json?.message ?? ADMIN_DETAIL_ERROR_KEY,
-        userMessage: json?.userMessage ?? null,
-        data: null,
-      };
-    }
-
-    return {
-      ok: json?.ok ?? true,
-      message: json?.message ?? null,
-      userMessage: json?.userMessage ?? null,
-      data: normalizeAdminDetail(json?.data ?? null),
-    };
-  } catch (error) {
-    console.error(
-      "[managementApplication.service][getGlobalAdminDetail] failed",
-      error,
-    );
-
-    return buildErrorResult<AdminManagementApplicationDetail | null>(
-      ADMIN_DETAIL_UNEXPECTED_ERROR_KEY,
-      null,
-    );
-  }
-}
-
 export async function getPendingAdminManagementApplications(options?: {
   scope?: "tenant" | "global";
 }): Promise<ApiResponse<AdminManagementApplicationListItem[]>> {
@@ -722,9 +666,7 @@ export async function getPendingAdminManagementApplications(options?: {
         method: "GET",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
+        headers: jsonHeaders(),
       },
     );
 
@@ -762,9 +704,7 @@ export async function getAdminManagementApplications(): Promise<
         method: "GET",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
+        headers: jsonHeaders(),
       },
     );
 
@@ -802,9 +742,7 @@ export async function getAllManagementApplications(): Promise<
         method: "GET",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
+        headers: jsonHeaders(),
       },
     );
 
@@ -842,9 +780,7 @@ export async function getGlobalManagementApplications(): Promise<
         method: "GET",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
+        headers: jsonHeaders(),
       },
     );
 
@@ -894,9 +830,6 @@ export async function uploadManagementApplicationDocument(
         method: "POST",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
         body: formData,
       },
     );
@@ -939,9 +872,7 @@ export async function getManagementApplicationDocuments(
         method: "GET",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
+        headers: jsonHeaders(),
       },
     );
 
@@ -978,9 +909,7 @@ export async function deleteManagementApplicationDocument(
         method: "DELETE",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
+        headers: jsonHeaders(),
       },
     );
 

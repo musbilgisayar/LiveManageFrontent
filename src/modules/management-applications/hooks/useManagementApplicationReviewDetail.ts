@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 
 import {
   getAdminManagementApplicationDetail,
   getGlobalAdminManagementApplicationDetail,
-} from "../services/managementApplication.service";
+} from "../services/adminManagementApplication.service";
 import { useIsSuperAdminScope } from "./useAdminManagementReviewList";
 
 import type { AdminManagementApplicationDetail } from "../types/adminManagementApplication.types";
@@ -14,6 +15,8 @@ export default function useManagementApplicationReviewDetail(
   applicationId: string,
 ) {
   const isSuperAdmin = useIsSuperAdminScope();
+  const params = useParams<{ locale?: string }>();
+  const locale = params?.locale ?? "tr";
 
   const [data, setData] =
     useState<AdminManagementApplicationDetail | null>(null);
@@ -54,7 +57,7 @@ export default function useManagementApplicationReviewDetail(
     } finally {
       setIsLoading(false);
     }
-  }, [applicationId, isSuperAdmin]);
+  }, [applicationId, isSuperAdmin, locale]);
 
   useEffect(() => {
     void load();

@@ -30,8 +30,10 @@ const KEYS = {
     "management-applications:create.validation.postalCodeRequired",
   blockCountRequired:
     "management-applications:create.validation.blockCountRequired",
-  totalApartmentCountRequired:
-    "management-applications:create.validation.totalApartmentCountRequired",
+  residentialUnitCountRequired:
+    "management-applications:create.validation.residentialUnitCountRequired",
+  commercialUnitCountRequired:
+    "management-applications:create.validation.commercialUnitCountRequired",
   documentsRequired:
     "management-applications:create.validation.documentsRequired",
   consentsRequired:
@@ -58,8 +60,10 @@ export function validateManagementApplicationForm(
   const next: ManagementApplicationFormErrors = {};
 
   const blockCount = Number.parseInt(form.blockCount || "0", 10) || 0;
-  const totalApartmentCount =
-    Number.parseInt(form.totalApartmentCount || "0", 10) || 0;
+  const residentialUnitCount =
+    Number.parseInt(form.residentialUnitCount || "0", 10) || 0;
+  const commercialUnitCount =
+    Number.parseInt(form.commercialUnitCount || "0", 10) || 0;
 
   if (!form.propertyName.trim()) {
     next.propertyName = tr(
@@ -94,6 +98,7 @@ export function validateManagementApplicationForm(
   }
 
   if (
+    !form.isAuthorityIndefinite &&
     form.authorityStartDate &&
     form.authorityEndDate &&
     form.authorityEndDate < form.authorityStartDate
@@ -169,11 +174,19 @@ export function validateManagementApplicationForm(
     );
   }
 
-  if (totalApartmentCount <= 0) {
-    next.totalApartmentCount = tr(
+  if (residentialUnitCount <= 0) {
+    next.residentialUnitCount = tr(
       t,
-      KEYS.totalApartmentCountRequired,
-      "Lütfen toplam daire sayısını girin.",
+      KEYS.residentialUnitCountRequired,
+      "Lütfen konut bağımsız bölüm sayısını girin.",
+    );
+  }
+
+  if (commercialUnitCount < 0) {
+    next.commercialUnitCount = tr(
+      t,
+      KEYS.commercialUnitCountRequired,
+      "Ticari bağımsız bölüm sayısı negatif olamaz.",
     );
   }
 
@@ -206,6 +219,7 @@ export function getStepFields(stepId: WizardStepId): string[] {
     return [
       "propertyName",
       "contactFullName",
+      "applicantType",
       "taxOrIdentityNumber",
       "authorityStartDate",
       "authorityEndDate",
@@ -222,7 +236,8 @@ export function getStepFields(stepId: WizardStepId): string[] {
       "address.buildingNumber",
       "address.postalCode",
       "blockCount",
-      "totalApartmentCount",
+      "residentialUnitCount",
+      "commercialUnitCount",
     ];
   }
 

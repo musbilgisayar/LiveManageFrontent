@@ -81,8 +81,8 @@ export default function useManagementApplicationsDashboard(
 
         setErrorMessage(
           response.userMessage ||
-            response.message ||
-            "Başvurular yüklenemedi.",
+          response.message ||
+          "Başvurular yüklenemedi.",
         );
 
         return;
@@ -110,16 +110,19 @@ export default function useManagementApplicationsDashboard(
 
         if (isStatus(status, 0, ["pending"])) acc.pending += 1;
 
-        if (
-          isStatus(status, 1, ["underreview", "under_review", "review"]) ||
-          isStatus(status, 2, ["inreview", "in_review"])
-        ) {
+        if (isStatus(status, 1, ["underreview", "under_review", "review"])) {
           acc.inReview += 1;
         }
 
-        if (isStatus(status, 3, ["approved"])) acc.approved += 1;
+        if (isStatus(status, 2, ["approved"])) acc.approved += 1;
 
-        if (isStatus(status, 4, ["rejected"])) acc.rejected += 1;
+        if (isStatus(status, 3, ["rejected"])) acc.rejected += 1;
+
+        if (isStatus(status, 4, ["needsmoreinfo", "needs_more_info", "missing_information"])) {
+          acc.documentRequested += 1;
+        }
+
+
 
         if (isStatus(status, 5, ["cancelled", "canceled"])) acc.cancelled += 1;
 

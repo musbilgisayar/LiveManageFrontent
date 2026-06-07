@@ -1,3 +1,5 @@
+/// Bu bileşen, kullanıcıların şifrelerini değiştirmelerine olanak tanır. Hem kendi şifrelerini değiştirebilecekleri bir mod (self) hem de adminlerin diğer kullanıcıların şifrelerini değiştirebileceği bir mod (admin) destekler. Şifre gücü göstergesi, kurallara uyum kontrolü ve hata/success mesajları içerir. Admin modu, eski şifre doğrulaması gerektirmez ve ek olarak değişiklik nedeni ve tüm oturumları kapatma seçeneği sunar.
+//src/modules/users/components/detail/cards/PasswordChangeCard.tsx
 "use client";
 
 import React, { useMemo, useState } from "react";
@@ -345,30 +347,30 @@ export default function PasswordChangeCard({
     try {
       const response = isAdminMode
         ? await postWebFetcher(
-            `/api/v1.0/superadmin/users/${encodeURIComponent(
-              userId ?? ""
-            )}/password-change`,
-            {
-              newPassword,
-              reason: "SuperAdmin kullanıcı detay ekranından parola güncellendi",
-              logoutAllSessions: true,
-            } as AdminPasswordChangeRequestDto
-          )
-        : await postWebFetcher("/api/v1.0/account/change-password", {
-            currentPassword,
-            oldPassword: currentPassword,
+          `/api/v1.0/superadmin/users/${encodeURIComponent(
+            userId ?? ""
+          )}/password-change`,
+          {
             newPassword,
-            confirmPassword,
-          });
+            reason: "SuperAdmin kullanıcı detay ekranından parola güncellendi",
+            logoutAllSessions: true,
+          } as AdminPasswordChangeRequestDto
+        )
+        : await postWebFetcher("/api/v1.0/account/change-password", {
+          currentPassword,
+          oldPassword: currentPassword,
+          newPassword,
+          confirmPassword,
+        });
 
       const ok = response?.ok ?? response?.success ?? true;
 
       if (ok === false) {
         const requestError: any = new Error(
           response?.userMessage ||
-            response?.message ||
-            response?.error ||
-            tr(t, "account:password.error", "İşlem başarısız.")
+          response?.message ||
+          response?.error ||
+          tr(t, "account:password.error", "İşlem başarısız.")
         );
 
         requestError.payload = response;
@@ -376,13 +378,32 @@ export default function PasswordChangeCard({
       }
 
       setSuccessMessage(
-        response?.userMessage ||
-          response?.message ||
-          tr(t, "account:password.success", "Şifreniz başarıyla değiştirildi.")
+        tr(
+          t,
+          "account:password.changed.reloginRequired",
+          "Şifreniz başarıyla değiştirildi. Güvenlik nedeniyle tüm aktif oturumlar sonlandırıldı. Devam etmek için lütfen yeniden giriş yapın."
+        )
       );
 
       resetForm();
+
+      if (!isAdminMode) {
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent("livemanage:session-expired", {
+              detail: {
+                source: "password-change",
+                reason: "PASSWORD_CHANGED",
+              },
+            }),
+          );
+        }, 3000);
+
+        return;
+      }
+
       await onPasswordCredentialChanged?.();
+
     } catch (error: any) {
       setError(extractBestErrorMessage(error, t));
     } finally {
@@ -434,15 +455,15 @@ export default function PasswordChangeCard({
               <Typography variant="body2" sx={{ opacity: 0.92, mt: 0.5 }}>
                 {isAdminMode
                   ? tr(
-                      t,
-                      "account:password.adminDesc",
-                      "Kullanıcı için yeni ve güvenli bir şifre belirleyin."
-                    )
+                    t,
+                    "account:password.adminDesc",
+                    "Kullanıcı için yeni ve güvenli bir şifre belirleyin."
+                  )
                   : tr(
-                      t,
-                      "account:password.desc",
-                      "Mevcut şifrenizi doğrulayarak yeni şifrenizi belirleyin."
-                    )}
+                    t,
+                    "account:password.desc",
+                    "Mevcut şifrenizi doğrulayarak yeni şifrenizi belirleyin."
+                  )}
               </Typography>
             </Box>
           </Stack>
@@ -734,15 +755,15 @@ export default function PasswordChangeCard({
           <Typography variant="caption" color="text.secondary">
             {isAdminMode
               ? tr(
-                  t,
-                  "account:password.adminFooterNote",
-                  "Admin tarafından yapılan şifre değişiklikleri audit log ile izlenir."
-                )
+                t,
+                "account:password.adminFooterNote",
+                "Admin tarafından yapılan şifre değişiklikleri audit log ile izlenir."
+              )
               : tr(
-                  t,
-                  "account:password.footerNote",
-                  "Şifre güncelleme sonrası tüm oturumlar kapatılabilir."
-                )}
+                t,
+                "account:password.footerNote",
+                "Şifre güncelleme sonrası tüm oturumlar kapatılabilir."
+              )}
           </Typography>
 
           <Button

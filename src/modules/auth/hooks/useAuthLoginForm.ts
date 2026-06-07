@@ -16,6 +16,7 @@ type TranslateFn = (key: string) => string;
 type UseAuthLoginFormOptions = {
   t: TranslateFn;
   locale: string;
+  returnUrl?: string | null;
   onSuccess: (redirectTo: string) => void | Promise<void>;
 };
 
@@ -37,6 +38,7 @@ function getDashboardPath(locale: string) {
 export function useAuthLoginForm({
   t,
   locale,
+  returnUrl,
   onSuccess,
 }: UseAuthLoginFormOptions) {
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
@@ -142,8 +144,13 @@ export function useAuthLoginForm({
         ? toPrefix(result.data.cultureCode)
         : locale;
 
+      const safeReturnUrl =
+        returnUrl && returnUrl.startsWith("/") && !returnUrl.startsWith("//")
+          ? returnUrl
+          : null;
+
       const redirectTo =
-        result.data?.redirectTo || getDashboardPath(targetLocale);
+        safeReturnUrl || result.data?.redirectTo || getDashboardPath(targetLocale);
 
       await onSuccess(redirectTo);
     } catch (error) {

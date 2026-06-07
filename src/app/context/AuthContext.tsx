@@ -12,6 +12,12 @@ import React, {
 } from "react";
 
 import { useParams, useRouter } from "next/navigation";
+import {
+  buildLoginUrlWithReturnUrl,
+  getCurrentReturnUrl,
+  isSessionExpiredPayload,
+  redirectToLoginForSessionExpired,
+} from "@/utils/sessionExpiredRedirect.client";
 
 export interface AuthUser {
   id?: string;
@@ -60,7 +66,9 @@ interface MeResponseDto {
   ok?: boolean;
   status?: number;
   data?: AuthUser | null;
+  code?: string | null;
   error?: string | null;
+  message?: string | null;
 }
 
 interface AuthContextType {
@@ -84,15 +92,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  setUser: () => {},
-  clearUser: () => {},
-  refreshUser: async () => {},
+  setUser: () => { },
+  clearUser: () => { },
+  refreshUser: async () => { },
 
   isAuthenticated: false,
   loading: true,
   permissionsReady: false,
 
-  logout: () => {},
+  logout: () => { },
 
   effectivePermissions: [],
 
@@ -102,7 +110,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 const AUTHENTICATED_SELF_PERMISSIONS = ["account.me.view.self"];
-const SESSION_REFRESH_INTERVAL_MS = 4 * 60 * 1000;
+const SESSION_USER_RELOAD_INTERVAL_MS = 4 * 60 * 1000;
 
 function resolveLocaleFromParams(
   params: Record<string, string | string[] | undefined> | null
@@ -235,7 +243,7 @@ async function readJsonIfPossible<T>(response: Response): Promise<T | null> {
   }
 }
 
-async function fetchCurrentUser(retryAfterRefresh = true): Promise<AuthUser | null> {
+async function fetchCurrentUser(): Promise<AuthUser | null> {
   const response = await fetch("/api/v1.0/account/users/me", {
     method: "GET",
     credentials: "include",
@@ -246,10 +254,20 @@ async function fetchCurrentUser(retryAfterRefresh = true): Promise<AuthUser | nu
   });
 
   if (response.status === 401) {
-    const refreshed = retryAfterRefresh ? await refreshWebSession() : false;
+    const payload = await readJsonIfPossible<MeResponseDto>(response.clone());
 
-    if (refreshed) {
-      return fetchCurrentUser(false);
+    if (isSessionExpiredPayload(payload, response.status)) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("livemanage:session-expired", {
+            detail: {
+              source: "AuthContext.fetchCurrentUser",
+            },
+          }),
+        );
+      }
+
+      return null;
     }
 
     return null;
@@ -271,44 +289,7 @@ async function fetchCurrentUser(retryAfterRefresh = true): Promise<AuthUser | nu
 
   const normalizedUser = normalizeAuthUser(json);
 
-  console.log("[AuthContext] Normalized user:", normalizedUser);
-  console.log(
-    "[AuthContext] Effective permissions:",
-    normalizedUser?.effectivePermissions
-  );
-
   return normalizedUser;
-}
-
-function isRefreshResponseSuccessful(payload: any): boolean {
-  if (!payload || typeof payload !== "object") return false;
-
-  if (payload.ok === true) return true;
-  if (payload.isSuccess === true) return true;
-  if (payload.success === true) return true;
-
-  if (payload.data && typeof payload.data === "object") {
-    if (payload.data.isSuccess === true) return true;
-    if (payload.data.success === true) return true;
-  }
-
-  return false;
-}
-
-async function refreshWebSession(): Promise<boolean> {
-  const response = await fetch("/api/v1.0/account/refresh", {
-    method: "POST",
-    credentials: "include",
-    cache: "no-store",
-    headers: {
-      accept: "application/json",
-    },
-  });
-
-  if (!response.ok) return false;
-
-  const json = await readJsonIfPossible<any>(response);
-  return isRefreshResponseSuccessful(json);
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -376,28 +357,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     let active = true;
 
-    const renew = async () => {
-      const refreshed = await refreshWebSession();
-
-      if (!active) return;
-
-      if (refreshed) {
-        const currentUser = await fetchCurrentUser(false);
+    const reloadCurrentUser = async () => {
+      try {
+        const currentUser = await fetchCurrentUser();
         if (active) {
           setUser(currentUser);
         }
-      } else {
-        setUser(null);
+      } catch (error) {
+        if (active) {
+          console.warn("[AuthContext] Kullanıcı bilgisi yenilenemedi:", error);
+        }
       }
     };
 
     const intervalId = window.setInterval(() => {
-      void renew();
-    }, SESSION_REFRESH_INTERVAL_MS);
+      void reloadCurrentUser();
+    }, SESSION_USER_RELOAD_INTERVAL_MS);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void renew();
+        void reloadCurrentUser();
       }
     };
 
@@ -409,6 +388,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [user]);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      console.warn(
+        "[AuthContext] Session expired algılandı. Auth state temizleniyor.",
+      );
+
+      setUser(null);
+
+      redirectToLoginForSessionExpired();
+    };
+
+    window.addEventListener(
+      "livemanage:session-expired",
+      handleSessionExpired as EventListener,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "livemanage:session-expired",
+        handleSessionExpired as EventListener,
+      );
+    };
+  }, []);
+
 
   const logout = useCallback(async () => {
     try {
@@ -424,7 +428,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.warn("[AuthContext] Logout isteği başarısız:", error);
     } finally {
       setUser(null);
-      router.replace(`/${locale}/auth/login`);
+      router.replace(buildLoginUrlWithReturnUrl(locale, getCurrentReturnUrl()));
     }
   }, [locale, router]);
 
@@ -432,9 +436,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return user?.effectivePermissions ?? user?.permissions ?? [];
   }, [user]);
 
-const permissionsReady = useMemo(() => {
-  return !loading;
-}, [loading]);
+  const permissionsReady = useMemo(() => {
+    return !loading;
+  }, [loading]);
 
   const hasPermission = useCallback(
     (permission: string) =>

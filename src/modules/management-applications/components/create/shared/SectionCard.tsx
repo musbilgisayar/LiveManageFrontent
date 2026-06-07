@@ -1,13 +1,22 @@
 "use client";
 
 import React from "react";
-import { alpha, Box, Stack, Typography, useTheme } from "@mui/material";
+
+import {
+  alpha,
+  Box,
+  Divider,
+  Stack,
+  Typography,
+  useTheme,
+} from "@mui/material";
+
 import type { Theme } from "@mui/material/styles";
 
 type SectionCardProps = {
   icon: React.ReactNode;
   title: string;
-  description: string;
+  description?: string;
   children: React.ReactNode;
 };
 
@@ -23,47 +32,49 @@ export default function SectionCard({
     <Box
       sx={{
         position: "relative",
+        p: { xs: 2, md: 2.25 },
+        borderRadius: 3,
+        border: `1px solid ${alpha(theme.palette.divider, 0.9)}`,
+        bgcolor: theme.palette.background.paper,
+        boxShadow: `0 10px 26px ${alpha("#0f172a", 0.035)}`,
         overflow: "hidden",
-        p: { xs: 2.25, md: 2.75 },
-        borderRadius: 4,
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.12)}`,
-        bgcolor: alpha(theme.palette.background.paper, 0.96),
-        boxShadow: `0 18px 46px ${alpha("#0f172a", 0.055)}`,
-        transition: "border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease",
+
         "&::before": {
           content: '""',
           position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: `linear-gradient(135deg, ${alpha(
-            theme.palette.primary.main,
-            0.045,
-          )} 0%, transparent 42%)`,
-        },
-        "&:hover": {
-          transform: "translateY(-1px)",
-          borderColor: alpha(theme.palette.primary.main, 0.22),
-          boxShadow: `0 22px 58px ${alpha("#0f172a", 0.075)}`,
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 4,
+          bgcolor: alpha(theme.palette.primary.main, 0.72),
         },
       }}
     >
-      <Stack spacing={2.4} sx={{ position: "relative", zIndex: 1 }}>
-        <Stack direction="row" spacing={1.45} alignItems="flex-start">
+      <Stack spacing={1.75}>
+        <Stack
+          direction="row"
+          spacing={1.25}
+          alignItems="center"
+          sx={{
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
           <Box
             sx={{
-              width: 38,
-              height: 38,
-              borderRadius: 2.5,
+              width: 34,
+              height: 34,
+              borderRadius: 2,
               display: "grid",
               placeItems: "center",
               flexShrink: 0,
               color: theme.palette.primary.main,
-              bgcolor: alpha(theme.palette.primary.main, 0.09),
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
               border: `1px solid ${alpha(theme.palette.primary.main, 0.12)}`,
-              boxShadow: `0 10px 22px ${alpha(theme.palette.primary.main, 0.1)}`,
+
               "& svg": {
-                width: 20,
-                height: 20,
+                width: 19,
+                height: 19,
                 strokeWidth: 1.9,
               },
             }}
@@ -74,32 +85,47 @@ export default function SectionCard({
           <Box sx={{ minWidth: 0 }}>
             <Typography
               sx={{
-                fontWeight: 900,
-                fontSize: { xs: 15.5, md: 16.5 },
-                letterSpacing: "-0.02em",
-                color: theme.palette.text.primary,
+                fontWeight: 800,
+                fontSize: { xs: 15, md: 15.5 },
+                letterSpacing: "-0.015em",
+                color: "text.primary",
                 lineHeight: 1.25,
               }}
             >
               {title}
             </Typography>
 
-            <Typography
-              color="text.secondary"
-              sx={{
-                mt: 0.45,
-                maxWidth: 820,
-                fontSize: 13.2,
-                fontWeight: 500,
-                lineHeight: 1.6,
-              }}
-            >
-              {description}
-            </Typography>
+            {description ? (
+              <Typography
+                color="text.secondary"
+                sx={{
+                  mt: 0.35,
+                  maxWidth: 860,
+                  fontSize: 12.8,
+                  fontWeight: 500,
+                  lineHeight: 1.55,
+                }}
+              >
+                {description}
+              </Typography>
+            ) : null}
           </Box>
         </Stack>
 
-        <Box>{children}</Box>
+        <Divider
+          sx={{
+            borderColor: alpha(theme.palette.divider, 0.85),
+          }}
+        />
+
+        <Box
+          sx={{
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
+          {children}
+        </Box>
       </Stack>
     </Box>
   );

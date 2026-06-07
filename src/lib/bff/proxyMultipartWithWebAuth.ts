@@ -1,3 +1,4 @@
+//src/lib/bff/proxyMultipartWithWebAuth.ts
 import { NextRequest, NextResponse } from "next/server";
 
 import { createLogger } from "./logger";
@@ -17,10 +18,9 @@ import {
   withTimeout,
 } from "./webAuthProxyCore";
 
-export type ProxyRawWithWebAuthOptions = {
+export type ProxyMultipartOptions = {
   url: string;
-  method?: Extract<WebProxyMethod, "GET" | "POST" | "PUT" | "PATCH" | "DELETE">;
-  body?: BodyInit | null;
+  method?: Extract<WebProxyMethod, "POST" | "PUT" | "PATCH">;
   timeoutMs?: number;
   extraHeaders?: HeadersInit;
   responseHeaders?: HeadersInit;
@@ -28,8 +28,8 @@ export type ProxyRawWithWebAuthOptions = {
 
   /**
    * Türkçe not:
-   * Raw/download işlemlerinde proactive refresh default kapalıdır.
-   * Dosya indirme öncesi refresh yapmak JTI race riskini artırabilir.
+   * Multipart/upload işlemlerinde proactive refresh default kapalıdır.
+   * Upload başlamadan refresh yapmak JTI race riskini artırır.
    */
   enableProactiveRefresh?: boolean;
 
@@ -64,15 +64,15 @@ function isHardRefreshFailure(refresh: RefreshResult): boolean {
   );
 }
 
-function buildRawHeaders(
+function buildMultipartHeaders(
   req: NextRequest,
   correlationId: string,
   refreshCookies: string[],
-  options: ProxyRawWithWebAuthOptions,
+  options: ProxyMultipartOptions,
 ): Headers {
   const headerOptions = {
     extraHeaders: options.extraHeaders,
-    defaultAccept: "*/*",
+    defaultAccept: "application/json",
   };
 
   if (refreshCookies.length > 0) {
@@ -85,26 +85,6 @@ function buildRawHeaders(
   }
 
   return buildWebAuthHeaders(req, correlationId, headerOptions);
-}
-
-function copyRawResponseHeaders(upstream: Response, target: Headers): void {
-  const allowedHeaders = [
-    "content-type",
-    "content-length",
-    "content-disposition",
-    "cache-control",
-    "etag",
-    "last-modified",
-    "accept-ranges",
-  ];
-
-  for (const name of allowedHeaders) {
-    const value = upstream.headers.get(name);
-
-    if (value) {
-      target.set(name, value);
-    }
-  }
 }
 
 function buildSessionExpiredResponse(params: {
@@ -123,7 +103,7 @@ function buildSessionExpiredResponse(params: {
     ? appendSessionExpiredCookies(headers)
     : 0;
 
-  logger.warn("Raw refresh failed", {
+  logger.warn("Multipart refresh failed", {
     upstreamStatus: upstream.status,
     refreshStatus: refresh.status,
     refreshReason: refresh.reason,
@@ -150,11 +130,11 @@ function buildSessionExpiredResponse(params: {
   );
 }
 
-async function fetchRaw(
+async function fetchMultipart(
   targetUrl: string,
   method: string,
   headers: Headers,
-  body: BodyInit | null | undefined,
+  formData: FormData,
   timeoutMs: number,
 ): Promise<Response> {
   const { signal, cleanup } = withTimeout(timeoutMs);
@@ -163,7 +143,7 @@ async function fetchRaw(
     return await fetch(targetUrl, {
       method,
       headers,
-      body,
+      body: formData,
       cache: "no-store",
       signal,
     });
@@ -172,13 +152,13 @@ async function fetchRaw(
   }
 }
 
-export async function proxyRawWithWebAuth(
+export async function proxyMultipartWithWebAuth(
   req: NextRequest,
-  options: ProxyRawWithWebAuthOptions,
+  options: ProxyMultipartOptions,
 ): Promise<NextResponse> {
-  const method = options.method ?? (req.method as WebProxyMethod);
+  const method = options.method ?? "POST";
   const timeoutMs = options.timeoutMs ?? DEFAULT_JSON_TIMEOUT_MS;
-  const logLabel = options.logLabel ?? "ProxyRawWithWebAuth";
+  const logLabel = options.logLabel ?? "ProxyMultipartWithWebAuth";
   const targetUrl = resolveBackendUrl(options.url);
   const correlationId = resolveCorrelationId(req);
   const logger = createLogger(logLabel, correlationId);
@@ -189,11 +169,12 @@ export async function proxyRawWithWebAuth(
 
   const skipRetryOn401 = options.disableRetryOn401 ?? false;
 
-  logger.debug("Raw request started", {
+  logger.debug("Multipart request started", {
     method,
     targetUrl,
     tenantKey: resolveTenant(req),
     hasCookie: !!req.headers.get("cookie"),
+    contentType: req.headers.get("content-type"),
     enableProactiveRefresh,
     skipProactiveRefresh,
     skipRetryOn401,
@@ -201,31 +182,38 @@ export async function proxyRawWithWebAuth(
   });
 
   try {
+    const formData = await req.formData();
+
     let refreshCookies: string[] = [];
     let retryUsed = false;
 
     /**
      * Türkçe not:
-     * Raw/download işlemlerinde proactive refresh default kapalıdır.
-     * Normal akış: önce backend denenir, 401 gelirse tek refresh + retry yapılır.
+     * Proactive refresh multipart işlemlerde default kapalıdır.
+     * Normal akış: önce upload denenir, 401 gelirse tek refresh + retry yapılır.
      */
     if (!skipProactiveRefresh) {
-      logger.debug("Raw proactive refresh intentionally skipped by policy", {
+      logger.debug("Multipart proactive refresh intentionally skipped by policy", {
         enableProactiveRefresh,
       });
     }
 
-    let headers = buildRawHeaders(req, correlationId, refreshCookies, options);
+    let headers = buildMultipartHeaders(
+      req,
+      correlationId,
+      refreshCookies,
+      options,
+    );
 
-    let upstream = await fetchRaw(
+    let upstream = await fetchMultipart(
       targetUrl,
       method,
       headers,
-      options.body,
+      formData,
       timeoutMs,
     );
 
-    logger.debug("Raw upstream first response", {
+    logger.debug("Multipart upstream first response", {
       status: upstream.status,
     });
 
@@ -249,17 +237,17 @@ export async function proxyRawWithWebAuth(
       refreshCookies = refresh.cookies;
       retryUsed = true;
 
-      headers = buildRawHeaders(req, correlationId, refreshCookies, options);
+      headers = buildMultipartHeaders(req, correlationId, refreshCookies, options);
 
-      upstream = await fetchRaw(
+      upstream = await fetchMultipart(
         targetUrl,
         method,
         headers,
-        options.body,
+        formData,
         timeoutMs,
       );
 
-      logger.debug("Raw upstream retry response", {
+      logger.debug("Multipart upstream retry response", {
         status: upstream.status,
         retryUsed,
         refreshCookieCount: refreshCookies.length,
@@ -276,8 +264,6 @@ export async function proxyRawWithWebAuth(
     }
 
     const responseHeaders = filterProxyResponseHeaders(upstream, refreshCookies);
-
-    copyRawResponseHeaders(upstream, responseHeaders);
     applyResponseHeaders(responseHeaders, options.responseHeaders);
 
     if (upstream.status === 204 || upstream.status === 205) {
@@ -287,14 +273,19 @@ export async function proxyRawWithWebAuth(
       });
     }
 
+    const contentType = upstream.headers.get("content-type");
+
+    if (contentType && !responseHeaders.has("content-type")) {
+      responseHeaders.set("content-type", contentType);
+    }
+
     const body = await upstream.arrayBuffer();
 
-    logger.debug("Raw response complete", {
+    logger.debug("Multipart response complete", {
       status: upstream.status,
       retryUsed,
       byteLength: body.byteLength,
-      contentType: responseHeaders.get("content-type"),
-      contentDisposition: responseHeaders.get("content-disposition"),
+      contentType,
     });
 
     return new NextResponse(body, {
@@ -305,7 +296,7 @@ export async function proxyRawWithWebAuth(
     const isTimeout = isAbortLikeError(error);
     const message = error instanceof Error ? error.message : "Unknown error";
 
-    logger.error("Raw proxy error", {
+    logger.error("Multipart proxy error", {
       targetUrl,
       method,
       error: message,
@@ -316,10 +307,10 @@ export async function proxyRawWithWebAuth(
     return NextResponse.json(
       {
         ok: false,
-        message: isTimeout ? "bff.timeout" : "bff.raw_proxy_error",
+        message: isTimeout ? "bff.timeout" : "bff.multipart_proxy_error",
         userMessage: isTimeout
           ? "İstek zaman aşımına uğradı."
-          : "İstek işlenemedi.",
+          : "Dosya yükleme isteği işlenemedi.",
         correlationId,
       },
       { status: isTimeout ? 504 : 500 },

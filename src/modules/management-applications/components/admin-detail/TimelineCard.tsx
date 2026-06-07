@@ -31,23 +31,25 @@ export default function TimelineCard({
 
   return (
     <SectionCard
-      title={t("admin.detail.timeline.title")}
+      title={resolveNamespacedTranslation(
+        t,
+        "management-applications:admin.detail.timeline.title",
+        "İşlem Geçmişi",
+      )}
       icon={<IconClock size={19} />}
     >
       <Stack spacing={1.2}>
         {timeline.length === 0 ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-          >
-            {t("admin.detail.timeline.empty")}
+          <Typography variant="body2" color="text.secondary">
+            {resolveNamespacedTranslation(
+              t,
+              "management-applications:admin.detail.timeline.empty",
+              "Henüz işlem geçmişi yok.",
+            )}
           </Typography>
         ) : (
           timeline.map((item) => (
-            <TimelineRow
-              key={item.id}
-              item={item}
-            />
+            <TimelineRow key={item.id} item={item} />
           ))
         )}
       </Stack>
@@ -62,6 +64,9 @@ function TimelineRow({
 }) {
   const theme = useTheme<Theme>();
   const { t } = useI18nNs("management-applications");
+
+  const actionLabel = resolveTimelineActionLabel(t, item.action);
+  const actorLabel = resolveTimelineActorLabel(t, item.actorName);
 
   return (
     <Stack direction="row" spacing={1.1}>
@@ -87,11 +92,8 @@ function TimelineRow({
           minWidth: 0,
         }}
       >
-        <Typography
-          fontWeight={900}
-          sx={{ overflowWrap: "anywhere" }}
-        >
-          {resolveTimelineActionLabel(t, item.action)}
+        <Typography fontWeight={900} sx={{ overflowWrap: "anywhere" }}>
+          {actionLabel}
         </Typography>
 
         <Typography
@@ -99,7 +101,7 @@ function TimelineRow({
           color="text.secondary"
           sx={{ overflowWrap: "anywhere" }}
         >
-          {item.actorName} · {item.occurredAt}
+          {actorLabel} · {item.occurredAt}
         </Typography>
 
         {item.note && (
@@ -121,20 +123,67 @@ function TimelineRow({
 
 function resolveTimelineActionLabel(
   t: (key: string) => string,
-  action: string,
-) {
-  const normalized = String(action || "")
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[\s-]+/g, "_")
-    .toLowerCase();
+  action?: string | null,
+): string {
+  const raw = String(action || "").trim();
 
-  if (!normalized) {
-    return t("admin.detail.timeline.action.unknown");
+  if (!raw) {
+    return resolveNamespacedTranslation(
+      t,
+      "management-applications:admin.detail.timeline.action.unknown",
+      "Bilinmeyen işlem",
+    );
   }
 
-  const key = `admin.detail.timeline.action.${normalized}`;
-  const value = t(key);
+  return resolveNamespacedTranslation(t, raw, raw);
+}
 
-  return value === key ? action : value;
+function resolveTimelineActorLabel(
+  t: (key: string) => string,
+  actorName?: string | null,
+): string {
+  const raw = String(actorName || "").trim();
+
+  if (!raw || isGuidLike(raw)) {
+    return resolveNamespacedTranslation(
+      t,
+      "management-applications:admin.detail.timeline.actor.system",
+      "Sistem",
+    );
+  }
+
+  return raw;
+}
+
+function resolveNamespacedTranslation(
+  t: (key: string) => string,
+  keyOrText?: string | null,
+  fallback = "-",
+): string {
+  const raw = String(keyOrText || "").trim();
+
+  if (!raw) return fallback;
+
+  const normalizedKey = raw.startsWith("management-applications:")
+    ? raw.replace("management-applications:", "")
+    : raw;
+
+  const value = t(normalizedKey);
+
+  if (!value) return fallback;
+  if (value === raw) return fallback;
+  if (value === normalizedKey) return fallback;
+  if (value === `[${raw}]`) return fallback;
+  if (value === `[${normalizedKey}]`) return fallback;
+  if (value === `[management-applications:${normalizedKey}]`) {
+    return fallback;
+  }
+
+  return value;
+}
+
+function isGuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

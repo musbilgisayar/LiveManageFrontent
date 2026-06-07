@@ -6,6 +6,10 @@ import { Box, CircularProgress, Stack, Typography } from "@mui/material";
 
 import { useAuth } from "@/app/context/AuthContext";
 import { resolvePanelPathByPermissions } from "@/modules/auth/config/panelAccess.config";
+import {
+  buildLoginUrlWithReturnUrl,
+  getCurrentReturnUrl,
+} from "@/utils/sessionExpiredRedirect.client";
 
 function resolveLocale(params: Record<string, string | string[] | undefined>) {
   const raw = params.locale;
@@ -31,7 +35,7 @@ export default function DashboardPage() {
     if (loading) return;
 
     if (!isAuthenticated) {
-      router.replace(`/${locale}/auth/login`);
+      router.replace(buildLoginUrlWithReturnUrl(locale, getCurrentReturnUrl()));
       return;
     }
 

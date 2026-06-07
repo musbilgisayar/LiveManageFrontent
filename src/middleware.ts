@@ -1,5 +1,10 @@
 // src/middleware.ts
 import { NextRequest, NextResponse } from "next/server";
+import {
+  ACCESS_TOKEN_COOKIE_NAMES,
+  REFRESH_TOKEN_COOKIE_NAMES,
+  SESSION_MARKER_COOKIE_NAMES,
+} from "@/lib/bff/authCookies";
 
 const LOCALE_RE = /^[a-z]{2}(?:-[A-Za-z]{2})?$/i;
 
@@ -38,6 +43,13 @@ const PROTECTED_ROOTS = [
   "listings-management",
   "management-applications",
   "account",
+  "users",
+  "roles",
+  "permissions",
+  "monitoring",
+  "tenants",
+  "role-manager",
+  "localization",
 ];
 
 const shouldBypass = (pathname: string) =>
@@ -74,11 +86,13 @@ function withCommonHeaders(res: NextResponse, corrId: string) {
 
 function redirectWithCommonHeaders(
   request: NextRequest,
-  pathname: string,
+  targetPath: string,
   corrId: string
 ) {
   const url = request.nextUrl.clone();
+  const [pathname, search = ""] = targetPath.split("?");
   url.pathname = pathname;
+  url.search = search ? `?${search}` : "";
   const res = NextResponse.redirect(url);
   return withCommonHeaders(res, corrId);
 }
@@ -114,24 +128,68 @@ function isProtectedRoute(pathWithoutLocale: string) {
   );
 }
 
+function buildLoginUrlWithReturnUrl(
+  normalizedLocale: string,
+  request: NextRequest
+): string {
+  const loginPath = `/${normalizedLocale}/login`;
+  const returnUrl = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+
+  const encodedReturnUrl = encodeURIComponent(returnUrl).replace(/%2F/g, "/");
+
+  return `${loginPath}?returnUrl=${encodedReturnUrl}`;
+}
+
+function readFirstCookie(request: NextRequest, names: readonly string[]): string {
+  for (const name of names) {
+    const value = request.cookies.get(name)?.value?.trim();
+    if (value) return value;
+  }
+
+  return "";
+}
+
+function base64UrlDecode(input: string): string {
+  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+
+  return atob(padded);
+}
+
+function getJwtExpUnixSeconds(token: string): number | null {
+  const parts = token.split(".");
+
+  if (parts.length < 2) return null;
+
+  try {
+    const payload = JSON.parse(base64UrlDecode(parts[1])) as {
+      exp?: unknown;
+    };
+
+    return typeof payload.exp === "number" ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function isJwtCurrentlyValid(token: string): boolean {
+  const exp = getJwtExpUnixSeconds(token);
+
+  if (!exp) return false;
+
+  return exp > Math.floor(Date.now() / 1000);
+}
+
 function getAuthSignals(request: NextRequest) {
-  const accessToken =
-    request.cookies.get("accessToken")?.value ||
-    request.cookies.get("lm.at")?.value ||
-    "";
-
-  const refreshToken =
-    request.cookies.get("refreshToken")?.value ||
-    request.cookies.get("RefreshToken")?.value ||
-    request.cookies.get("lm.rt")?.value ||
-    "";
-
-  const sessionMarker =
-    request.cookies.get("lm.sid")?.value ||
-    request.cookies.get("logged_in")?.value ||
-    "";
+  const accessToken = readFirstCookie(request, ACCESS_TOKEN_COOKIE_NAMES);
+  const refreshToken = readFirstCookie(request, REFRESH_TOKEN_COOKIE_NAMES);
+  const sessionMarker = readFirstCookie(request, SESSION_MARKER_COOKIE_NAMES);
 
   const deviceId = request.cookies.get("lm.did")?.value || "";
+  const hasValidAccessToken = accessToken ? isJwtCurrentlyValid(accessToken) : false;
 
   return {
     accessToken,
@@ -142,13 +200,20 @@ function getAuthSignals(request: NextRequest) {
     hasRefreshToken: !!refreshToken,
     hasSessionMarker: !!sessionMarker,
     hasDeviceId: !!deviceId,
+    hasValidAccessToken,
   };
 }
 
 function hasRenewableWebSession(request: NextRequest) {
   const s = getAuthSignals(request);
 
-  return s.hasRefreshToken;
+  return s.hasValidAccessToken;
+}
+
+function hasAuthenticatedWebSession(request: NextRequest) {
+  const s = getAuthSignals(request);
+
+  return s.hasValidAccessToken;
 }
 
 export function middleware(request: NextRequest) {
@@ -240,20 +305,21 @@ export function middleware(request: NextRequest) {
   const pathWithoutLocale = getPathWithoutLocale(cleanPath);
   const authSignals = getAuthSignals(request);
   const renewableWebSession = hasRenewableWebSession(request);
+  const authenticatedWebSession = hasAuthenticatedWebSession(request);
 
   console.log(
     `[MW][${now()}][${corrId}] locale='${normalizedLocale}' pathWithoutLocale='${pathWithoutLocale}' authRoute=${isAuthRoute(
       pathWithoutLocale
     )} protected=${isProtectedRoute(
       pathWithoutLocale
-    )} renewableWebSession=${renewableWebSession}`
+    )} renewableWebSession=${renewableWebSession} authenticatedWebSession=${authenticatedWebSession}`
   );
 
   console.log(
-    `[MW][${now()}][${corrId}] auth signals => access=${authSignals.hasAccessToken}, refresh=${authSignals.hasRefreshToken}, sessionMarker=${authSignals.hasSessionMarker}, deviceId=${authSignals.hasDeviceId}`
+    `[MW][${now()}][${corrId}] auth signals => access=${authSignals.hasAccessToken}, validAccess=${authSignals.hasValidAccessToken}, refresh=${authSignals.hasRefreshToken}, sessionMarker=${authSignals.hasSessionMarker}, deviceId=${authSignals.hasDeviceId}`
   );
 
-  const loginUrl = `/${normalizedLocale}/auth/login`;
+  const loginUrl = buildLoginUrlWithReturnUrl(normalizedLocale, request);
   const dashboardUrl = `/${normalizedLocale}/dashboard`;
 
   const res = NextResponse.next();
@@ -265,7 +331,7 @@ export function middleware(request: NextRequest) {
 
   withCommonHeaders(res, corrId);
 
-  if (renewableWebSession && isAuthRoute(pathWithoutLocale)) {
+  if (authenticatedWebSession && isAuthRoute(pathWithoutLocale)) {
     console.log(
       `[MW][${now()}][${corrId}] authenticated user requested auth route -> redirect to ${dashboardUrl}`
     );

@@ -1,332 +1,344 @@
-// src/lib/bff/proxyJsonWithWebAuth.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import { resolveTenant } from "./resolveTenant";
+
 import {
   DEFAULT_JSON_TIMEOUT_MS,
-  type WebProxyMethod,
-  resolveBackendUrl,
-  resolveCorrelationId,
-  withTimeout,
+  WebProxyMethod,
+  appendSessionExpiredCookies,
+  buildMergedRetryHeaders,
   buildWebAuthHeaders,
-  tryRefreshWebSession,
   filterProxyResponseHeaders,
   isAbortLikeError,
-  buildMergedRetryHeaders,
+  resolveBackendUrl,
+  resolveCorrelationId,
   shouldProactivelyRefreshAccessToken,
-  type RefreshResult,
-} from "./webAuthProxyCore";
-import { createLogger } from "./logger";
+  tryRefreshWebSession,
+  withTimeout,
+} from "@/lib/bff/webAuthProxyCore";
 
-export type ResponseTransformContext = {
-  req: NextRequest;
-  correlationId: string;
-  logLabel: string;
-  upstreamStatus: number;
-  retryUsed: boolean;
-};
-
-export type ResponseTransformResult = {
-  body: unknown;
-  status?: number;
-  headers?: HeadersInit;
-};
-
-export type ProxyJsonOptions = {
+export type ProxyJsonWithWebAuthOptions = {
   url: string;
   method?: WebProxyMethod;
   body?: unknown;
+  headers?: HeadersInit;
   timeoutMs?: number;
-  extraHeaders?: HeadersInit;
-  responseHeaders?: HeadersInit;
   logLabel?: string;
-  /** Skip automatic JSON content-type injection */
-  skipContentTypeInjection?: boolean;
-  /** Disable proactive refresh (for idempotent read-only endpoints) */
+  defaultAccept?: string;
+  includeTenantHeader?: boolean;
+
+  /**
+   * Türkçe not:
+   * Proactive refresh artık global/default çalışmaz.
+   * Sadece account/me gibi merkezi session endpointleri true göndermeli.
+   */
+  enableProactiveRefresh?: boolean;
+
+  /**
+   * Türkçe not:
+   * Geriye dönük güvenlik anahtarı.
+   * true verilirse proactive refresh kesin kapalıdır.
+   */
   disableProactiveRefresh?: boolean;
-  /** Disable retry on 401 (for login endpoints) */
+
+  /**
+   * Türkçe not:
+   * 401 sonrası refresh + retry kapatılmak istenirse kullanılır.
+   */
   disableRetryOn401?: boolean;
-  /** Omit x-tenant-key for backend endpoints that intentionally support global scope. */
-  disableTenantHeader?: boolean;
-  transformResponse?: (
-    payload: unknown,
-    context: ResponseTransformContext
-  ) => ResponseTransformResult | Promise<ResponseTransformResult>;
 };
 
-export type ProxyJsonResult = Promise<NextResponse>;
-
-type PayloadResult =
-  | { kind: "json"; value: unknown }
-  | { kind: "text"; value: string }
-  | { kind: "empty"; value: null };
-
-function applyResponseHeaders(target: Headers, source?: HeadersInit): Headers {
-  if (!source) return target;
-  const extra = new Headers(source);
-  extra.forEach((value, key) => target.set(key, value));
-  return target;
+function isBodyAllowed(method: WebProxyMethod): boolean {
+  return method !== "GET" && method !== "HEAD";
 }
 
-function buildBody(body: unknown): string | undefined {
-  if (body === undefined || body === null) return undefined;
-  if (typeof body === "string") return body;
-  return JSON.stringify(body);
+async function resolveRequestBody(
+  req: NextRequest,
+  method: WebProxyMethod,
+  explicitBody: unknown,
+): Promise<BodyInit | undefined> {
+  if (!isBodyAllowed(method)) {
+    return undefined;
+  }
+
+  if (explicitBody !== undefined) {
+    return typeof explicitBody === "string"
+      ? explicitBody
+      : JSON.stringify(explicitBody);
+  }
+
+  const contentLength = req.headers.get("content-length");
+  const contentType = req.headers.get("content-type");
+
+  if (!contentLength && !contentType) {
+    return undefined;
+  }
+
+  const text = await req.text();
+
+  return text.length > 0 ? text : undefined;
 }
 
-function applyJsonContentTypeIfNeeded(headers: Headers, body: unknown, skip: boolean): void {
-  if (skip) return;
-  if (body === undefined || body === null) return;
-  if (headers.has("content-type")) return;
+function applyJsonContentType(headers: Headers, body: BodyInit | undefined): void {
+  if (!body) return;
 
-  headers.set(
-    "content-type",
-    typeof body === "string" ? "text/plain; charset=utf-8" : "application/json"
-  );
-}
-
-async function readResponsePayload(res: Response): Promise<PayloadResult> {
-  const raw = await res.text();
-  if (!raw) return { kind: "empty", value: null };
-
-  try {
-    return { kind: "json", value: JSON.parse(raw) };
-  } catch {
-    return { kind: "text", value: raw };
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
   }
 }
 
-function buildSessionExpiredResponse(
-  upstream: Response,
-  correlationId: string,
-  logLabel: string
-): NextResponse {
-  const logger = createLogger(logLabel, correlationId);
-  logger.warn("Session expired - refresh failed", { upstreamStatus: upstream.status });
+async function readPayloadSafely(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") ?? "";
 
-  return NextResponse.json(
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return await response.text().catch(() => null);
+  }
+
+  return await response.json().catch(() => null);
+}
+
+function isHardRefreshFailure(reason?: string): boolean {
+  if (!reason) return false;
+
+  const normalized = reason.toUpperCase();
+
+return [
+  "UNAUTHORIZED",
+  "FORBIDDEN",
+  "SESSION_EXPIRED",
+  "REFRESH_FAILED",
+  "INVALID_REFRESH_TOKEN",
+  "REFRESH_TOKEN_REUSED",
+  "TOKEN_REUSE_DETECTED",
+  "BLACKLISTED_REFRESH_TOKEN",
+  "REFRESH_JTI_BLACKLISTED",
+  "USER_BLACKLISTED",
+  "USER_TOKEN_BLACKLISTED",
+  "DEVICE_MISMATCH",
+].some((item) => normalized.includes(item));
+}
+
+function createSessionExpiredResponse(
+  refreshReason: string | undefined,
+  status: number,
+  logLabel: string,
+  correlationId: string,
+): NextResponse {
+  const normalizedReason = refreshReason ?? "REFRESH_FAILED";
+  const redirectTo = "/login";
+  const messageKey = "auth.sessionExpired";
+  const fallbackUserMessage = "Oturum süreniz doldu. Lütfen tekrar giriş yapın.";
+
+  const response = NextResponse.json(
     {
       ok: false,
-      message: "auth.session_expired",
-      userMessage: "Oturum süreniz doldu. Lütfen tekrar giriş yapın.",
-      correlationId,
-      data: { reason: "SessionExpired", redirectTo: "/login" },
-    },
-    { status: 401, headers: filterProxyResponseHeaders(upstream, []) }
-  );
-}
+      code: "SESSION_EXPIRED",
+      error: "SESSION_EXPIRED",
 
-async function executeWithRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 2,
-  baseDelayMs: number = 100
-): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * Math.pow(2, attempt)));
-      }
-    }
+      // Client/i18n bu key'i çevirmeli
+      message: messageKey,
+      userMessage: fallbackUserMessage,
+      userMessageKey: messageKey,
+
+      reason: normalizedReason,
+      redirectTo,
+      correlationId,
+
+      data: {
+        code: "SESSION_EXPIRED",
+        reason: normalizedReason,
+        redirectTo,
+        messageKey,
+        fallbackUserMessage,
+      },
+    },
+    {
+      status: status > 0 ? status : 401,
+    },
+  );
+
+const expiredCookieCount = appendSessionExpiredCookies(response.headers);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(`[BFF][${logLabel}][SESSION_EXPIRED_RESPONSE]`, {
+      correlationId,
+      refreshReason: normalizedReason,
+      status,
+      expiredCookieCount,
+    });
   }
-  throw lastError;
+
+  return response;
+}
+async function fetchUpstreamJson(
+  url: string,
+  method: WebProxyMethod,
+  headers: Headers,
+  body: BodyInit | undefined,
+  timeoutMs: number,
+): Promise<Response> {
+  const { signal, cleanup } = withTimeout(timeoutMs);
+
+  try {
+    return await fetch(url, {
+      method,
+      headers,
+      body,
+      cache: "no-store",
+      signal,
+    });
+  } finally {
+    cleanup();
+  }
 }
 
 export async function proxyJsonWithWebAuth(
   req: NextRequest,
-  options: ProxyJsonOptions
-): ProxyJsonResult {
-  const method = options.method ?? "GET";
+  options: ProxyJsonWithWebAuthOptions,
+): Promise<NextResponse> {
+  const method = options.method ?? (req.method as WebProxyMethod);
   const timeoutMs = options.timeoutMs ?? DEFAULT_JSON_TIMEOUT_MS;
-  const logLabel = options.logLabel ?? "ProxyJsonWithWebAuth";
-  const url = resolveBackendUrl(options.url);
+  const logLabel = options.logLabel ?? "BFF_JSON_PROXY";
   const correlationId = resolveCorrelationId(req);
-  const logger = createLogger(logLabel, correlationId);
+  const targetUrl = resolveBackendUrl(options.url);
 
-  const skipProactiveRefresh = options.disableProactiveRefresh ?? false;
+  const enableProactiveRefresh = options.enableProactiveRefresh === true;
+  const skipProactiveRefresh =
+    options.disableProactiveRefresh === true || !enableProactiveRefresh;
+
   const skipRetryOn401 = options.disableRetryOn401 ?? false;
 
-  logger.debug("Request started", {
-    method,
-    targetUrl: url,
-    tenantKey: resolveTenant(req),
-    hasCookie: !!req.headers.get("cookie"),
-    hasBody: options.body !== undefined,
-    timeoutMs,
-    skipProactiveRefresh,
-    skipRetryOn401,
-  });
+  let refreshCookies: string[] = [];
 
   try {
-    let headers = buildWebAuthHeaders(req, correlationId, {
-      extraHeaders: options.extraHeaders,
-      defaultAccept: "application/json",
-      includeTenantHeader: !options.disableTenantHeader,
+    const requestBody = await resolveRequestBody(req, method, options.body);
+
+    let firstHeaders = buildWebAuthHeaders(req, correlationId, {
+      extraHeaders: options.headers,
+      defaultAccept: options.defaultAccept,
+      includeTenantHeader: options.includeTenantHeader,
     });
 
-    applyJsonContentTypeIfNeeded(headers, options.body, options.skipContentTypeInjection ?? false);
+    applyJsonContentType(firstHeaders, requestBody);
 
-    let upstream: Response;
-    let retryUsed = false;
-    let refreshCookies: string[] = [];
-
-    // Proactive refresh - token about to expire
     if (!skipProactiveRefresh && shouldProactivelyRefreshAccessToken(req)) {
-      const refresh = await executeWithRetry(() =>
-        tryRefreshWebSession(req, timeoutMs, correlationId, `${logLabel}.PROACTIVE`)
+      const proactiveRefresh = await tryRefreshWebSession(
+        req,
+        timeoutMs,
+        correlationId,
+        `${logLabel}.PROACTIVE`,
       );
 
-      if (refresh.ok && refresh.cookies.length > 0) {
-        refreshCookies = refresh.cookies;
-        headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
-          extraHeaders: options.extraHeaders,
-          defaultAccept: "application/json",
-          includeTenantHeader: !options.disableTenantHeader,
-        });
-        applyJsonContentTypeIfNeeded(headers, options.body, options.skipContentTypeInjection ?? false);
+      if (proactiveRefresh.ok) {
+        refreshCookies = proactiveRefresh.cookies;
 
-        logger.debug("Proactive refresh applied", { refreshCookieCount: refreshCookies.length });
-      } else {
-        logger.debug("Proactive refresh skipped - not needed", {
-          refreshOk: refresh.ok,
-          refreshCookieCount: refresh.cookies.length,
-        });
+        firstHeaders = buildMergedRetryHeaders(
+          req,
+          correlationId,
+          refreshCookies,
+          {
+            extraHeaders: options.headers,
+            defaultAccept: options.defaultAccept,
+            includeTenantHeader: options.includeTenantHeader,
+          },
+        );
+
+        applyJsonContentType(firstHeaders, requestBody);
       }
     }
 
-    // Initial request
-    {
-      const { signal, cleanup } = withTimeout(timeoutMs);
-      try {
-        upstream = await fetch(url, {
-          method,
-          headers,
-          body: buildBody(options.body),
-          cache: "no-store",
-          signal,
-        });
-      } finally {
-        cleanup();
-      }
-    }
+    let upstream = await fetchUpstreamJson(
+      targetUrl,
+      method,
+      firstHeaders,
+      requestBody,
+      timeoutMs,
+    );
 
-    logger.debug("Upstream first response", { status: upstream.status });
+    let retryUsed = false;
 
-    const alreadyRefreshedProactively = refreshCookies.length > 0;
-
-    // 401 retry with refresh
-    if (!skipRetryOn401 && upstream.status === 401 && !alreadyRefreshedProactively) {
-      const refresh = await executeWithRetry(() =>
-        tryRefreshWebSession(req, timeoutMs, correlationId, logLabel)
+    if (upstream.status === 401 && !skipRetryOn401) {
+      const retryRefresh = await tryRefreshWebSession(
+        req,
+        timeoutMs,
+        correlationId,
+        `${logLabel}.RETRY`,
       );
 
-      if (!refresh.ok) {
-        return buildSessionExpiredResponse(upstream, correlationId, logLabel);
+      if (!retryRefresh.ok) {
+        return createSessionExpiredResponse(
+          retryRefresh.reason,
+          401,
+          logLabel,
+          correlationId,
+        );
       }
 
-      refreshCookies = refresh.cookies;
       retryUsed = true;
+      refreshCookies = retryRefresh.cookies;
 
-      headers = buildMergedRetryHeaders(req, correlationId, refreshCookies, {
-        extraHeaders: options.extraHeaders,
-        defaultAccept: "application/json",
-        includeTenantHeader: !options.disableTenantHeader,
-      });
-      applyJsonContentTypeIfNeeded(headers, options.body, options.skipContentTypeInjection ?? false);
+      const retryHeaders = buildMergedRetryHeaders(
+        req,
+        correlationId,
+        refreshCookies,
+        {
+          extraHeaders: options.headers,
+          defaultAccept: options.defaultAccept,
+          includeTenantHeader: options.includeTenantHeader,
+        },
+      );
 
-      const retryTimeout = withTimeout(timeoutMs);
-      try {
-        upstream = await fetch(url, {
-          method,
-          headers,
-          body: buildBody(options.body),
-          cache: "no-store",
-          signal: retryTimeout.signal,
-        });
-      } finally {
-        retryTimeout.cleanup();
-      }
+      applyJsonContentType(retryHeaders, requestBody);
 
-      logger.debug("Upstream retry response", { status: upstream.status, retryUsed: true });
+      upstream = await fetchUpstreamJson(
+        targetUrl,
+        method,
+        retryHeaders,
+        requestBody,
+        timeoutMs,
+      );
     }
 
     const responseHeaders = filterProxyResponseHeaders(upstream, refreshCookies);
-    logger.debug("Final response", { retryUsed, refreshCookieCount: refreshCookies.length });
+    const payload = await readPayloadSafely(upstream);
 
-    // No content responses
-    if (upstream.status === 204 || upstream.status === 205) {
-      applyResponseHeaders(responseHeaders, options.responseHeaders);
-      return new NextResponse(null, {
-        status: upstream.status,
-        headers: responseHeaders,
-      });
-    }
-
-    const payload = await readResponsePayload(upstream);
-    logger.debug("Response payload read", { kind: payload.kind });
-
-    // Text response (non-JSON)
-    if (payload.kind === "text") {
-      if (!responseHeaders.has("content-type")) {
-        responseHeaders.set("content-type", "text/plain; charset=utf-8");
-      }
-      applyResponseHeaders(responseHeaders, options.responseHeaders);
-      return new NextResponse(payload.value, {
-        status: upstream.status,
-        headers: responseHeaders,
-      });
-    }
-
-    // Apply transformation if provided
-    if (options.transformResponse) {
-      const transformed = await options.transformResponse(payload.value, {
-        req,
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[BFF][${logLabel}][FINAL_RESPONSE]`, {
         correlationId,
-        logLabel,
-        upstreamStatus: upstream.status,
+        status: upstream.status,
         retryUsed,
-      });
-
-      if (transformed.headers) {
-        const extra = new Headers(transformed.headers);
-        extra.forEach((value, key) => responseHeaders.set(key, value));
-      }
-      applyResponseHeaders(responseHeaders, options.responseHeaders);
-
-      return NextResponse.json(transformed.body, {
-        status: transformed.status ?? upstream.status,
-        headers: responseHeaders,
+        refreshCookieCount: refreshCookies.length,
       });
     }
 
-    applyResponseHeaders(responseHeaders, options.responseHeaders);
-    return NextResponse.json(payload.value, {
+    return NextResponse.json(payload, {
       status: upstream.status,
       headers: responseHeaders,
     });
-  } catch (err: unknown) {
-    const isTimeout = isAbortLikeError(err);
-    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+  } catch (error) {
+    const aborted = isAbortLikeError(error);
 
-    logger.error("Proxy error", {
-      targetUrl: url,
-      method,
-      error: errorMessage,
-      isTimeout,
-      timeoutMs,
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.error(`[BFF][${logLabel}][ERROR]`, {
+        correlationId,
+        targetUrl,
+        aborted,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
 
     return NextResponse.json(
       {
         ok: false,
-        message: isTimeout ? "bff.timeout" : "bff.proxy_error",
-        userMessage: isTimeout ? "İstek zaman aşımına uğradı." : "Beklenmeyen bir hata oluştu.",
+        message: aborted
+          ? "İstek zaman aşımına uğradı."
+          : "BFF proxy isteği başarısız oldu.",
+        userMessage: aborted
+          ? "İstek zaman aşımına uğradı. Lütfen tekrar deneyin."
+          : "İşlem sırasında beklenmeyen bir hata oluştu.",
         correlationId,
       },
-      { status: isTimeout ? 504 : 500 }
+      {
+        status: aborted ? 504 : 502,
+      },
     );
   }
 }

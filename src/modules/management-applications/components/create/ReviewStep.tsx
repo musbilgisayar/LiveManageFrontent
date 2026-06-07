@@ -26,7 +26,10 @@ type ReviewStepProps = {
   form: FormState;
   errors: FormErrors;
   blockCount: number;
-  totalApartmentCount: number;
+   
+  residentialUnitCount: number;
+commercialUnitCount: number;
+totalUnitCount: number;
   summaryAddress: string;
   uploadedFiles: UploadedFileItem[];
   onPatch: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
@@ -58,7 +61,8 @@ const KEYS = {
   summaryBlockCount:
     "management-applications:create.review.summary.blockCount",
   summaryTotalApartmentCount:
-    "management-applications:create.review.summary.totalApartmentCount",
+    "management-applications:create.review.summary.totalUnitCount",
+
   summaryUploadedDocument:
     "management-applications:create.review.summary.uploadedDocument",
   summaryDocumentCount:
@@ -69,7 +73,10 @@ export default function ReviewStep({
   form,
   errors,
   blockCount,
-  totalApartmentCount,
+  
+  residentialUnitCount,
+commercialUnitCount,
+totalUnitCount,
   summaryAddress,
   uploadedFiles,
   onPatch,
@@ -172,7 +179,8 @@ export default function ReviewStep({
           },
           {
             label: tr(KEYS.summaryTotalApartmentCount, "Toplam daire sayısı"),
-            value: `${totalApartmentCount}`,
+            
+            value: `${residentialUnitCount} konut · ${commercialUnitCount} ticari · ${totalUnitCount} toplam`,
           },
           {
             label: tr(KEYS.summaryUploadedDocument, "Eklenen belge"),

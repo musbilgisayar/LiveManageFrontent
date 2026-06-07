@@ -133,14 +133,6 @@ export function useProfile() {
           });
         }
 
-        // Çok kritik debug: accessToken var mı?
-        // (Token'ı yazdırmıyoruz, sadece var/yok + expire şüphesi için hint)
-        try {
-          const hasToken = typeof window !== "undefined" && !!localStorage.getItem("accessToken");
-          logProfile("info", "Client accessToken durumu", { hasToken });
-        } catch (e) {
-          logProfile("warn", "localStorage okunamadı", normalizeErr(e));
-        }
       },
 
       onError: (err) => {

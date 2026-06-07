@@ -3,6 +3,8 @@
 
 export type ManagementStructureType = "site" | "apartment";
 
+export type ManagementApplicantType = "individual" | "company";
+
 export type RepresentationType =
   | "owner"
   | "proxy"
@@ -52,21 +54,34 @@ export type ManagementApplicationAddressForm = {
 export type ManagementApplicationFormState = {
   structureType: ManagementStructureType;
   propertyName: string;
+
+  // UI form değeri string kalacak
   representationType: RepresentationType;
+ residentialUnitCount: string;
+commercialUnitCount: string;
   blockCount: string;
-  totalApartmentCount: string;
+ 
   contactFullName: string;
   contactEmail: string;
   contactPhone: string;
+  applicantType: ManagementApplicantType;
   taxOrIdentityNumber: string;
+  mersisNumber?: string;
+
   authorityStartDate: string;
   authorityEndDate: string;
+
   address: ManagementApplicationAddressForm;
   note: string;
+
   consentAccuracy: boolean;
   consentAuthority: boolean;
   consentPrivacy: boolean;
   consentContract: boolean;
+  requestedRoleId?: string | null;
+  authorityScope?: string | null;
+  isAuthorityIndefinite?: boolean;
+  requestedRoleNameSnapshot?: string | null;
 };
 
 export type ManagementApplicationFormErrors = Partial<Record<string, string>>;
@@ -88,6 +103,7 @@ export type WizardStep = {
 };
 
 export type CreateManagedPropertyApplicationRequestDto = {
+
   propertyName: string;
   description?: string | null;
   addressId?: string | null;
@@ -95,7 +111,21 @@ export type CreateManagedPropertyApplicationRequestDto = {
   commercialUnitCount: number;
   blockCount?: number | null;
   applicantNote?: string | null;
+  authorityStartDateUtc?: string | null;
+  authorityEndDateUtc?: string | null;
+  isAuthorityIndefinite?: boolean;
   autoCreateUnitsAfterApproval: boolean;
+
+  representationType?: number | null;
+  requestedRoleId?: string | null;
+  requestedRoleNameSnapshot?: string | null;
+  authorityScope?: string | null;
+
+  applicantType?: number | null;
+  identityNumber?: string | null;
+  taxNumber?: string | null;
+  mersisNumber?: string | null;
+
 };
 
 export type ManagedPropertyApplicationStatus = number;
@@ -103,12 +133,13 @@ export type ManagedPropertyApplicationDocumentType = number;
 export type ManagedPropertyApplicationDocumentStatus = number;
 
 export type ManagedPropertyApplicationApplicantDto = {
-  userId: string;
+  userId?: string | null;
   fullName?: string | null;
   email?: string | null;
+  phone?: string | null;
   phoneNumber?: string | null;
-  isEmailVerified: boolean;
-  isPhoneVerified: boolean;
+  isEmailVerified?: boolean | null;
+  isPhoneVerified?: boolean | null;
 };
 
 export type ManagedPropertyApplicationPropertyDto = {
@@ -116,19 +147,37 @@ export type ManagedPropertyApplicationPropertyDto = {
   propertyName: string;
   description?: string | null;
   addressId?: string | null;
+  addressSummary?: string | null;
   addressText?: string | null;
   residentialUnitCount: number;
   commercialUnitCount: number;
   blockCount?: number | null;
+  totalApartmentCount?: number | null;
 };
 
 export type ManagedPropertyApplicationAuthorityDto = {
-  applicantUserId: string;
+  applicantUserId?: string | null;
+  representationType?: number | string | null;
+  requestedRoleId?: string | null;
+  requestedRoleName?: string | null;
+  authorityScope?: string | null;
+  authorityStartDateUtc?: string | null;
+  authorityEndDateUtc?: string | null;
+  isAuthorityIndefinite?: boolean | null;
+  applicantNote?: string | null;
+};
+export type ManagedPropertyApplicationReviewDto = {
+  reviewDecision?: number | string | null;
   reviewedByUserId?: string | null;
   reviewedAtUtc?: string | null;
   reviewNote?: string | null;
   rejectReason?: string | null;
-  applicantNote?: string | null;
+  requestedDocumentNote?: string | null;
+  assignedRoleId?: string | null;
+  assignedRoleName?: string | null;
+  permissionValidFromUtc?: string | null;
+  permissionValidUntilUtc?: string | null;
+  notifyApplicant?: boolean | null;
 };
 
 export type ManagedPropertyApplicationDocumentDto = {
@@ -158,11 +207,12 @@ export type ManagedPropertyApplicationSystemCheckDto = {
 };
 
 export type ManagedPropertyApplicationTimelineItemDto = {
-  eventType: string;
-  title: string;
+  eventType?: string | null;
+  title?: string | null;
   description?: string | null;
-  occurredAtUtc: string;
+  occurredAtUtc?: string | null;
   actorUserId?: string | null;
+  actorName?: string | null;
 };
 
 export type ManagedPropertyApplicationDetailDto = {
@@ -174,12 +224,16 @@ export type ManagedPropertyApplicationDetailDto = {
   submittedAtUtc: string;
   reviewedAtUtc?: string | null;
   updatedAt?: string | null;
-  applicant: ManagedPropertyApplicationApplicantDto;
+
   property: ManagedPropertyApplicationPropertyDto;
-  authority: ManagedPropertyApplicationAuthorityDto;
+
   documents: ManagedPropertyApplicationDocumentDto[];
   systemChecks: ManagedPropertyApplicationSystemCheckDto[];
-  timeline: ManagedPropertyApplicationTimelineItemDto[];
+
+  applicant?: ManagedPropertyApplicationApplicantDto | null;
+  authority?: ManagedPropertyApplicationAuthorityDto | null;
+  review?: ManagedPropertyApplicationReviewDto | null;
+  timeline?: ManagedPropertyApplicationTimelineItemDto[];
   reviewNote?: string | null;
   rejectReason?: string | null;
   applicantNote?: string | null;
@@ -286,3 +340,5 @@ export type ApplicationDocumentUploadProgress = {
   completed: number;
   failed: number;
 };
+
+

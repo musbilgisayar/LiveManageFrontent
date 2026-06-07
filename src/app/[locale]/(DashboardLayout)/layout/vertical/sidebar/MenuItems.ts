@@ -79,16 +79,15 @@ const Menuitems: NavGroup[] = [
       "admin.property.applications.view_pending.tenant",
     ],
   },
-  {
-    id: uniqueId(),
-    title: "sidebar:menu.realEstate.pendingActions",
-    icon: IconChecklist,
-    href: "/pending-actions",
-    requiredAnyPermissions: [
-      "property.applications.view_own.self",
-      "admin.property.applications.view_pending.tenant",
-    ],
-  },
+{
+  id: uniqueId(),
+  title: "sidebar:menu.realEstate.pendingActions",
+  icon: IconChecklist,
+  href: "/pending-actions",
+  requiredAnyPermissions: [
+    "admin.property.applications.view_pending.tenant",
+  ],
+},
 
 
   {

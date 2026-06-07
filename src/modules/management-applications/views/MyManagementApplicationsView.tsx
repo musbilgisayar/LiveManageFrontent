@@ -19,7 +19,7 @@ import {
   alpha,
   useTheme,
 } from "@mui/material";
-
+import { IconArrowLeft } from "@tabler/icons-react";
 import {
   IconArrowRight,
   IconChecklist,
@@ -42,7 +42,7 @@ function getDisplayValue(value: unknown, fallback = "-") {
   return String(value);
 }
 
-function getApplicationStatusKey(status: unknown): string {
+ function getApplicationStatusKey(status: unknown): string {
   switch (Number(status)) {
     case 0:
       return "status.pending";
@@ -51,19 +51,22 @@ function getApplicationStatusKey(status: unknown): string {
       return "status.underReview";
 
     case 2:
-      return "status.documentRequested";
-
-    case 3:
       return "status.approved";
 
-    case 4:
+    case 3:
       return "status.rejected";
+
+    case 4:
+      return "status.needsMoreInfo";
 
     case 5:
       return "status.cancelled";
 
+    case 6:
+      return "status.documentRequested";
+
     default:
-      return "status.unknown";
+      return "status.pending";
   }
 }
 
@@ -197,6 +200,23 @@ export default function MyManagementApplicationsView() {
             }}
             justifyContent="space-between"
           >
+
+            <Button
+              component={Link}
+              href={`/${locale}/management-applications`}
+              variant="text"
+              
+              color="primary"
+              startIcon={<IconArrowLeft size={18} />}
+              sx={{
+                alignSelf: "flex-start",
+                px: 0,
+                minWidth: "auto",
+              }}
+            >
+              {tx("common.back")}
+            </Button>
+
             <Stack spacing={1.5}>
               <Chip
                 icon={<IconFolderOpen size={18} />}
@@ -475,3 +495,4 @@ export default function MyManagementApplicationsView() {
     </Stack>
   );
 }
+

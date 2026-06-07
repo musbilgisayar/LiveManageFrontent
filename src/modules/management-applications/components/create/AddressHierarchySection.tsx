@@ -9,7 +9,7 @@ import { useAddressHierarchy } from "@/modules/users/hooks/useAddressHierarchy";
 
 import InlineNotice from "./shared/InlineNotice";
 import { premiumFieldSx } from "./constants";
-
+import { useEffect, useRef } from "react";
 import type {
   ManagementApplicationAddressForm as AddressForm,
   ManagementApplicationFormErrors as FormErrors,
@@ -91,6 +91,21 @@ export default function AddressHierarchySection({
   } = useAddressHierarchy({
     autoLoad: false,
   });
+
+
+  const lastLoadedCountryCodeRef = useRef<string | null>(null);
+
+useEffect(() => {
+  const countryCode = value.countryCode?.trim().toUpperCase();
+
+  if (!countryCode) return;
+
+  if (lastLoadedCountryCodeRef.current === countryCode) return;
+
+  lastLoadedCountryCodeRef.current = countryCode;
+
+  void reloadProvinces(countryCode);
+}, [value.countryCode, reloadProvinces]);
 
   const patch = (partial: Partial<AddressForm>) => {
     onChange({ ...value, ...partial });
@@ -254,14 +269,7 @@ export default function AddressHierarchySection({
           )}
         </TextField>
 
-        <TextField
-          label={tr(KEYS.countryCode, "Ülke kodu")}
-          value={value.countryCode}
-          InputProps={{ readOnly: true }}
-          helperText=" "
-          fullWidth
-          sx={premiumFieldSx}
-        />
+        
 
         <TextField
           select

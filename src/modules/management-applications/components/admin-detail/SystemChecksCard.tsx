@@ -6,11 +6,14 @@ import {
   alpha,
   Box,
   Chip,
+  Divider,
   Stack,
   Typography,
   useTheme,
 } from "@mui/material";
+
 import type { Theme } from "@mui/material/styles";
+
 import {
   IconAlertTriangle,
   IconCheck,
@@ -40,18 +43,55 @@ export default function SystemChecksCard({
 }: SystemChecksCardProps) {
   const { t } = useI18nNs("management-applications");
 
+  const passedCount = checks.filter(
+    (x) => x.status === "passed",
+  ).length;
+
   return (
     <SectionCard
       title={t("admin.detail.systemChecks.title")}
+      description={t("admin.detail.systemChecks.description")}
       icon={<IconShieldCheck size={19} />}
     >
-      <Stack spacing={1}>
-        {checks.map((check) => (
-          <SystemCheckRow
-            key={check.id}
-            check={check}
-          />
-        ))}
+      <Stack spacing={1.25}>
+        <Box>
+          <Typography
+            sx={{
+              fontSize: 13,
+              fontWeight: 800,
+              color: "text.primary",
+            }}
+          >
+            {passedCount}/{checks.length}{" "}
+            {t("admin.detail.systemChecks.completed")}
+          </Typography>
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.35 }}
+          >
+            {t("admin.detail.systemChecks.summaryTitle")}
+          </Typography>
+        </Box>
+
+        <Divider />
+
+        {checks.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {t("admin.detail.systemChecks.empty")}
+          </Typography>
+        ) : (
+          <Stack spacing={0}>
+            {checks.map((check, index) => (
+              <React.Fragment key={check.id}>
+                <SystemCheckRow check={check} />
+
+                {index !== checks.length - 1 ? <Divider /> : null}
+              </React.Fragment>
+            ))}
+          </Stack>
+        )}
       </Stack>
     </SectionCard>
   );
@@ -64,43 +104,35 @@ function SystemCheckRow({
 }) {
   const theme = useTheme<Theme>();
 
-  const { t } = useI18nNs(
-    "management-applications",
-  );
+  const { t } = useI18nNs("management-applications");
 
-  const color = getCheckColor(
-    theme,
-    check.status,
-  );
+  const color = getCheckColor(theme, check.status);
 
   return (
-    <Box
-      sx={{
-        p: 1.25,
-        borderRadius: 3,
-        border: `1px solid ${alpha(
-          color,
-          0.15,
-        )}`,
-        bgcolor: alpha(color, 0.035),
-      }}
-    >
+    <Box sx={{ py: 1.25 }}>
       <Stack
         direction="row"
-        spacing={1.1}
+        spacing={1.25}
         alignItems="flex-start"
         justifyContent="space-between"
       >
         <Stack
           direction="row"
-          spacing={1.1}
+          spacing={1.15}
           alignItems="flex-start"
           sx={{ minWidth: 0 }}
         >
           <Box
             sx={{
-              mt: 0.25,
+              width: 32,
+              height: 32,
+              borderRadius: 2,
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
               color,
+              bgcolor: alpha(color, 0.08),
+              border: `1px solid ${alpha(color, 0.16)}`,
             }}
           >
             {check.status === "passed" ? (
@@ -113,13 +145,25 @@ function SystemCheckRow({
           </Box>
 
           <Box sx={{ minWidth: 0 }}>
-            <Typography fontWeight={900}>
+            <Typography
+              sx={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: "text.primary",
+                lineHeight: 1.35,
+              }}
+            >
               {check.label}
             </Typography>
 
             <Typography
               variant="body2"
               color="text.secondary"
+              sx={{
+                mt: 0.25,
+                lineHeight: 1.55,
+                wordBreak: "break-word",
+              }}
             >
               {check.description}
             </Typography>
@@ -128,20 +172,14 @@ function SystemCheckRow({
 
         <Chip
           size="small"
-          label={t(
-            checkStatusLabelKey(
-              check.status,
-            ),
-          )}
+          label={t(checkStatusLabelKey(check.status))}
           sx={{
-            fontWeight: 850,
+            flexShrink: 0,
+            fontWeight: 800,
             borderRadius: 999,
-            bgcolor: alpha(color, 0.08),
             color,
-            border: `1px solid ${alpha(
-              color,
-              0.16,
-            )}`,
+            bgcolor: alpha(color, 0.08),
+            border: `1px solid ${alpha(color, 0.16)}`,
           }}
         />
       </Stack>
