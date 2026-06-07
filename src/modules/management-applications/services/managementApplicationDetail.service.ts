@@ -1,3 +1,4 @@
+//src/modules/management-applications/services/managementApplicationDetail.service.ts
 import type { ApiResponse } from "../types/managementApplication.types";
 
 import type {
@@ -290,21 +291,39 @@ function normalizeStatus(value: unknown): ManagementApplicationStatus {
     case "0":
     case "pending":
       return "pending";
+
     case "1":
+    case "underreview":
+    case "under_review":
     case "inreview":
     case "in_review":
       return "in_review";
+
     case "2":
-    case "missinginformation":
-    case "missing_information":
-    case "documentrequested":
-      return "missing_information";
-    case "3":
     case "approved":
       return "approved";
-    case "4":
+
+    case "3":
     case "rejected":
       return "rejected";
+
+    case "4":
+    case "needsmoreinfo":
+    case "needs_more_info":
+    case "missinginformation":
+    case "missing_information":
+      return "missing_information";
+
+    case "5":
+    case "cancelled":
+    case "canceled":
+      return "cancelled";
+
+    case "6":
+    case "documentrequested":
+    case "document_requested":
+      return "document_requested";
+
     default:
       return "pending";
   }

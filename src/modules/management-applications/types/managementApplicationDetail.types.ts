@@ -1,9 +1,11 @@
 export type ManagementApplicationStatus =
   | "pending"
   | "in_review"
-  | "missing_information"
   | "approved"
-  | "rejected";
+  | "rejected"
+  | "missing_information"
+  | "cancelled"
+  | "document_requested";
 
 export type ManagementApplicationDetail = {
   applicationId: string;

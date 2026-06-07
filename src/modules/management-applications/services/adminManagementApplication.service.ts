@@ -1,3 +1,4 @@
+//src/modules/management-applications/services/adminManagementApplication.service.ts
 import type {
   AdminManagementApplicationDetail,
   AdminManagementApplicationDetailDto,

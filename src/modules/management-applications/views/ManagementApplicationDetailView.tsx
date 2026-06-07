@@ -1,3 +1,4 @@
+//bu dosya kullanıcıya ait bir yönetim başvurusunun detaylarını gösteren sayfanın bileşenlerini içerir. Veriler, useManagementApplicationDetail hook'u aracılığıyla alınır ve kullanıcıya başvuru numarası, durumu, başvuru sahibi bilgileri, mülk bilgileri, yetki bilgileri, belgeler ve zaman çizelgesi gibi detaylar sunulur. Ayrıca, kullanıcı belgeleri indirebilir ve önceki sayfaya dönebilir.
 // src/modules/management-applications/views/ManagementApplicationDetailView.tsx
 "use client";
 

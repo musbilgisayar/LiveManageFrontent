@@ -1,3 +1,6 @@
+//bu dosya, yönetim başvurularının detaylarını göstermek için kullanılan bir custom hook olan useManagementApplicationDetail'i içerir. Bu hook, belirli bir başvuru ID'sine sahip yönetim başvurusunun detaylarını almak için kullanılır. Hook, başvuru detaylarını, yüklenme durumunu ve hata mesajlarını yönetir. Ayrıca, başvuru detaylarını yeniden yüklemek için bir fonksiyon da sağlar.
+
+//src/modules/management-applications/hooks/useManagementApplicationDetail.ts
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
